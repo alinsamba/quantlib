@@ -330,22 +330,21 @@ ipcMain.handle('get-incidents', async () => {
 ipcMain.handle('get-summary', async () => {
   try {
     ensureDb()
-    const subjects = await prisma!.subject.findMany()
-    let totalBooks = 0
-    let available = 0
-    let issued = 0
-    let damagedLost = 0
 
-    subjects.forEach(s => {
-      totalBooks += s.openingCount + s.recovered
-      issued += s.issued
-      damagedLost += s.damaged + s.lost
-      available += calculateAvailable(s)
-    })
+    const [subjects, overdueCount] = await Promise.all([
+      prisma!.subject.findMany(),
+      prisma!.checkout.count({
+        where: { status: 'ACTIVE', dueDate: { lt: new Date() } }
+      })
+    ])
 
-    const overdueCount = await prisma!.checkout.count({
-      where: { status: 'ACTIVE', dueDate: { lt: new Date() } }
-    })
+    const { totalBooks, available, issued, damagedLost } = subjects.reduce((acc, s) => {
+      acc.totalBooks += s.openingCount + s.recovered
+      acc.issued += s.issued
+      acc.damagedLost += s.damaged + s.lost
+      acc.available += calculateAvailable(s)
+      return acc
+    }, { totalBooks: 0, available: 0, issued: 0, damagedLost: 0 })
 
     return { success: true, data: { totalBooks, available, issued, damagedLost, subjects, overdueCount } }
   } catch (err: any) { return { success: false, error: err.message } }
