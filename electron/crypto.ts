@@ -24,8 +24,8 @@ export function checkDbStatus(): 'SETUP' | 'LOCKED' {
   return 'SETUP'
 }
 
-function deriveUserKey(password: string, salt: Buffer): Buffer {
-  return crypto.pbkdf2Sync(password, salt, 100000, 32, 'sha256')
+function deriveUserKey(password: string, salt: Buffer, iterations: number = 600000): Buffer {
+  return crypto.pbkdf2Sync(password, salt, iterations, 32, 'sha256')
 }
 
 export function setupDatabase(password: string): { success: boolean, recoveryKey?: string, error?: string } {
@@ -61,6 +61,7 @@ export function setupDatabase(password: string): { success: boolean, recoveryKey
     
     const meta = {
       salt: salt.toString('base64'),
+      iterations: 600000,
       password_payload: Buffer.concat([iv1, tag1, passPayload]).toString('base64'),
       recovery_payload: Buffer.concat([iv2, tag2, recPayload]).toString('base64'),
     }
@@ -106,8 +107,9 @@ export function unlockDatabase(password: string, isRecovery: boolean = false): {
     const metaStr = fs.readFileSync(META_FILE, 'utf-8')
     const meta = JSON.parse(metaStr)
     const salt = Buffer.from(meta.salt, 'base64')
+    const iterations = meta.iterations || 100000
     
-    const userKey = deriveUserKey(password, salt)
+    const userKey = deriveUserKey(password, salt, iterations)
     const payload = isRecovery ? meta.recovery_payload : meta.password_payload
     
     const masterKey = decryptPayload(payload, userKey)
@@ -179,9 +181,10 @@ export function changePassword(oldPassword: string, newPassword: string): { succ
     const metaStr = fs.readFileSync(META_FILE, 'utf-8')
     const meta = JSON.parse(metaStr)
     const salt = Buffer.from(meta.salt, 'base64')
+    const oldIterations = meta.iterations || 100000
     
     // Verify old password
-    const oldUserKey = deriveUserKey(oldPassword, salt)
+    const oldUserKey = deriveUserKey(oldPassword, salt, oldIterations)
     const masterKey = decryptPayload(meta.password_payload, oldUserKey)
     if (!masterKey) {
       return { success: false, error: 'Incorrect current password' }
@@ -208,6 +211,7 @@ export function changePassword(oldPassword: string, newPassword: string): { succ
     
     const newMeta = {
       salt: newSalt.toString('base64'),
+      iterations: 600000,
       password_payload: Buffer.concat([iv1, tag1, passPayload]).toString('base64'),
       recovery_payload: Buffer.concat([iv2, tag2, recPayload]).toString('base64'),
     }
