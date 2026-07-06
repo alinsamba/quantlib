@@ -28,6 +28,16 @@ function deriveUserKey(password: string, salt: Buffer): Buffer {
   return crypto.pbkdf2Sync(password, salt, 100000, 32, 'sha256')
 }
 
+/**
+ * Generates a 12-byte initialization vector where the first byte is set to the provided domain identifier.
+ * This ensures distinct IV handling for different key streams, improving cryptographic hygiene.
+ */
+function generateDistinctIv(domain: number): Buffer {
+  const iv = crypto.randomBytes(12)
+  iv[0] = domain & 0xFF
+  return iv
+}
+
 export function setupDatabase(password: string): { success: boolean, recoveryKey?: string, error?: string } {
   try {
     if (checkDbStatus() !== 'SETUP') {
@@ -48,13 +58,13 @@ export function setupDatabase(password: string): { success: boolean, recoveryKey
     const recoveryUserKey = deriveUserKey(recoveryKey, salt)
     
     // Encrypt MasterKey with UserKey
-    const iv1 = crypto.randomBytes(12)
+    const iv1 = generateDistinctIv(0)
     const cipher1 = crypto.createCipheriv('aes-256-gcm', userKey, iv1)
     const passPayload = Buffer.concat([cipher1.update(masterKey), cipher1.final()])
     const tag1 = cipher1.getAuthTag()
     
     // Encrypt MasterKey with RecoveryKey
-    const iv2 = crypto.randomBytes(12)
+    const iv2 = generateDistinctIv(1)
     const cipher2 = crypto.createCipheriv('aes-256-gcm', recoveryUserKey, iv2)
     const recPayload = Buffer.concat([cipher2.update(masterKey), cipher2.final()])
     const tag2 = cipher2.getAuthTag()
@@ -143,7 +153,7 @@ export function encryptTempDatabase() {
   
   try {
     const dbData = fs.readFileSync(TEMP_DB)
-    const iv = crypto.randomBytes(12)
+    const iv = generateDistinctIv(2)
     const cipher = crypto.createCipheriv('aes-256-gcm', currentMasterKey, iv)
     const encrypted = Buffer.concat([cipher.update(dbData), cipher.final()])
     const tag = cipher.getAuthTag()
@@ -195,13 +205,13 @@ export function changePassword(oldPassword: string, newPassword: string): { succ
     const newRecoveryUserKey = deriveUserKey(recoveryKey, newSalt)
     
     // Encrypt MasterKey with new UserKey
-    const iv1 = crypto.randomBytes(12)
+    const iv1 = generateDistinctIv(0)
     const cipher1 = crypto.createCipheriv('aes-256-gcm', newUserKey, iv1)
     const passPayload = Buffer.concat([cipher1.update(masterKey), cipher1.final()])
     const tag1 = cipher1.getAuthTag()
     
     // Encrypt MasterKey with new RecoveryKey
-    const iv2 = crypto.randomBytes(12)
+    const iv2 = generateDistinctIv(1)
     const cipher2 = crypto.createCipheriv('aes-256-gcm', newRecoveryUserKey, iv2)
     const recPayload = Buffer.concat([cipher2.update(masterKey), cipher2.final()])
     const tag2 = cipher2.getAuthTag()
