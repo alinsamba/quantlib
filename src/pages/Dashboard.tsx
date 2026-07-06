@@ -8,6 +8,15 @@ import { useNavigate } from 'react-router-dom'
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
 
+interface SubjectSummary {
+  name: string
+  openingCount: number
+  recovered: number
+  issued: number
+  damaged: number
+  lost: number
+}
+
 export default function Dashboard() {
   const [summaryData, setSummaryData] = useState<any>(null)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
@@ -31,7 +40,7 @@ export default function Dashboard() {
   if (errorMsg) return <div className="p-8 text-red-500 font-bold bg-white rounded-lg shadow">Error Loading Dashboard: {errorMsg}</div>
   if (!summaryData) return <div className="flex h-full items-center justify-center text-slate-500">Loading Dashboard Data...</div>
 
-  const subjectData = summaryData.subjects.map((s: any) => ({
+  const subjectData = summaryData.subjects.map((s: SubjectSummary) => ({
     name: s.name,
     available: calculateAvailable(s),
     total: s.openingCount + s.recovered
