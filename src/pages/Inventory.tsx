@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { db } from '../lib/ipc-client'
 import { calculateAvailable } from '../lib/utils'
 
@@ -48,12 +48,20 @@ export default function Inventory() {
 
   const filtered = subjects.filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()))
 
+  const subjectsMap = useMemo(() => {
+    const map = new Map()
+    for (const subject of subjects) {
+      map.set(subject.id, subject)
+    }
+    return map
+  }, [subjects])
+
   const handleIssueSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
       const dueDate = new Date()
       dueDate.setDate(dueDate.getDate() + 14) // default 14 days
-      const subject = subjects.find((sub) => sub.id === issueData.subjectId)
+      const subject = subjectsMap.get(issueData.subjectId)
 
       if (!subject || calculateAvailable(subject) <= 0) {
         alert('No available books for this subject.')
