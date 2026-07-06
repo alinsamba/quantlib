@@ -1,0 +1,72 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./quantlib.db"
+}
+
+model School {
+  id           Int      @id @default(autoincrement())
+  name         String
+  motto        String?
+  logoPath     String?
+  address      String?
+  contactName  String?
+  contactPhone String?
+  academicYear String?
+  updatedAt    DateTime @updatedAt
+}
+
+model Subject {
+  id           Int        @id @default(autoincrement())
+  name         String     @unique
+  category     String?
+  openingCount Int        @default(0)
+  recovered    Int        @default(0)
+  issued       Int        @default(0)
+  damaged      Int        @default(0)
+  lost         Int        @default(0)
+  notes        String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  incidents    Incident[]
+  auditLogs    AuditLog[]
+}
+
+model Incident {
+  id               Int      @id @default(autoincrement())
+  type             String   // DAMAGED, LOST, NEW, RECOVERED, DONATION
+  date             DateTime
+  subjectId        Int?
+  subject          Subject? @relation(fields: [subjectId], references: [id])
+  bookTitle        String
+  condition        String?
+  comment          String?
+  reportedBy       String?
+  responsibleParty String?
+  studentClass     String?
+  actionTaken      String?
+  createdAt        DateTime @default(now())
+}
+
+model AuditLog {
+  id         Int      @id @default(autoincrement())
+  subjectId  Int
+  subject    Subject  @relation(fields: [subjectId], references: [id])
+  field      String
+  oldValue   String
+  newValue   String
+  changedBy  String?
+  changedAt  DateTime @default(now())
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String
+  role      String   @default("LIBRARIAN")
+  pinHash   String?
+  createdAt DateTime @default(now())
+}
