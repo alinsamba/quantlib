@@ -1,8 +1,27 @@
 import { useState, useEffect } from 'react'
 import { db } from '../lib/ipc-client'
 
+interface Incident {
+  id: number
+  type: string
+  date: Date | string
+  subjectId?: number
+  subject?: {
+    id: number
+    name: string
+  }
+  bookTitle: string
+  condition?: string
+  comment?: string
+  reportedBy?: string
+  responsibleParty?: string
+  studentClass?: string
+  actionTaken?: string
+  createdAt: Date | string
+}
+
 export default function Incidents() {
-  const [incidents, setIncidents] = useState<any[]>([])
+  const [incidents, setIncidents] = useState<Incident[]>([])
 
   useEffect(() => {
     async function load() {
