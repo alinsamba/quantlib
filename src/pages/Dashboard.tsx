@@ -20,9 +20,9 @@ export default function Dashboard() {
       try {
         const data = await db.getSummary()
         setSummaryData(data)
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error(err)
-        setErrorMsg(err.message || String(err))
+        setErrorMsg(err instanceof Error ? err.message : String(err))
       }
     }
     loadData()

@@ -51,8 +51,8 @@ export default function Login({ onUnlock }: { onUnlock: () => void }) {
           setError(res.error || 'Invalid password or recovery key')
         }
       }
-    } catch (err: any) {
-      setError(err.message || 'An error occurred')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
       setLoading(false)
     }
