@@ -47,8 +47,8 @@ export default function Settings() {
       } else {
         setPasswordError(res.error || 'Failed to change password')
       }
-    } catch (err: any) {
-      setPasswordError(err.message || 'An error occurred')
+    } catch (err: unknown) {
+      setPasswordError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
       setIsChangingPassword(false)
     }

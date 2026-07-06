@@ -81,8 +81,8 @@ export function setupDatabase(password: string): { success: boolean, recoveryKey
     encryptTempDatabase() // Initial encryption
     
     return { success: true, recoveryKey }
-  } catch (err: any) {
-    return { success: false, error: err.message }
+  } catch (err: unknown) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) }
   }
 }
 
@@ -133,8 +133,8 @@ export function unlockDatabase(password: string, isRecovery: boolean = false): {
     }
     
     return { success: true }
-  } catch (err: any) {
-    return { success: false, error: err.message || 'Unlock failed' }
+  } catch (err: unknown) {
+    return { success: false, error: err instanceof Error ? err.message : 'Unlock failed' }
   }
 }
 
@@ -215,7 +215,7 @@ export function changePassword(oldPassword: string, newPassword: string): { succ
     fs.writeFileSync(META_FILE, JSON.stringify(newMeta))
     
     return { success: true, recoveryKey }
-  } catch (err: any) {
-    return { success: false, error: err.message || 'Failed to change password' }
+  } catch (err: unknown) {
+    return { success: false, error: err instanceof Error ? err.message : 'Failed to change password' }
   }
 }

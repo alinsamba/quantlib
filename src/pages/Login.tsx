@@ -14,9 +14,9 @@ export default function Login({ onUnlock }: { onUnlock: () => void }) {
   useEffect(() => {
     db.checkDbStatus()
       .then(s => setStatus(s))
-      .catch(err => {
+      .catch((err: unknown) => {
         console.error(err)
-        setError(err.message || 'Failed to connect to backend')
+        setError(err instanceof Error ? err.message : 'Failed to connect to backend')
         setStatus('SETUP') // or render an error state
       })
   }, [])
@@ -51,8 +51,8 @@ export default function Login({ onUnlock }: { onUnlock: () => void }) {
           setError(res.error || 'Invalid password or recovery key')
         }
       }
-    } catch (err: any) {
-      setError(err.message || 'An error occurred')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
       setLoading(false)
     }
