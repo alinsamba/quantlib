@@ -2,9 +2,22 @@ import { useState, useEffect } from 'react'
 import { db } from '../lib/ipc-client'
 import { calculateAvailable } from '../lib/utils'
 
+export interface Subject {
+  id: number
+  name: string
+  category: string
+  openingCount: number
+  recovered: number
+  issued: number
+  damaged: number
+  lost: number
+  averageCondition?: number
+  degradationRate?: number
+}
+
 export default function Inventory() {
   const [searchTerm, setSearchTerm] = useState('')
-  const [subjects, setSubjects] = useState<any[]>([])
+  const [subjects, setSubjects] = useState<Subject[]>([])
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [newSubject, setNewSubject] = useState({ name: '', category: 'General', openingCount: 0 })
 
@@ -157,7 +170,7 @@ export default function Inventory() {
                     <td className="p-4 text-right font-bold text-green-600">{available}</td>
                     <td className="p-4 text-right">
                       {sub.averageCondition ? sub.averageCondition.toFixed(1) : '3.0'}/3.0
-                      {sub.averageCondition < 2.0 && <span className="text-red-500 ml-1 font-bold" title="Replacement Warning">!</span>}
+                      {(sub.averageCondition ?? 3.0) < 2.0 && <span className="text-red-500 ml-1 font-bold" title="Replacement Warning">!</span>}
                     </td>
                     <td className="p-4 text-right text-slate-500">
                       -{sub.degradationRate ? sub.degradationRate.toFixed(2) : '0.00'}
