@@ -1,8 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
-import electron from 'vite-plugin-electron'
-import renderer from 'vite-plugin-electron-renderer'
+import electron from 'vite-plugin-electron/simple'
 import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
 
@@ -13,35 +12,28 @@ export default defineConfig({
   plugins: [
     tailwindcss(),
     react(),
-    electron([
-      {
+    electron({
+      main: {
         entry: 'electron/main.ts',
         vite: {
           build: {
+            rolldownOptions: {
+              external: ['@prisma/client']
+            },
             rollupOptions: {
               external: ['@prisma/client']
             }
           }
         }
       },
-      {
-        entry: 'electron/preload.ts',
+      preload: {
+        input: 'electron/preload.ts',
         onstart(options) {
           options.reload()
         },
-        vite: {
-          build: {
-            rollupOptions: {
-              output: {
-                format: 'es',
-                entryFileNames: '[name].mjs'
-              }
-            }
-          }
-        }
       },
-    ]),
-    renderer(),
+      renderer: {},
+    }),
   ],
   resolve: {
     alias: {

@@ -10,6 +10,43 @@
     "lint": "oxlint",
     "preview": "vite preview"
   },
+  "build": {
+    "appId": "com.quantlib.app",
+    "productName": "QuantLib",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "asarUnpack": [
+      "node_modules/.prisma/client/**",
+      "node_modules/@prisma/engines/**"
+    ],
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
+      "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
+      "!**/node_modules/*.d.ts",
+      "!**/.vscode",
+      "!**/*.map",
+      "!**/*.ts",
+      "!**/*.tsx",
+      "!**/*.db",
+      "prisma/schema.prisma"
+    ],
+    "mac": {
+      "identity": null,
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false
+    },
+    "win": {
+      "target": ["nsis"],
+      "sign": null
+    },
+    "linux": {
+      "target": ["AppImage"]
+    }
+  },
   "dependencies": {
     "@prisma/client": "^5.21.1",
     "clsx": "^2.1.1",

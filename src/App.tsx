@@ -1,9 +1,24 @@
+import { useState } from 'react'
 import { Outlet, NavLink } from 'react-router-dom'
-import { LayoutDashboard, Book, AlertTriangle, Settings as SettingsIcon } from 'lucide-react'
+import { LayoutDashboard, Book, AlertTriangle, Settings as SettingsIcon, Clock } from 'lucide-react'
+import { ThemeProvider } from './hooks/ThemeContext'
+import Login from './pages/Login'
 
 function App() {
+  const [isUnlocked, setIsUnlocked] = useState(false)
+
+  if (!isUnlocked) {
+    return (
+      <ThemeProvider>
+        <div className="absolute top-0 left-0 w-full h-8 [webkit-app-region:drag] z-50"></div>
+        <Login onUnlock={() => setIsUnlocked(true)} />
+      </ThemeProvider>
+    )
+  }
+
   return (
-    <div className="flex h-screen bg-slate-50 text-slate-900">
+    <ThemeProvider>
+    <div className="flex h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
       {/* Sidebar */}
       <aside className="w-64 bg-slate-900 text-white flex flex-col">
         <div className="p-6 pt-8 flex items-center space-x-3 [webkit-app-region:drag]">
@@ -37,6 +52,13 @@ function App() {
             <span className="font-medium">Incident Log</span>
           </NavLink>
           <NavLink 
+            to="/overdue" 
+            className={({ isActive }) => `flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors [webkit-app-region:no-drag] ${isActive ? 'bg-blue-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}
+          >
+            <Clock size={20} />
+            <span className="font-medium">Overdue</span>
+          </NavLink>
+          <NavLink 
             to="/settings" 
             className={({ isActive }) => `flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors mt-auto [webkit-app-region:no-drag] ${isActive ? 'bg-blue-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}
           >
@@ -49,12 +71,13 @@ function App() {
       {/* Main Content */}
       <main className="flex-1 flex flex-col overflow-hidden">
         {/* Draggable Top Bar for frameless window */}
-        <div className="h-8 bg-slate-50 [webkit-app-region:drag] w-full flex-shrink-0"></div>
+        <div className="h-8 bg-slate-50 dark:bg-slate-900 [webkit-app-region:drag] w-full flex-shrink-0 transition-colors duration-200"></div>
         <div className="flex-1 overflow-auto p-8 pt-4">
           <Outlet />
         </div>
       </main>
     </div>
+    </ThemeProvider>
   )
 }
 

@@ -1,24 +1,19 @@
 import { ipcRenderer, contextBridge } from 'electron'
 
-// --------- Expose some API to the Renderer process ---------
-contextBridge.exposeInMainWorld('ipcRenderer', {
-  on(...args: Parameters<typeof ipcRenderer.on>) {
-    const [channel, listener] = args
-    return ipcRenderer.on(channel, (event, ...args) => listener(event, ...args))
-  },
-  off(...args: Parameters<typeof ipcRenderer.off>) {
-    const [channel, ...omit] = args
-    return ipcRenderer.off(channel, ...omit)
-  },
-  send(...args: Parameters<typeof ipcRenderer.send>) {
-    const [channel, ...omit] = args
-    return ipcRenderer.send(channel, ...omit)
-  },
-  invoke(...args: Parameters<typeof ipcRenderer.invoke>) {
-    const [channel, ...omit] = args
-    return ipcRenderer.invoke(channel, ...omit)
-  },
-
-  // You can expose other APIs you need here.
-  // ...
+// Define the exact signature of our exposed API
+contextBridge.exposeInMainWorld('electronAPI', {
+  getSubjects: () => ipcRenderer.invoke('get-subjects'),
+  getIncidents: () => ipcRenderer.invoke('get-incidents'),
+  getSummary: () => ipcRenderer.invoke('get-summary'),
+  addSubject: (data: any) => ipcRenderer.invoke('add-subject', data),
+  addIncident: (data: any) => ipcRenderer.invoke('add-incident', data),
+  updateSubject: (data: any) => ipcRenderer.invoke('update-subject', data),
+  setTheme: (mode: 'light' | 'dark') => ipcRenderer.invoke('set-theme', mode),
+  addCheckout: (data: any) => ipcRenderer.invoke('add-checkout', data),
+  returnCheckout: (data: any) => ipcRenderer.invoke('return-checkout', data),
+  getOverdueCheckouts: () => ipcRenderer.invoke('get-overdue-checkouts'),
+  checkDbStatus: () => ipcRenderer.invoke('check-db-status'),
+  setupDb: (password: string) => ipcRenderer.invoke('setup-db', password),
+  unlockDb: (args: { password?: string, isRecovery?: boolean }) => ipcRenderer.invoke('unlock-db', args),
+  changePassword: (args: { oldPassword?: string, newPassword?: string }) => ipcRenderer.invoke('change-password', args)
 })

@@ -4,7 +4,7 @@ generator client {
 
 datasource db {
   provider = "sqlite"
-  url      = "file:./quantlib.db"
+  url      = env("DATABASE_URL")
 }
 
 model School {
@@ -16,7 +16,8 @@ model School {
   contactName  String?
   contactPhone String?
   academicYear String?
-  updatedAt    DateTime @updatedAt
+  updatedAt        DateTime @updatedAt
+  checkoutDuration Int      @default(14)
 }
 
 model Subject {
@@ -28,12 +29,15 @@ model Subject {
   issued       Int        @default(0)
   damaged      Int        @default(0)
   lost         Int        @default(0)
-  notes        String?
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  notes            String?
+  averageCondition Float      @default(3.0) // 3=Good, 2=Normal, 1=Damaged
+  degradationRate  Float      @default(0.0) // points lost per checkout
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
 
-  incidents    Incident[]
-  auditLogs    AuditLog[]
+  incidents        Incident[]
+  auditLogs        AuditLog[]
+  checkouts        Checkout[]
 }
 
 model Incident {
@@ -69,4 +73,22 @@ model User {
   role      String   @default("LIBRARIAN")
   pinHash   String?
   createdAt DateTime @default(now())
+}
+
+model Checkout {
+  id               Int       @id @default(autoincrement())
+  subjectId        Int
+  subject          Subject   @relation(fields: [subjectId], references: [id])
+  studentName      String
+  studentClass     String?
+  checkoutDate     DateTime  @default(now())
+  dueDate          DateTime
+  returnDate       DateTime?
+  status           String    @default("ACTIVE") // ACTIVE, RETURNED, OVERDUE, LOST
+  conditionOut     Int       // 3=Good, 2=Normal, 1=Damaged
+  conditionIn      Int?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([subjectId])
 }
