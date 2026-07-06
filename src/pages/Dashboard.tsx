@@ -140,7 +140,7 @@ export default function Dashboard() {
                   paddingAngle={5}
                   dataKey="total"
                 >
-                  {subjectData.map((_: any, index: number) => (
+                  {subjectData.map((_: unknown, index: number) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
