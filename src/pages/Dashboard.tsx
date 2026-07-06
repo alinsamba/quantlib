@@ -5,11 +5,21 @@ import { db } from '../lib/ipc-client'
 import { useTheme } from '../hooks/ThemeContext'
 import { calculateAvailable } from '../lib/utils'
 import { useNavigate } from 'react-router-dom'
+import type { Subject } from '@prisma/client'
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
 
+export interface DashboardSummary {
+  totalBooks: number
+  available: number
+  issued: number
+  damagedLost: number
+  subjects: Subject[]
+  overdueCount: number
+}
+
 export default function Dashboard() {
-  const [summaryData, setSummaryData] = useState<any>(null)
+  const [summaryData, setSummaryData] = useState<DashboardSummary | null>(null)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const { theme } = useTheme()
   const isDark = theme === 'dark'
@@ -31,7 +41,7 @@ export default function Dashboard() {
   if (errorMsg) return <div className="p-8 text-red-500 font-bold bg-white rounded-lg shadow">Error Loading Dashboard: {errorMsg}</div>
   if (!summaryData) return <div className="flex h-full items-center justify-center text-slate-500">Loading Dashboard Data...</div>
 
-  const subjectData = summaryData.subjects.map((s: any) => ({
+  const subjectData = summaryData.subjects.map((s: Subject) => ({
     name: s.name,
     available: calculateAvailable(s),
     total: s.openingCount + s.recovered
