@@ -2,9 +2,22 @@ import { useState, useEffect, useMemo } from 'react'
 import { db } from '../lib/ipc-client'
 import { calculateAvailable } from '../lib/utils'
 
+export interface Subject {
+  id: number
+  name: string
+  category?: string
+  openingCount: number
+  recovered: number
+  issued: number
+  damaged: number
+  lost: number
+  averageCondition: number
+  degradationRate: number
+}
+
 export default function Inventory() {
   const [searchTerm, setSearchTerm] = useState('')
-  const [subjects, setSubjects] = useState<any[]>([])
+  const [subjects, setSubjects] = useState<Subject[]>([])
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [newSubject, setNewSubject] = useState({ name: '', category: 'General', openingCount: 0 })
 
@@ -84,7 +97,7 @@ export default function Inventory() {
     }
   }
 
-  const openIssueModal = (sub: any) => {
+  const openIssueModal = (sub: Subject) => {
     setIssueData({ ...defaultIssueData, subjectId: sub.id })
     setSelectedSubjectName(sub.name)
     setIsIssueModalOpen(true)
@@ -106,7 +119,7 @@ export default function Inventory() {
     }
   }
 
-  const openEditModal = (sub: any) => {
+  const openEditModal = (sub: Subject) => {
     setEditSubject({ id: sub.id, name: sub.name, category: sub.category || '', openingCount: sub.openingCount })
     setIsEditModalOpen(true)
   }
