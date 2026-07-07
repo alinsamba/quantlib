@@ -163,11 +163,46 @@ export function encryptTempDatabase() {
   }
 }
 
+function secureWipe(filePath: string) {
+  if (!fs.existsSync(filePath)) return
+
+  let fd: number | null = null;
+  try {
+    const stats = fs.statSync(filePath)
+    fd = fs.openSync(filePath, 'r+')
+    const bufferSize = 4096
+    const zeroBuffer = Buffer.alloc(bufferSize, 0)
+
+    let bytesWrittenTotal = 0
+    while (bytesWrittenTotal < stats.size) {
+      const bytesToWrite = Math.min(bufferSize, stats.size - bytesWrittenTotal)
+      const written = fs.writeSync(fd, zeroBuffer, 0, bytesToWrite, bytesWrittenTotal)
+      bytesWrittenTotal += written
+    }
+
+    fs.fsyncSync(fd)
+  } catch (err) {
+    console.error(`Failed to securely wipe ${filePath}:`, err)
+  } finally {
+    if (fd !== null) {
+      try {
+        fs.closeSync(fd)
+      } catch (err) {}
+    }
+    // Try to unlink the file regardless of if secure wipe succeeded or failed
+    try {
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath)
+    } catch (err) {
+      console.error(`Failed to delete ${filePath}:`, err)
+    }
+  }
+}
+
 export function cleanupTempDatabase() {
   try {
     if (fs.existsSync(TEMP_DB)) {
       encryptTempDatabase() // Final flush
-      fs.unlinkSync(TEMP_DB)
+      secureWipe(TEMP_DB)
     }
   } catch (e) {
     console.error('Cleanup failed:', e)
