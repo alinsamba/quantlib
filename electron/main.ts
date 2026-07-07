@@ -473,14 +473,15 @@ ipcMain.handle('return-checkout', async (_, { id, conditionIn }) => {
       
       const subject = await tx.subject.findUnique({ where: { id: checkout.subjectId }, include: { checkouts: true } })
       if (subject) {
-        const returnedCheckouts = subject.checkouts.filter((c: any) => c.status === 'RETURNED' && c.conditionIn !== null)
-        let totalDegradation = 0
+        const { totalDegradation, count } = subject.checkouts.reduce((acc: any, c: any) => {
+          if (c.status === 'RETURNED' && c.conditionIn !== null) {
+            acc.totalDegradation += (c.conditionOut - (c.conditionIn || c.conditionOut))
+            acc.count++
+          }
+          return acc
+        }, { totalDegradation: 0, count: 0 })
         
-        returnedCheckouts.forEach((c: any) => {
-          totalDegradation += (c.conditionOut - (c.conditionIn || c.conditionOut))
-        })
-        
-        const newDegradationRate = returnedCheckouts.length > 0 ? totalDegradation / returnedCheckouts.length : 0
+        const newDegradationRate = count > 0 ? totalDegradation / count : 0
         
         const totalBooks = subject.openingCount + subject.recovered - subject.lost - subject.damaged
         const conditionLoss = (checkout.conditionOut - (conditionIn || checkout.conditionOut))
