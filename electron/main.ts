@@ -289,9 +289,9 @@ ipcMain.handle('setup-db', async (_, password) => {
   if (result.success) {
     try {
       await openPrismaDatabase()
-    } catch (err: any) {
+    } catch (err: unknown) {
       await disconnectPrisma()
-      return { success: false, error: err.message || 'Failed to initialize database' }
+      return { success: false, error: err instanceof Error ? err.message : 'Failed to initialize database' }
     }
   }
   return result
@@ -302,9 +302,9 @@ ipcMain.handle('unlock-db', async (_, { password, isRecovery = false }) => {
   if (result.success) {
     try {
       await openPrismaDatabase()
-    } catch (err: any) {
+    } catch (err: unknown) {
       await disconnectPrisma()
-      return { success: false, error: err.message || 'Failed to initialize database' }
+      return { success: false, error: err instanceof Error ? err.message : 'Failed to initialize database' }
     }
   }
   return result
@@ -318,13 +318,13 @@ ipcMain.handle('change-password', (_, { oldPassword, newPassword }) => {
 ipcMain.handle('get-subjects', async () => {
   try {
     ensureDb(); return { success: true, data: await prisma!.subject.findMany() }
-  } catch (err: any) { return { success: false, error: err.message } }
+  } catch (err: unknown) { return { success: false, error: err instanceof Error ? err.message : String(err) } }
 })
 
 ipcMain.handle('get-incidents', async () => {
   try {
     ensureDb(); return { success: true, data: await prisma!.incident.findMany({ include: { subject: true }, orderBy: { date: 'desc' } }) }
-  } catch (err: any) { return { success: false, error: err.message } }
+  } catch (err: unknown) { return { success: false, error: err instanceof Error ? err.message : String(err) } }
 })
 
 ipcMain.handle('get-summary', async () => {
@@ -347,7 +347,7 @@ ipcMain.handle('get-summary', async () => {
     }, { totalBooks: 0, available: 0, issued: 0, damagedLost: 0 })
 
     return { success: true, data: { totalBooks, available, issued, damagedLost, subjects, overdueCount } }
-  } catch (err: any) { return { success: false, error: err.message } }
+  } catch (err: unknown) { return { success: false, error: err instanceof Error ? err.message : String(err) } }
 })
 
 ipcMain.handle('add-subject', async (_, data) => {
@@ -364,7 +364,7 @@ ipcMain.handle('add-subject', async (_, data) => {
     })
     encryptTempDatabase()
     return { success: true, data: res }
-  } catch (err: any) { return { success: false, error: err.message } }
+  } catch (err: unknown) { return { success: false, error: err instanceof Error ? err.message : String(err) } }
 })
 
 const ALLOWED_INCIDENT_TYPES = Object.values(IncidentType)
@@ -415,7 +415,7 @@ ipcMain.handle('add-incident', async (_, data) => {
     })
     encryptTempDatabase()
     return { success: true, data: res }
-  } catch (err: any) { return { success: false, error: err.message } }
+  } catch (err: unknown) { return { success: false, error: err instanceof Error ? err.message : String(err) } }
 })
 
 ipcMain.handle('set-theme', (_, mode) => {
@@ -457,7 +457,7 @@ ipcMain.handle('add-checkout', async (_, data) => {
     })
     encryptTempDatabase()
     return { success: true, data: res }
-  } catch (err: any) { return { success: false, error: err.message } }
+  } catch (err: unknown) { return { success: false, error: err instanceof Error ? err.message : String(err) } }
 })
 
 ipcMain.handle('return-checkout', async (_, { id, conditionIn }) => {
@@ -501,7 +501,7 @@ ipcMain.handle('return-checkout', async (_, { id, conditionIn }) => {
     })
     encryptTempDatabase()
     return { success: true, data: res }
-  } catch (err: any) { return { success: false, error: err.message } }
+  } catch (err: unknown) { return { success: false, error: err instanceof Error ? err.message : String(err) } }
 })
 
 ipcMain.handle('get-overdue-checkouts', async () => {
@@ -513,7 +513,7 @@ ipcMain.handle('get-overdue-checkouts', async () => {
       orderBy: { dueDate: 'asc' }
     })
     return { success: true, data: res }
-  } catch (err: any) { return { success: false, error: err.message } }
+  } catch (err: unknown) { return { success: false, error: err instanceof Error ? err.message : String(err) } }
 })
 
 ipcMain.handle('update-subject', async (_, data) => {
@@ -531,5 +531,5 @@ ipcMain.handle('update-subject', async (_, data) => {
     })
     encryptTempDatabase()
     return { success: true, data: res }
-  } catch (err: any) { return { success: false, error: err.message } }
+  } catch (err: unknown) { return { success: false, error: err instanceof Error ? err.message : String(err) } }
 })
