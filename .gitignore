@@ -27,3 +27,4 @@ prisma/*.db
 *.sln
 *.sw?
 node_modules
+.tmp.driveupload

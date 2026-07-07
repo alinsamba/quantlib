@@ -1,164 +1,275 @@
-import { BrowserWindow as e, app as t, ipcMain as n } from "electron";
-import r from "node:path";
-import { fileURLToPath as i } from "node:url";
-import { PrismaClient as a } from "@prisma/client";
-import o from "node:crypto";
-import s from "node:fs";
+import { BrowserWindow, app, ipcMain } from "electron";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { PrismaClient } from "@prisma/client";
+import crypto from "node:crypto";
+import fs from "node:fs";
 //#region electron/crypto.ts
-var c = t.getPath("userData"), l = r.join(c, "quantlib.meta"), u = r.join(c, "quantlib.enc"), d = r.join(c, "quantlib.enc.bak"), f = r.join(c, "quantlib.enc.tmp"), p = r.join(c, "quantlib_temp.db"), m = r.join(process.cwd(), "quantlib.db"), h = null;
-function g() {
-	return p;
+var DATA_DIR = app.getPath("userData");
+var META_FILE = path.join(DATA_DIR, "quantlib.meta");
+var ENC_FILE = path.join(DATA_DIR, "quantlib.enc");
+var ENC_BACKUP_FILE = path.join(DATA_DIR, "quantlib.enc.bak");
+var ENC_TEMP_FILE = path.join(DATA_DIR, "quantlib.enc.tmp");
+var TEMP_DB = path.join(DATA_DIR, "quantlib_temp.db");
+var LEGACY_DB = path.join(process.cwd(), "quantlib.db");
+var currentMasterKey = null;
+function getTempDbPath() {
+	return TEMP_DB;
 }
-function _() {
-	return s.existsSync(l) && s.existsSync(u) ? "LOCKED" : "SETUP";
+function checkDbStatus() {
+	if (fs.existsSync(META_FILE) && fs.existsSync(ENC_FILE)) return "LOCKED";
+	return "SETUP";
 }
-function v(e, t) {
-	return o.pbkdf2Sync(e, t, 1e5, 32, "sha256");
+function deriveUserKey(password, salt, iterations = 6e5) {
+	return crypto.pbkdf2Sync(password, salt, iterations, 32, "sha256");
 }
-function y(e) {
+/**
+* Generates a 12-byte initialization vector where the first byte is set to the provided domain identifier.
+* This ensures distinct IV handling for different key streams, improving cryptographic hygiene.
+*/
+function generateDistinctIv(domain) {
+	const iv = crypto.randomBytes(12);
+	iv[0] = domain & 255;
+	return iv;
+}
+function setupDatabase(password) {
 	try {
-		if (_() !== "SETUP") return {
-			success: !1,
+		if (checkDbStatus() !== "SETUP") return {
+			success: false,
 			error: "Database is already set up"
 		};
-		if (s.existsSync(l) || s.existsSync(u)) return {
-			success: !1,
+		if (fs.existsSync(META_FILE) || fs.existsSync(ENC_FILE)) return {
+			success: false,
 			error: "Existing database state found. Unlock or recover the database instead."
 		};
-		let t = o.randomBytes(16), n = o.randomBytes(32), r = o.randomBytes(8).toString("hex").match(/.{1,4}/g)?.join("-").toUpperCase() || "", i = v(e, t), a = v(r, t), c = o.randomBytes(12), d = o.createCipheriv("aes-256-gcm", i, c), f = Buffer.concat([d.update(n), d.final()]), g = d.getAuthTag(), y = o.randomBytes(12), b = o.createCipheriv("aes-256-gcm", a, y), x = Buffer.concat([b.update(n), b.final()]), C = b.getAuthTag(), w = {
-			salt: t.toString("base64"),
+		const salt = crypto.randomBytes(16);
+		const masterKey = crypto.randomBytes(32);
+		const recoveryKey = crypto.randomBytes(8).toString("hex").match(/.{1,4}/g)?.join("-").toUpperCase() || "";
+		const userKey = deriveUserKey(password, salt);
+		const recoveryUserKey = deriveUserKey(recoveryKey, salt);
+		const iv1 = generateDistinctIv(0);
+		const cipher1 = crypto.createCipheriv("aes-256-gcm", userKey, iv1);
+		const passPayload = Buffer.concat([cipher1.update(masterKey), cipher1.final()]);
+		const tag1 = cipher1.getAuthTag();
+		const iv2 = generateDistinctIv(1);
+		const cipher2 = crypto.createCipheriv("aes-256-gcm", recoveryUserKey, iv2);
+		const recPayload = Buffer.concat([cipher2.update(masterKey), cipher2.final()]);
+		const tag2 = cipher2.getAuthTag();
+		const meta = {
+			salt: salt.toString("base64"),
+			iterations: 6e5,
 			password_payload: Buffer.concat([
-				c,
-				g,
-				f
+				iv1,
+				tag1,
+				passPayload
 			]).toString("base64"),
 			recovery_payload: Buffer.concat([
-				y,
-				C,
-				x
+				iv2,
+				tag2,
+				recPayload
 			]).toString("base64")
 		};
-		if (s.writeFileSync(l, JSON.stringify(w)), s.existsSync(m)) {
-			s.copyFileSync(m, p);
+		fs.writeFileSync(META_FILE, JSON.stringify(meta));
+		if (fs.existsSync(LEGACY_DB)) {
+			fs.copyFileSync(LEGACY_DB, TEMP_DB);
 			try {
-				s.renameSync(m, m + ".bak");
+				fs.renameSync(LEGACY_DB, LEGACY_DB + ".bak");
 			} catch {}
-		} else s.writeFileSync(p, "");
-		return h = n, S(), {
-			success: !0,
-			recoveryKey: r
-		};
-	} catch (e) {
+		} else fs.writeFileSync(TEMP_DB, "");
+		currentMasterKey = masterKey;
+		encryptTempDatabase();
 		return {
-			success: !1,
-			error: e.message
+			success: true,
+			recoveryKey
+		};
+	} catch (err) {
+		return {
+			success: false,
+			error: err instanceof Error ? err.message : String(err)
 		};
 	}
 }
-function b(e, t) {
+function decryptPayload(payloadBase64, key) {
 	try {
-		let n = Buffer.from(e, "base64"), r = n.subarray(0, 12), i = n.subarray(12, 28), a = n.subarray(28), s = o.createDecipheriv("aes-256-gcm", t, r);
-		return s.setAuthTag(i), Buffer.concat([s.update(a), s.final()]);
+		const buf = Buffer.from(payloadBase64, "base64");
+		const iv = buf.subarray(0, 12);
+		const tag = buf.subarray(12, 28);
+		const encrypted = buf.subarray(28);
+		const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
+		decipher.setAuthTag(tag);
+		return Buffer.concat([decipher.update(encrypted), decipher.final()]);
 	} catch {
 		return null;
 	}
 }
-function x(e, t = !1) {
+function unlockDatabase(password, isRecovery = false) {
 	try {
-		let n = s.readFileSync(l, "utf-8"), r = JSON.parse(n), i = v(e, Buffer.from(r.salt, "base64")), a = b(t ? r.recovery_payload : r.password_payload, i);
-		if (!a) return {
-			success: !1,
+		const metaStr = fs.readFileSync(META_FILE, "utf-8");
+		const meta = JSON.parse(metaStr);
+		const userKey = deriveUserKey(password, Buffer.from(meta.salt, "base64"), meta.iterations || 1e5);
+		const masterKey = decryptPayload(isRecovery ? meta.recovery_payload : meta.password_payload, userKey);
+		if (!masterKey) return {
+			success: false,
 			error: "Invalid password or recovery key"
 		};
-		h = a;
-		let c = s.readFileSync(u);
-		if (c.length > 0) {
-			let e = c.subarray(0, 12), t = c.subarray(12, 28), n = c.subarray(28), r = o.createDecipheriv("aes-256-gcm", h, e);
-			r.setAuthTag(t);
-			let i = Buffer.concat([r.update(n), r.final()]);
-			s.writeFileSync(p, i);
-		} else s.writeFileSync(p, "");
-		return { success: !0 };
-	} catch (e) {
+		currentMasterKey = masterKey;
+		const encData = fs.readFileSync(ENC_FILE);
+		if (encData.length > 0) {
+			const iv = encData.subarray(0, 12);
+			const tag = encData.subarray(12, 28);
+			const encrypted = encData.subarray(28);
+			const decipher = crypto.createDecipheriv("aes-256-gcm", currentMasterKey, iv);
+			decipher.setAuthTag(tag);
+			const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
+			fs.writeFileSync(TEMP_DB, decrypted);
+		} else fs.writeFileSync(TEMP_DB, "");
+		return { success: true };
+	} catch (err) {
 		return {
-			success: !1,
-			error: e.message || "Unlock failed"
+			success: false,
+			error: err instanceof Error ? err.message : "Unlock failed"
 		};
 	}
 }
-function S() {
-	if (!(!h || !s.existsSync(p))) try {
-		let e = s.readFileSync(p), t = o.randomBytes(12), n = o.createCipheriv("aes-256-gcm", h, t), r = Buffer.concat([n.update(e), n.final()]), i = n.getAuthTag();
-		s.writeFileSync(f, Buffer.concat([
-			t,
-			i,
-			r
-		])), s.existsSync(u) && s.copyFileSync(u, d), s.renameSync(f, u);
-	} catch (e) {
-		console.error("Failed to encrypt database:", e);
+function encryptTempDatabase() {
+	if (!currentMasterKey || !fs.existsSync(TEMP_DB)) return;
+	try {
+		const dbData = fs.readFileSync(TEMP_DB);
+		const iv = generateDistinctIv(2);
+		const cipher = crypto.createCipheriv("aes-256-gcm", currentMasterKey, iv);
+		const encrypted = Buffer.concat([cipher.update(dbData), cipher.final()]);
+		const tag = cipher.getAuthTag();
+		fs.writeFileSync(ENC_TEMP_FILE, Buffer.concat([
+			iv,
+			tag,
+			encrypted
+		]));
+		if (fs.existsSync(ENC_FILE)) fs.copyFileSync(ENC_FILE, ENC_BACKUP_FILE);
+		fs.renameSync(ENC_TEMP_FILE, ENC_FILE);
+	} catch (err) {
+		console.error("Failed to encrypt database:", err);
 		try {
-			s.existsSync(f) && s.unlinkSync(f);
+			if (fs.existsSync(ENC_TEMP_FILE)) fs.unlinkSync(ENC_TEMP_FILE);
 		} catch {}
 	}
 }
-function C() {
+function secureWipe(filePath) {
+	if (!fs.existsSync(filePath)) return;
+	let fd = null;
 	try {
-		s.existsSync(p) && (S(), s.unlinkSync(p));
+		const stats = fs.statSync(filePath);
+		fd = fs.openSync(filePath, "r+");
+		const bufferSize = 4096;
+		const zeroBuffer = Buffer.alloc(bufferSize, 0);
+		let bytesWrittenTotal = 0;
+		while (bytesWrittenTotal < stats.size) {
+			const bytesToWrite = Math.min(bufferSize, stats.size - bytesWrittenTotal);
+			const written = fs.writeSync(fd, zeroBuffer, 0, bytesToWrite, bytesWrittenTotal);
+			bytesWrittenTotal += written;
+		}
+		fs.fsyncSync(fd);
+	} catch (err) {
+		console.error(`Failed to securely wipe ${filePath}:`, err);
+	} finally {
+		if (fd !== null) try {
+			fs.closeSync(fd);
+		} catch (err) {}
+		try {
+			if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+		} catch (err) {
+			console.error(`Failed to delete ${filePath}:`, err);
+		}
+	}
+}
+function cleanupTempDatabase() {
+	try {
+		if (fs.existsSync(TEMP_DB)) {
+			encryptTempDatabase();
+			secureWipe(TEMP_DB);
+		}
 	} catch (e) {
 		console.error("Cleanup failed:", e);
 	}
 }
-function w(e, t) {
+function changePassword(oldPassword, newPassword) {
 	try {
-		let n = s.readFileSync(l, "utf-8"), r = JSON.parse(n), i = v(e, Buffer.from(r.salt, "base64")), a = b(r.password_payload, i);
-		if (!a) return {
-			success: !1,
+		const metaStr = fs.readFileSync(META_FILE, "utf-8");
+		const meta = JSON.parse(metaStr);
+		const oldUserKey = deriveUserKey(oldPassword, Buffer.from(meta.salt, "base64"), meta.iterations || 1e5);
+		const masterKey = decryptPayload(meta.password_payload, oldUserKey);
+		if (!masterKey) return {
+			success: false,
 			error: "Incorrect current password"
 		};
-		let c = o.randomBytes(16), u = o.randomBytes(8).toString("hex").match(/.{1,4}/g)?.join("-").toUpperCase() || "", d = v(t, c), f = v(u, c), p = o.randomBytes(12), m = o.createCipheriv("aes-256-gcm", d, p), h = Buffer.concat([m.update(a), m.final()]), g = m.getAuthTag(), _ = o.randomBytes(12), y = o.createCipheriv("aes-256-gcm", f, _), x = Buffer.concat([y.update(a), y.final()]), S = y.getAuthTag(), C = {
-			salt: c.toString("base64"),
+		const newSalt = crypto.randomBytes(16);
+		const recoveryKey = crypto.randomBytes(8).toString("hex").match(/.{1,4}/g)?.join("-").toUpperCase() || "";
+		const newUserKey = deriveUserKey(newPassword, newSalt);
+		const newRecoveryUserKey = deriveUserKey(recoveryKey, newSalt);
+		const iv1 = generateDistinctIv(0);
+		const cipher1 = crypto.createCipheriv("aes-256-gcm", newUserKey, iv1);
+		const passPayload = Buffer.concat([cipher1.update(masterKey), cipher1.final()]);
+		const tag1 = cipher1.getAuthTag();
+		const iv2 = generateDistinctIv(1);
+		const cipher2 = crypto.createCipheriv("aes-256-gcm", newRecoveryUserKey, iv2);
+		const recPayload = Buffer.concat([cipher2.update(masterKey), cipher2.final()]);
+		const tag2 = cipher2.getAuthTag();
+		const newMeta = {
+			salt: newSalt.toString("base64"),
+			iterations: 6e5,
 			password_payload: Buffer.concat([
-				p,
-				g,
-				h
+				iv1,
+				tag1,
+				passPayload
 			]).toString("base64"),
 			recovery_payload: Buffer.concat([
-				_,
-				S,
-				x
+				iv2,
+				tag2,
+				recPayload
 			]).toString("base64")
 		};
-		return s.writeFileSync(l, JSON.stringify(C)), {
-			success: !0,
-			recoveryKey: u
-		};
-	} catch (e) {
+		fs.writeFileSync(META_FILE, JSON.stringify(newMeta));
 		return {
-			success: !1,
-			error: e.message || "Failed to change password"
+			success: true,
+			recoveryKey
+		};
+	} catch (err) {
+		return {
+			success: false,
+			error: err instanceof Error ? err.message : "Failed to change password"
 		};
 	}
 }
 //#endregion
 //#region src/lib/utils.ts
-function T(e) {
-	return e.openingCount + e.recovered - e.issued - e.damaged - e.lost;
+function calculateAvailable(subject) {
+	return subject.openingCount + subject.recovered - subject.issued - subject.damaged - subject.lost;
 }
-var E = {
+var IncidentType = {
 	DAMAGED: "DAMAGED",
 	LOST: "LOST",
 	NEW: "NEW",
 	RECOVERED: "RECOVERED",
 	DONATION: "DONATION"
-}, D = r.dirname(i(import.meta.url));
-process.env.DIST = r.join(D, "../dist"), process.env.VITE_PUBLIC = t.isPackaged ? process.env.DIST : r.join(process.env.DIST, "../public");
-var O, k = process.env.VITE_DEV_SERVER_URL;
-t.requestSingleInstanceLock() ? t.on("second-instance", () => {
-	O && (O.isMinimized() && O.restore(), O.focus());
-}) : (t.quit(), process.exit(0));
-function A() {
-	O = new e({
-		icon: r.join(process.env.VITE_PUBLIC, "icon.png"),
+};
+//#endregion
+//#region electron/main.ts
+var __dirname = path.dirname(fileURLToPath(import.meta.url));
+process.env.DIST = path.join(__dirname, "../dist");
+process.env.VITE_PUBLIC = app.isPackaged ? process.env.DIST : path.join(process.env.DIST, "../public");
+var win;
+var VITE_DEV_SERVER_URL = process.env["VITE_DEV_SERVER_URL"];
+if (!app.requestSingleInstanceLock()) {
+	app.quit();
+	process.exit(0);
+} else app.on("second-instance", () => {
+	if (win) {
+		if (win.isMinimized()) win.restore();
+		win.focus();
+	}
+});
+function createWindow() {
+	win = new BrowserWindow({
+		icon: path.join(process.env.VITE_PUBLIC, "icon.png"),
 		width: 1200,
 		height: 800,
 		titleBarStyle: "hidden",
@@ -168,311 +279,484 @@ function A() {
 			height: 32
 		},
 		webPreferences: {
-			preload: r.join(D, "preload.mjs"),
-			contextIsolation: !0,
-			nodeIntegration: !1,
-			sandbox: !0,
-			webSecurity: !0
+			preload: path.join(__dirname, "preload.mjs"),
+			contextIsolation: true,
+			nodeIntegration: false,
+			sandbox: true,
+			webSecurity: true
 		}
-	}), O.removeMenu(), O.webContents.setWindowOpenHandler(({ url: e }) => ((e.startsWith("https:") || e.startsWith("http:")) && import("electron").then(({ shell: t }) => t.openExternal(e)), { action: "deny" })), O.webContents.on("will-navigate", (e, t) => {
-		let n = new URL(t), r = n.protocol === "file:", i = k && n.origin === new URL(k).origin;
-		!r && !i && e.preventDefault();
-	}), O.webContents.on("did-finish-load", () => {
-		O?.webContents.send("main-process-message", (/* @__PURE__ */ new Date()).toLocaleString());
-	}), k ? O.loadURL(k) : O.loadFile(r.join(process.env.DIST, "index.html"));
+	});
+	win.removeMenu();
+	win.webContents.setWindowOpenHandler(({ url }) => {
+		if (url.startsWith("https:") || url.startsWith("http:")) import("electron").then(({ shell }) => shell.openExternal(url));
+		return { action: "deny" };
+	});
+	win.webContents.on("will-navigate", (event, url) => {
+		const parsedUrl = new URL(url);
+		const isLocalFile = parsedUrl.protocol === "file:";
+		const isDevServer = VITE_DEV_SERVER_URL && parsedUrl.origin === new URL(VITE_DEV_SERVER_URL).origin;
+		if (!isLocalFile && !isDevServer) event.preventDefault();
+	});
+	win.webContents.on("did-finish-load", () => {
+		win?.webContents.send("main-process-message", (/* @__PURE__ */ new Date()).toLocaleString());
+	});
+	if (VITE_DEV_SERVER_URL) win.loadURL(VITE_DEV_SERVER_URL);
+	else win.loadFile(path.join(process.env.DIST, "index.html"));
 }
-async function j() {
-	N &&= (await N.$disconnect(), null);
+async function disconnectPrisma() {
+	if (!prisma) return;
+	await prisma.$disconnect();
+	prisma = null;
 }
-async function M() {
-	if (!P) {
-		await j();
-		try {
-			C();
-		} finally {
-			P = !0;
-		}
+async function disconnectAndCleanupDatabase() {
+	if (databaseCleanupDone) return;
+	await disconnectPrisma();
+	try {
+		cleanupTempDatabase();
+	} finally {
+		databaseCleanupDone = true;
 	}
 }
-t.on("window-all-closed", async () => {
-	await M(), process.platform !== "darwin" && (t.quit(), O = null);
-}), t.on("before-quit", (e) => {
-	P || (e.preventDefault(), M().then(() => t.quit()).catch((e) => {
-		console.error("Database cleanup failed:", e), t.quit();
-	}));
-}), t.on("activate", () => {
-	e.getAllWindows().length === 0 && A();
-}), t.whenReady().then(() => {
-	import("electron").then(({ session: e }) => {
-		e.defaultSession.webRequest.onHeadersReceived((e, t) => {
-			let n = k ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'" : "script-src 'self'";
-			t({ responseHeaders: {
-				...e.responseHeaders,
-				"Content-Security-Policy": [`default-src 'self'; ${n}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:;`]
+app.on("window-all-closed", async () => {
+	await disconnectAndCleanupDatabase();
+	if (process.platform !== "darwin") {
+		app.quit();
+		win = null;
+	}
+});
+app.on("before-quit", (event) => {
+	if (databaseCleanupDone) return;
+	event.preventDefault();
+	disconnectAndCleanupDatabase().then(() => app.quit()).catch((err) => {
+		console.error("Database cleanup failed:", err);
+		app.quit();
+	});
+});
+app.on("activate", () => {
+	if (BrowserWindow.getAllWindows().length === 0) createWindow();
+});
+app.whenReady().then(() => {
+	import("electron").then(({ session }) => {
+		session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+			const scriptSrc = VITE_DEV_SERVER_URL ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'" : "script-src 'self'";
+			callback({ responseHeaders: {
+				...details.responseHeaders,
+				"Content-Security-Policy": [`default-src 'self'; ${scriptSrc}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:;`]
 			} });
 		});
-	}), A();
+	});
+	createWindow();
 });
-var N = null, P = !1;
-async function F(e) {
-	await e.$executeRawUnsafe("PRAGMA foreign_keys = ON"), await e.$executeRawUnsafe("\n    CREATE TABLE IF NOT EXISTS \"School\" (\n      \"id\" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,\n      \"name\" TEXT NOT NULL,\n      \"motto\" TEXT,\n      \"logoPath\" TEXT,\n      \"address\" TEXT,\n      \"contactName\" TEXT,\n      \"contactPhone\" TEXT,\n      \"academicYear\" TEXT,\n      \"updatedAt\" DATETIME NOT NULL,\n      \"checkoutDuration\" INTEGER NOT NULL DEFAULT 14\n    )\n  "), await e.$executeRawUnsafe("\n    CREATE TABLE IF NOT EXISTS \"Subject\" (\n      \"id\" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,\n      \"name\" TEXT NOT NULL,\n      \"category\" TEXT,\n      \"openingCount\" INTEGER NOT NULL DEFAULT 0,\n      \"recovered\" INTEGER NOT NULL DEFAULT 0,\n      \"issued\" INTEGER NOT NULL DEFAULT 0,\n      \"damaged\" INTEGER NOT NULL DEFAULT 0,\n      \"lost\" INTEGER NOT NULL DEFAULT 0,\n      \"notes\" TEXT,\n      \"averageCondition\" REAL NOT NULL DEFAULT 3.0,\n      \"degradationRate\" REAL NOT NULL DEFAULT 0.0,\n      \"createdAt\" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n      \"updatedAt\" DATETIME NOT NULL\n    )\n  "), await e.$executeRawUnsafe("CREATE UNIQUE INDEX IF NOT EXISTS \"Subject_name_key\" ON \"Subject\"(\"name\")"), await e.$executeRawUnsafe("\n    CREATE TABLE IF NOT EXISTS \"Incident\" (\n      \"id\" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,\n      \"type\" TEXT NOT NULL,\n      \"date\" DATETIME NOT NULL,\n      \"subjectId\" INTEGER,\n      \"bookTitle\" TEXT NOT NULL,\n      \"condition\" TEXT,\n      \"comment\" TEXT,\n      \"reportedBy\" TEXT,\n      \"responsibleParty\" TEXT,\n      \"studentClass\" TEXT,\n      \"actionTaken\" TEXT,\n      \"createdAt\" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n      CONSTRAINT \"Incident_subjectId_fkey\" FOREIGN KEY (\"subjectId\") REFERENCES \"Subject\" (\"id\") ON DELETE SET NULL ON UPDATE CASCADE\n    )\n  "), await e.$executeRawUnsafe("\n    CREATE TABLE IF NOT EXISTS \"AuditLog\" (\n      \"id\" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,\n      \"subjectId\" INTEGER NOT NULL,\n      \"field\" TEXT NOT NULL,\n      \"oldValue\" TEXT NOT NULL,\n      \"newValue\" TEXT NOT NULL,\n      \"changedBy\" TEXT,\n      \"changedAt\" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n      CONSTRAINT \"AuditLog_subjectId_fkey\" FOREIGN KEY (\"subjectId\") REFERENCES \"Subject\" (\"id\") ON DELETE RESTRICT ON UPDATE CASCADE\n    )\n  "), await e.$executeRawUnsafe("\n    CREATE TABLE IF NOT EXISTS \"User\" (\n      \"id\" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,\n      \"name\" TEXT NOT NULL,\n      \"role\" TEXT NOT NULL DEFAULT 'LIBRARIAN',\n      \"pinHash\" TEXT,\n      \"createdAt\" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP\n    )\n  "), await e.$executeRawUnsafe("\n    CREATE TABLE IF NOT EXISTS \"Checkout\" (\n      \"id\" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,\n      \"subjectId\" INTEGER NOT NULL,\n      \"studentName\" TEXT NOT NULL,\n      \"studentClass\" TEXT,\n      \"checkoutDate\" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n      \"dueDate\" DATETIME NOT NULL,\n      \"returnDate\" DATETIME,\n      \"status\" TEXT NOT NULL DEFAULT 'ACTIVE',\n      \"conditionOut\" INTEGER NOT NULL,\n      \"conditionIn\" INTEGER,\n      \"createdAt\" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n      \"updatedAt\" DATETIME NOT NULL,\n      CONSTRAINT \"Checkout_subjectId_fkey\" FOREIGN KEY (\"subjectId\") REFERENCES \"Subject\" (\"id\") ON DELETE RESTRICT ON UPDATE CASCADE\n    )\n  "), await e.$executeRawUnsafe("CREATE INDEX IF NOT EXISTS \"Checkout_subjectId_idx\" ON \"Checkout\"(\"subjectId\")");
+var prisma = null;
+var databaseCleanupDone = false;
+async function initializeDatabase(client) {
+	await client.$executeRawUnsafe("PRAGMA foreign_keys = ON");
+	await client.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "School" (
+      "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+      "name" TEXT NOT NULL,
+      "motto" TEXT,
+      "logoPath" TEXT,
+      "address" TEXT,
+      "contactName" TEXT,
+      "contactPhone" TEXT,
+      "academicYear" TEXT,
+      "updatedAt" DATETIME NOT NULL,
+      "checkoutDuration" INTEGER NOT NULL DEFAULT 14
+    )
+  `);
+	await client.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "Subject" (
+      "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+      "name" TEXT NOT NULL,
+      "category" TEXT,
+      "openingCount" INTEGER NOT NULL DEFAULT 0,
+      "recovered" INTEGER NOT NULL DEFAULT 0,
+      "issued" INTEGER NOT NULL DEFAULT 0,
+      "damaged" INTEGER NOT NULL DEFAULT 0,
+      "lost" INTEGER NOT NULL DEFAULT 0,
+      "notes" TEXT,
+      "averageCondition" REAL NOT NULL DEFAULT 3.0,
+      "degradationRate" REAL NOT NULL DEFAULT 0.0,
+      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" DATETIME NOT NULL
+    )
+  `);
+	await client.$executeRawUnsafe("CREATE UNIQUE INDEX IF NOT EXISTS \"Subject_name_key\" ON \"Subject\"(\"name\")");
+	await client.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "Incident" (
+      "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+      "type" TEXT NOT NULL,
+      "date" DATETIME NOT NULL,
+      "subjectId" INTEGER,
+      "bookTitle" TEXT NOT NULL,
+      "condition" TEXT,
+      "comment" TEXT,
+      "reportedBy" TEXT,
+      "responsibleParty" TEXT,
+      "studentClass" TEXT,
+      "actionTaken" TEXT,
+      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "Incident_subjectId_fkey" FOREIGN KEY ("subjectId") REFERENCES "Subject" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+    )
+  `);
+	await client.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "AuditLog" (
+      "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+      "subjectId" INTEGER NOT NULL,
+      "field" TEXT NOT NULL,
+      "oldValue" TEXT NOT NULL,
+      "newValue" TEXT NOT NULL,
+      "changedBy" TEXT,
+      "changedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "AuditLog_subjectId_fkey" FOREIGN KEY ("subjectId") REFERENCES "Subject" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+    )
+  `);
+	await client.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "User" (
+      "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+      "name" TEXT NOT NULL,
+      "role" TEXT NOT NULL DEFAULT 'LIBRARIAN',
+      "pinHash" TEXT,
+      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+	await client.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "Checkout" (
+      "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+      "subjectId" INTEGER NOT NULL,
+      "studentName" TEXT NOT NULL,
+      "studentClass" TEXT,
+      "checkoutDate" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "dueDate" DATETIME NOT NULL,
+      "returnDate" DATETIME,
+      "status" TEXT NOT NULL DEFAULT 'ACTIVE',
+      "conditionOut" INTEGER NOT NULL,
+      "conditionIn" INTEGER,
+      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" DATETIME NOT NULL,
+      CONSTRAINT "Checkout_subjectId_fkey" FOREIGN KEY ("subjectId") REFERENCES "Subject" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+    )
+  `);
+	await client.$executeRawUnsafe("CREATE INDEX IF NOT EXISTS \"Checkout_subjectId_idx\" ON \"Checkout\"(\"subjectId\")");
 }
-async function I() {
-	await j(), process.env.DATABASE_URL = `file:${g()}`, N = new a(), await F(N), S();
+async function openPrismaDatabase() {
+	await disconnectPrisma();
+	process.env.DATABASE_URL = `file:${getTempDbPath()}`;
+	prisma = new PrismaClient();
+	await initializeDatabase(prisma);
+	encryptTempDatabase();
 }
-function L() {
-	if (!N) throw Error("Database is locked. Please authenticate first.");
+function ensureDb() {
+	if (!prisma) throw new Error("Database is locked. Please authenticate first.");
 }
-n.handle("check-db-status", () => _()), n.handle("setup-db", async (e, t) => {
-	let n = y(t);
-	if (n.success) try {
-		await I();
-	} catch (e) {
-		return await j(), {
-			success: !1,
-			error: e.message || "Failed to initialize database"
-		};
-	}
-	return n;
-}), n.handle("unlock-db", async (e, { password: t, isRecovery: n = !1 }) => {
-	let r = x(t, n);
-	if (r.success) try {
-		await I();
-	} catch (e) {
-		return await j(), {
-			success: !1,
-			error: e.message || "Failed to initialize database"
-		};
-	}
-	return r;
-}), n.handle("change-password", (e, { oldPassword: t, newPassword: n }) => w(t, n)), n.handle("get-subjects", async () => {
-	try {
-		return L(), {
-			success: !0,
-			data: await N.subject.findMany()
-		};
-	} catch (e) {
+ipcMain.handle("check-db-status", () => {
+	return checkDbStatus();
+});
+ipcMain.handle("setup-db", async (_, password) => {
+	const result = setupDatabase(password);
+	if (result.success) try {
+		await openPrismaDatabase();
+	} catch (err) {
+		await disconnectPrisma();
 		return {
-			success: !1,
-			error: e.message
+			success: false,
+			error: err instanceof Error ? err.message : "Failed to initialize database"
 		};
 	}
-}), n.handle("get-incidents", async () => {
+	return result;
+});
+ipcMain.handle("unlock-db", async (_, { password, isRecovery = false }) => {
+	const result = unlockDatabase(password, isRecovery);
+	if (result.success) try {
+		await openPrismaDatabase();
+	} catch (err) {
+		await disconnectPrisma();
+		return {
+			success: false,
+			error: err instanceof Error ? err.message : "Failed to initialize database"
+		};
+	}
+	return result;
+});
+ipcMain.handle("change-password", (_, { oldPassword, newPassword }) => {
+	return changePassword(oldPassword, newPassword);
+});
+ipcMain.handle("get-subjects", async () => {
 	try {
-		return L(), {
-			success: !0,
-			data: await N.incident.findMany({
-				include: { subject: !0 },
+		ensureDb();
+		return {
+			success: true,
+			data: await prisma.subject.findMany()
+		};
+	} catch (err) {
+		return {
+			success: false,
+			error: err instanceof Error ? err.message : String(err)
+		};
+	}
+});
+ipcMain.handle("get-incidents", async () => {
+	try {
+		ensureDb();
+		return {
+			success: true,
+			data: await prisma.incident.findMany({
+				include: { subject: true },
 				orderBy: { date: "desc" }
 			})
 		};
-	} catch (e) {
+	} catch (err) {
 		return {
-			success: !1,
-			error: e.message
-		};
-	}
-}), n.handle("get-summary", async () => {
-	try {
-		L();
-		let e = await N.subject.findMany(), t = 0, n = 0, r = 0, i = 0;
-		e.forEach((e) => {
-			t += e.openingCount + e.recovered, r += e.issued, i += e.damaged + e.lost, n += T(e);
-		});
-		let a = await N.checkout.count({ where: {
-			status: "ACTIVE",
-			dueDate: { lt: /* @__PURE__ */ new Date() }
-		} });
-		return {
-			success: !0,
-			data: {
-				totalBooks: t,
-				available: n,
-				issued: r,
-				damagedLost: i,
-				subjects: e,
-				overdueCount: a
-			}
-		};
-	} catch (e) {
-		return {
-			success: !1,
-			error: e.message
-		};
-	}
-}), n.handle("add-subject", async (e, t) => {
-	try {
-		if (L(), !t.name || typeof t.name != "string") throw Error("Invalid subject name");
-		let e = await N.subject.create({ data: {
-			name: t.name,
-			category: typeof t.category == "string" ? t.category : "General",
-			openingCount: typeof t.openingCount == "number" ? t.openingCount : 0
-		} });
-		return S(), {
-			success: !0,
-			data: e
-		};
-	} catch (e) {
-		return {
-			success: !1,
-			error: e.message
+			success: false,
+			error: err instanceof Error ? err.message : String(err)
 		};
 	}
 });
-var R = Object.values(E);
-n.handle("add-incident", async (e, t) => {
+ipcMain.handle("get-summary", async () => {
 	try {
-		if (L(), !t.bookTitle || typeof t.bookTitle != "string") throw Error("Invalid book title");
-		if (!R.includes(t.type)) throw Error("Invalid incident type");
-		if (t.subjectId && typeof t.subjectId != "number") throw Error("Invalid subject ID");
-		let e = await N.$transaction(async (e) => {
-			if (t.subjectId && !await e.subject.findUnique({ where: { id: t.subjectId } })) throw Error("Referenced subject does not exist");
-			let n = await e.incident.create({ data: {
-				type: t.type,
-				date: t.date ? new Date(t.date) : /* @__PURE__ */ new Date(),
-				subjectId: t.subjectId || null,
-				bookTitle: t.bookTitle,
-				condition: t.condition || null,
-				comment: t.comment || null,
-				reportedBy: t.reportedBy || null,
-				responsibleParty: t.responsibleParty || null,
-				studentClass: t.studentClass || null,
-				actionTaken: t.actionTaken || null
+		ensureDb();
+		const [subjects, overdueCount] = await Promise.all([prisma.subject.findMany(), prisma.checkout.count({ where: {
+			status: "ACTIVE",
+			dueDate: { lt: /* @__PURE__ */ new Date() }
+		} })]);
+		const { totalBooks, available, issued, damagedLost } = subjects.reduce((acc, s) => {
+			acc.totalBooks += s.openingCount + s.recovered;
+			acc.issued += s.issued;
+			acc.damagedLost += s.damaged + s.lost;
+			acc.available += calculateAvailable(s);
+			return acc;
+		}, {
+			totalBooks: 0,
+			available: 0,
+			issued: 0,
+			damagedLost: 0
+		});
+		return {
+			success: true,
+			data: {
+				totalBooks,
+				available,
+				issued,
+				damagedLost,
+				subjects,
+				overdueCount
+			}
+		};
+	} catch (err) {
+		return {
+			success: false,
+			error: err instanceof Error ? err.message : String(err)
+		};
+	}
+});
+ipcMain.handle("add-subject", async (_, data) => {
+	try {
+		ensureDb();
+		if (!data.name || typeof data.name !== "string") throw new Error("Invalid subject name");
+		const res = await prisma.subject.create({ data: {
+			name: data.name,
+			category: typeof data.category === "string" ? data.category : "General",
+			openingCount: typeof data.openingCount === "number" ? data.openingCount : 0
+		} });
+		encryptTempDatabase();
+		return {
+			success: true,
+			data: res
+		};
+	} catch (err) {
+		return {
+			success: false,
+			error: err instanceof Error ? err.message : String(err)
+		};
+	}
+});
+var ALLOWED_INCIDENT_TYPES = Object.values(IncidentType);
+ipcMain.handle("add-incident", async (_, data) => {
+	try {
+		ensureDb();
+		if (!data.bookTitle || typeof data.bookTitle !== "string") throw new Error("Invalid book title");
+		if (!ALLOWED_INCIDENT_TYPES.includes(data.type)) throw new Error("Invalid incident type");
+		if (data.subjectId && typeof data.subjectId !== "number") throw new Error("Invalid subject ID");
+		const res = await prisma.$transaction(async (tx) => {
+			if (data.subjectId) {
+				if (!await tx.subject.findUnique({ where: { id: data.subjectId } })) throw new Error("Referenced subject does not exist");
+			}
+			const incident = await tx.incident.create({ data: {
+				type: data.type,
+				date: data.date ? new Date(data.date) : /* @__PURE__ */ new Date(),
+				subjectId: data.subjectId || null,
+				bookTitle: data.bookTitle,
+				condition: data.condition || null,
+				comment: data.comment || null,
+				reportedBy: data.reportedBy || null,
+				responsibleParty: data.responsibleParty || null,
+				studentClass: data.studentClass || null,
+				actionTaken: data.actionTaken || null
 			} });
-			if (t.subjectId) {
-				let n = {};
-				t.type === E.DAMAGED && (n.damaged = { increment: 1 }), t.type === E.LOST && (n.lost = { increment: 1 }), t.type === E.RECOVERED && (n.recovered = { increment: 1 }), Object.keys(n).length > 0 && await e.subject.update({
-					where: { id: t.subjectId },
-					data: n
+			if (data.subjectId) {
+				const updateData = {};
+				if (data.type === IncidentType.DAMAGED) updateData.damaged = { increment: 1 };
+				if (data.type === IncidentType.LOST) updateData.lost = { increment: 1 };
+				if (data.type === IncidentType.RECOVERED) updateData.recovered = { increment: 1 };
+				if (Object.keys(updateData).length > 0) await tx.subject.update({
+					where: { id: data.subjectId },
+					data: updateData
 				});
 			}
-			return n;
+			return incident;
 		});
-		return S(), {
-			success: !0,
-			data: e
-		};
-	} catch (e) {
+		encryptTempDatabase();
 		return {
-			success: !1,
-			error: e.message
+			success: true,
+			data: res
+		};
+	} catch (err) {
+		return {
+			success: false,
+			error: err instanceof Error ? err.message : String(err)
 		};
 	}
-}), n.handle("set-theme", (e, t) => {
-	O && O.setTitleBarOverlay({
-		color: t === "dark" ? "#0f172a" : "#f8fafc",
-		symbolColor: t === "dark" ? "#ffffff" : "#000000"
+});
+ipcMain.handle("set-theme", (_, mode) => {
+	if (win) win.setTitleBarOverlay({
+		color: mode === "dark" ? "#0f172a" : "#f8fafc",
+		symbolColor: mode === "dark" ? "#ffffff" : "#000000"
 	});
-}), n.handle("add-checkout", async (e, t) => {
+});
+ipcMain.handle("add-checkout", async (_, data) => {
 	try {
-		if (L(), !t.subjectId || typeof t.subjectId != "number") throw Error("Invalid subject ID");
-		if (!t.studentName || typeof t.studentName != "string") throw Error("Invalid student name");
-		let e = await N.$transaction(async (e) => {
-			let n = await e.subject.findUnique({ where: { id: t.subjectId } });
-			if (!n) throw Error("Referenced subject does not exist");
-			if (T(n) <= 0) throw Error("No available books for this subject");
-			let r = await e.checkout.create({ data: {
-				subjectId: t.subjectId,
-				studentName: t.studentName,
-				studentClass: t.studentClass || null,
-				dueDate: t.dueDate ? new Date(t.dueDate) : /* @__PURE__ */ new Date(),
-				conditionOut: typeof t.conditionOut == "number" ? t.conditionOut : 3,
+		ensureDb();
+		if (!data.subjectId || typeof data.subjectId !== "number") throw new Error("Invalid subject ID");
+		if (!data.studentName || typeof data.studentName !== "string") throw new Error("Invalid student name");
+		const res = await prisma.$transaction(async (tx) => {
+			const subject = await tx.subject.findUnique({ where: { id: data.subjectId } });
+			if (!subject) throw new Error("Referenced subject does not exist");
+			if (calculateAvailable(subject) <= 0) throw new Error("No available books for this subject");
+			const checkout = await tx.checkout.create({ data: {
+				subjectId: data.subjectId,
+				studentName: data.studentName,
+				studentClass: data.studentClass || null,
+				dueDate: data.dueDate ? new Date(data.dueDate) : /* @__PURE__ */ new Date(),
+				conditionOut: typeof data.conditionOut === "number" ? data.conditionOut : 3,
 				status: "ACTIVE"
 			} });
-			return await e.subject.update({
-				where: { id: t.subjectId },
+			await tx.subject.update({
+				where: { id: data.subjectId },
 				data: { issued: { increment: 1 } }
-			}), r;
+			});
+			return checkout;
 		});
-		return S(), {
-			success: !0,
-			data: e
-		};
-	} catch (e) {
+		encryptTempDatabase();
 		return {
-			success: !1,
-			error: e.message
+			success: true,
+			data: res
+		};
+	} catch (err) {
+		return {
+			success: false,
+			error: err instanceof Error ? err.message : String(err)
 		};
 	}
-}), n.handle("return-checkout", async (e, { id: t, conditionIn: n }) => {
+});
+ipcMain.handle("return-checkout", async (_, { id, conditionIn }) => {
 	try {
-		if (L(), typeof t != "number") throw Error("Invalid checkout ID");
-		let e = await N.$transaction(async (e) => {
-			let r = await e.checkout.update({
-				where: { id: t },
+		ensureDb();
+		if (typeof id !== "number") throw new Error("Invalid checkout ID");
+		const res = await prisma.$transaction(async (tx) => {
+			const checkout = await tx.checkout.update({
+				where: { id },
 				data: {
 					status: "RETURNED",
 					returnDate: /* @__PURE__ */ new Date(),
-					conditionIn: typeof n == "number" ? n : null
+					conditionIn: typeof conditionIn === "number" ? conditionIn : null
 				}
-			}), i = await e.subject.findUnique({
-				where: { id: r.subjectId },
-				include: { checkouts: !0 }
 			});
-			if (i) {
-				let { totalDegradation: t, count: a } = i.checkouts.reduce((e, t) => (t.status === "RETURNED" && t.conditionIn !== null && (e.totalDegradation += t.conditionOut - (t.conditionIn || t.conditionOut), e.count++), e), {
+			const subject = await tx.subject.findUnique({
+				where: { id: checkout.subjectId },
+				include: { checkouts: true }
+			});
+			if (subject) {
+				const { totalDegradation, count } = subject.checkouts.reduce((acc, c) => {
+					if (c.status === "RETURNED" && c.conditionIn !== null) {
+						acc.totalDegradation += c.conditionOut - (c.conditionIn || c.conditionOut);
+						acc.count++;
+					}
+					return acc;
+				}, {
 					totalDegradation: 0,
 					count: 0
-				}), o = a > 0 ? t / a : 0, s = i.openingCount + i.recovered - i.lost - i.damaged, c = r.conditionOut - (n || r.conditionOut), l = s > 0 ? c / s : c, u = Math.max(1, i.averageCondition - l);
-				await e.subject.update({
-					where: { id: i.id },
+				});
+				const newDegradationRate = count > 0 ? totalDegradation / count : 0;
+				const totalBooks = subject.openingCount + subject.recovered - subject.lost - subject.damaged;
+				const conditionLoss = checkout.conditionOut - (conditionIn || checkout.conditionOut);
+				const conditionShift = totalBooks > 0 ? conditionLoss / totalBooks : conditionLoss;
+				const newAverageCondition = Math.max(1, subject.averageCondition - conditionShift);
+				await tx.subject.update({
+					where: { id: subject.id },
 					data: {
 						issued: { decrement: 1 },
-						degradationRate: o,
-						averageCondition: u
+						degradationRate: newDegradationRate,
+						averageCondition: newAverageCondition
 					}
 				});
 			}
-			return r;
+			return checkout;
 		});
-		return S(), {
-			success: !0,
-			data: e
-		};
-	} catch (e) {
+		encryptTempDatabase();
 		return {
-			success: !1,
-			error: e.message
+			success: true,
+			data: res
+		};
+	} catch (err) {
+		return {
+			success: false,
+			error: err instanceof Error ? err.message : String(err)
 		};
 	}
-}), n.handle("get-overdue-checkouts", async () => {
+});
+ipcMain.handle("get-overdue-checkouts", async () => {
 	try {
-		return L(), {
-			success: !0,
-			data: await N.checkout.findMany({
+		ensureDb();
+		return {
+			success: true,
+			data: await prisma.checkout.findMany({
 				where: {
 					status: "ACTIVE",
 					dueDate: { lt: /* @__PURE__ */ new Date() }
 				},
-				include: { subject: !0 },
+				include: { subject: true },
 				orderBy: { dueDate: "asc" }
 			})
 		};
-	} catch (e) {
+	} catch (err) {
 		return {
-			success: !1,
-			error: e.message
+			success: false,
+			error: err instanceof Error ? err.message : String(err)
 		};
 	}
-}), n.handle("update-subject", async (e, t) => {
+});
+ipcMain.handle("update-subject", async (_, data) => {
 	try {
-		if (L(), !t.id || typeof t.id != "number") throw Error("Invalid subject ID");
-		let e = await N.subject.update({
-			where: { id: t.id },
+		ensureDb();
+		if (!data.id || typeof data.id !== "number") throw new Error("Invalid subject ID");
+		const res = await prisma.subject.update({
+			where: { id: data.id },
 			data: {
-				name: typeof t.data?.name == "string" ? t.data.name : void 0,
-				category: typeof t.data?.category == "string" ? t.data.category : void 0,
-				openingCount: typeof t.data?.openingCount == "number" ? t.data.openingCount : void 0
+				name: typeof data.data?.name === "string" ? data.data.name : void 0,
+				category: typeof data.data?.category === "string" ? data.data.category : void 0,
+				openingCount: typeof data.data?.openingCount === "number" ? data.data.openingCount : void 0
 			}
 		});
-		return S(), {
-			success: !0,
-			data: e
-		};
-	} catch (e) {
+		encryptTempDatabase();
 		return {
-			success: !1,
-			error: e.message
+			success: true,
+			data: res
+		};
+	} catch (err) {
+		return {
+			success: false,
+			error: err instanceof Error ? err.message : String(err)
 		};
 	}
 });
