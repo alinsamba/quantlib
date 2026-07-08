@@ -27,3 +27,5 @@ prisma/*.db
 *.sln
 *.sw?
 node_modules
+
+coverage
