@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import type { Subject } from '@prisma/client'
 import { db } from '../lib/ipc-client'
 import { calculateAvailable } from '../lib/utils'
