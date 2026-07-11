@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -632,5 +632,30 @@ ipcMain.handle('get-audit-logs', async () => {
       take: 100
     })
     return { success: true, data: res }
+  } catch (err: unknown) { return { success: false, error: sanitizeError(err) } }
+})
+
+import fs from 'node:fs'
+
+ipcMain.handle('backup-database', async () => {
+  try {
+    ensureDb()
+    if (!win) return { success: false, error: 'No window available' }
+    
+    const { canceled, filePath } = await dialog.showSaveDialog(win, {
+      title: 'Backup Database',
+      defaultPath: 'quantlib_backup.db',
+      filters: [
+        { name: 'SQLite Database', extensions: ['db'] },
+        { name: 'All Files', extensions: ['*'] }
+      ]
+    })
+    
+    if (canceled || !filePath) return { success: false, error: 'Backup cancelled' }
+    
+    const sourceDb = getTempDbPath()
+    fs.copyFileSync(sourceDb, filePath)
+    
+    return { success: true }
   } catch (err: unknown) { return { success: false, error: sanitizeError(err) } }
 })

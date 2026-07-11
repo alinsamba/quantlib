@@ -18,6 +18,7 @@ declare global {
       setupDb: (password: string) => Promise<{ success: boolean, recoveryKey?: string, error?: string }>
       unlockDb: (args: { password?: string, isRecovery?: boolean }) => Promise<{ success: boolean, error?: string }>
       changePassword: (args: { oldPassword?: string, newPassword?: string }) => Promise<{ success: boolean, recoveryKey?: string, error?: string }>
+      backupDatabase: () => Promise<{ success: boolean, error?: string }>
     }
   }
 }

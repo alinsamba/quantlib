@@ -38,5 +38,6 @@ export const db = {
   changePassword: (args: { oldPassword?: string, newPassword?: string }) => {
     if (!window.electronAPI) return Promise.reject(new Error('Electron preload is not available.'))
     return window.electronAPI.changePassword(args)
-  }
+  },
+  backupDatabase: () => invoke('backupDatabase')
 }

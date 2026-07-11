@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
+import { Download, Printer } from 'lucide-react'
+import { exportToExcel, exportToCsv } from '../lib/exportUtils'
 import { db } from '../lib/ipc-client'
 import { calculateAvailable } from '../lib/utils'
 import { Button } from '../components/Button'
@@ -127,13 +129,56 @@ export default function Inventory() {
     setIsEditModalOpen(true)
   }
 
+  const handleExportExcel = () => {
+    const data = filtered.map(s => ({
+      'Subject': s.name,
+      'Category': s.category,
+      'Opening Stock': s.openingCount,
+      'Recovered': s.recovered,
+      'Issued': s.issued,
+      'Damaged': s.damaged,
+      'Lost': s.lost,
+      'Available': calculateAvailable(s),
+      'Condition (out of 3.0)': s.averageCondition ? s.averageCondition.toFixed(1) : '3.0',
+      'Wear Rate': s.degradationRate ? s.degradationRate.toFixed(2) : '0.00'
+    }))
+    exportToExcel(data, 'QuantLib_Inventory')
+  }
+
+  const handleExportCsv = () => {
+    const data = filtered.map(s => ({
+      'Subject': s.name,
+      'Category': s.category,
+      'Opening Stock': s.openingCount,
+      'Recovered': s.recovered,
+      'Issued': s.issued,
+      'Damaged': s.damaged,
+      'Lost': s.lost,
+      'Available': calculateAvailable(s),
+      'Condition (out of 3.0)': s.averageCondition ? s.averageCondition.toFixed(1) : '3.0',
+      'Wear Rate': s.degradationRate ? s.degradationRate.toFixed(2) : '0.00'
+    }))
+    exportToCsv(data, 'QuantLib_Inventory')
+  }
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Inventory</h1>
-        <Button onClick={() => setIsAddModalOpen(true)}>
-          + Add Subject
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" icon={<Download size={18} />} onClick={handleExportExcel} className="print:hidden">
+            Excel
+          </Button>
+          <Button variant="secondary" icon={<Download size={18} />} onClick={handleExportCsv} className="print:hidden">
+            CSV
+          </Button>
+          <Button variant="secondary" icon={<Printer size={18} />} onClick={() => window.print()} className="print:hidden">
+            Print
+          </Button>
+          <Button onClick={() => setIsAddModalOpen(true)} className="print:hidden">
+            + Add Subject
+          </Button>
+        </div>
       </div>
 
       <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden transition-colors duration-200">

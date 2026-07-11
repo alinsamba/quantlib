@@ -1,6 +1,9 @@
 import { useEffect } from 'react'
+import { Download, Printer } from 'lucide-react'
+import { exportToExcel, exportToCsv } from '../lib/exportUtils'
 import { db } from '../lib/ipc-client'
 import { useAsync } from '../hooks/useAsync'
+import { Button } from '../components/Button'
 import type { Incident } from '../lib/types'
 
 export default function Incidents() {
@@ -14,13 +17,54 @@ export default function Incidents() {
     })
   }, [execute])
 
+  const handleExportExcel = () => {
+    const data = (incidents || []).map(inc => ({
+      'Date': new Date(inc.date).toLocaleDateString(),
+      'Type': inc.type,
+      'Subject': inc.subject?.name || '-',
+      'Book Title': inc.bookTitle,
+      'Responsible': inc.responsibleParty || '-',
+      'Class': inc.studentClass || '-',
+      'Condition': inc.condition || '-',
+      'Action Taken': inc.actionTaken || '-',
+      'Comment': inc.comment || '-'
+    }))
+    exportToExcel(data, 'QuantLib_Incidents')
+  }
+
+  const handleExportCsv = () => {
+    const data = (incidents || []).map(inc => ({
+      'Date': new Date(inc.date).toLocaleDateString(),
+      'Type': inc.type,
+      'Subject': inc.subject?.name || '-',
+      'Book Title': inc.bookTitle,
+      'Responsible': inc.responsibleParty || '-',
+      'Class': inc.studentClass || '-',
+      'Condition': inc.condition || '-',
+      'Action Taken': inc.actionTaken || '-',
+      'Comment': inc.comment || '-'
+    }))
+    exportToCsv(data, 'QuantLib_Incidents')
+  }
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Incident Log</h1>
-        <button className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors shadow-sm font-medium">
-          Log Incident
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" icon={<Download size={18} />} onClick={handleExportExcel} className="print:hidden">
+            Excel
+          </Button>
+          <Button variant="secondary" icon={<Download size={18} />} onClick={handleExportCsv} className="print:hidden">
+            CSV
+          </Button>
+          <Button variant="secondary" icon={<Printer size={18} />} onClick={() => window.print()} className="print:hidden">
+            Print
+          </Button>
+          <Button className="print:hidden">
+            Log Incident
+          </Button>
+        </div>
       </div>
 
       <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden transition-colors duration-200">

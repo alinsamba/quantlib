@@ -16,5 +16,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   checkDbStatus: () => ipcRenderer.invoke('check-db-status'),
   setupDb: (password: string) => ipcRenderer.invoke('setup-db', password),
   unlockDb: (args: { password?: string, isRecovery?: boolean }) => ipcRenderer.invoke('unlock-db', args),
-  changePassword: (args: { oldPassword?: string, newPassword?: string }) => ipcRenderer.invoke('change-password', args)
+  changePassword: (args: { oldPassword?: string, newPassword?: string }) => ipcRenderer.invoke('change-password', args),
+  backupDatabase: () => ipcRenderer.invoke('backup-database')
 })
