@@ -81,8 +81,9 @@ export function setupDatabase(password: string): { success: boolean, recoveryKey
     // If a legacy unencrypted DB exists, we migrate it. Otherwise, create an empty one.
     if (fs.existsSync(LEGACY_DB)) {
       fs.copyFileSync(LEGACY_DB, TEMP_DB)
-      // We don't delete LEGACY_DB immediately just to be safe, maybe rename it
-      try { fs.renameSync(LEGACY_DB, LEGACY_DB + '.bak') } catch {}
+      // We securely wipe the legacy plaintext DB instead of leaving a backup.
+      try { secureWipe(LEGACY_DB) } catch {}
+      try { secureWipe(LEGACY_DB + '.bak') } catch {}
     } else {
       // Just touch the file to ensure it exists for Prisma to initialize
       fs.writeFileSync(TEMP_DB, '')
@@ -125,6 +126,19 @@ export function unlockDatabase(password: string, isRecovery: boolean = false): {
     const masterKey = decryptPayload(payload, userKey)
     if (!masterKey) {
       return { success: false, error: 'Invalid password or recovery key' }
+    }
+    
+    // Transparently re-wrap with 600k iterations if upgrading from legacy setting
+    if (iterations < 600000 && !isRecovery) {
+      const newUserKey = deriveUserKey(password, salt, 600000)
+      const iv1 = generateDistinctIv(0)
+      const cipher1 = crypto.createCipheriv('aes-256-gcm', newUserKey, iv1)
+      const passPayload = Buffer.concat([cipher1.update(masterKey), cipher1.final()])
+      const tag1 = cipher1.getAuthTag()
+      
+      meta.iterations = 600000
+      meta.password_payload = Buffer.concat([iv1, tag1, passPayload]).toString('base64')
+      fs.writeFileSync(META_FILE, JSON.stringify(meta))
     }
     
     currentMasterKey = masterKey
@@ -218,6 +232,11 @@ export function cleanupTempDatabase() {
     }
   } catch (e) {
     console.error('Cleanup failed:', e)
+  } finally {
+    if (currentMasterKey) {
+      currentMasterKey.fill(0)
+      currentMasterKey = null
+    }
   }
 }
 

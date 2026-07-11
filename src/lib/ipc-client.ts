@@ -20,6 +20,7 @@ export const db = {
   addCheckout: (data: any) => invoke('addCheckout', data),
   returnCheckout: (id: number, conditionIn: number) => invoke('returnCheckout', { id, conditionIn }),
   getOverdueCheckouts: () => invoke('getOverdueCheckouts'),
+  getAuditLogs: () => invoke('getAuditLogs'),
   
   // Auth methods don't unwrap since Login.tsx expects the full response object
   checkDbStatus: () => {

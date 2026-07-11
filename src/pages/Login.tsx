@@ -12,13 +12,18 @@ export default function Login({ onUnlock }: { onUnlock: () => void }) {
   const [isRecoveryMode, setIsRecoveryMode] = useState(false)
 
   useEffect(() => {
+    let mounted = true
     db.checkDbStatus()
-      .then(s => setStatus(s))
+      .then(s => {
+        if (mounted) setStatus(s)
+      })
       .catch((err: unknown) => {
+        if (!mounted) return
         console.error(err)
         setError(err instanceof Error ? err.message : 'Failed to connect to backend')
         setStatus('SETUP') // or render an error state
       })
+    return () => { mounted = false }
   }, [])
 
   const handleSubmit = async (e: FormEvent) => {

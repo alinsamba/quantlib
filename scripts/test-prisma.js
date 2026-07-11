@@ -8,7 +8,9 @@ async function main() {
     console.log('SUCCESS, fetched:', subjects.length)
   } catch (err) {
     console.error('ERROR FETCHING:', err)
+  } finally {
+    await prisma.$disconnect()
   }
 }
 
-main()
+main().catch(console.error)

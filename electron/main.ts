@@ -162,12 +162,24 @@ app.whenReady().then(() => {
 
 import { PrismaClient } from '@prisma/client'
 import { checkDbStatus, setupDatabase, unlockDatabase, encryptTempDatabase, cleanupTempDatabase, getTempDbPath, changePassword } from './crypto'
-import { calculateAvailable, IncidentType } from '../src/lib/utils'
+import { calculateAvailable, IncidentType, validateMasterPassword } from '../src/lib/utils'
 
 let prisma: PrismaClient | null = null
 let databaseCleanupDone = false
 
+function sanitizeError(err: unknown): string {
+  console.error('IPC Error:', err)
+  if (err instanceof Error) {
+    if (err.message.startsWith('Invalid ') || err.message === 'No available books for this subject' || err.message === 'Referenced subject does not exist') {
+      return err.message
+    }
+  }
+  return 'An unexpected database or server error occurred.'
+}
+
 async function initializeDatabase(client: PrismaClient) {
+  // Canonical schema representation. Matches prisma/schema.prisma exactly.
+  // We use this raw SQL instead of prisma db push so it works reliably in the packaged app.
   await client.$executeRawUnsafe('PRAGMA foreign_keys = ON')
 
   await client.$executeRawUnsafe(`
@@ -285,32 +297,57 @@ ipcMain.handle('check-db-status', () => {
 })
 
 ipcMain.handle('setup-db', async (_, password) => {
+  const pwdError = validateMasterPassword(password)
+  if (pwdError) return { success: false, error: pwdError }
+
   const result = setupDatabase(password)
   if (result.success) {
     try {
       await openPrismaDatabase()
     } catch (err: unknown) {
       await disconnectPrisma()
-      return { success: false, error: err instanceof Error ? err.message : 'Failed to initialize database' }
+      return { success: false, error: sanitizeError(err) }
     }
   }
   return result
 })
 
+const unlockAttempts = new Map<string, { attempts: number, nextAllowedTime: number }>()
+
 ipcMain.handle('unlock-db', async (_, { password, isRecovery = false }) => {
+  const key = isRecovery ? 'recovery' : 'password'
+  const state = unlockAttempts.get(key) || { attempts: 0, nextAllowedTime: 0 }
+  
+  if (Date.now() < state.nextAllowedTime) {
+    const waitTime = Math.ceil((state.nextAllowedTime - Date.now()) / 1000)
+    return { success: false, error: `Too many failed attempts. Try again in ${waitTime} seconds.` }
+  }
+
   const result = unlockDatabase(password, isRecovery)
+  if (!result.success) {
+    state.attempts++
+    const backoffSeconds = Math.min(60, Math.pow(2, state.attempts - 1))
+    state.nextAllowedTime = Date.now() + backoffSeconds * 1000
+    unlockAttempts.set(key, state)
+    return { success: false, error: 'Invalid password or recovery key' }
+  }
+  
+  unlockAttempts.delete(key)
+
   if (result.success) {
     try {
       await openPrismaDatabase()
     } catch (err: unknown) {
       await disconnectPrisma()
-      return { success: false, error: err instanceof Error ? err.message : 'Failed to initialize database' }
+      return { success: false, error: sanitizeError(err) }
     }
   }
   return result
 })
 
 ipcMain.handle('change-password', (_, { oldPassword, newPassword }) => {
+  const pwdError = validateMasterPassword(newPassword)
+  if (pwdError) return { success: false, error: pwdError }
   return changePassword(oldPassword, newPassword)
 })
 
@@ -318,13 +355,13 @@ ipcMain.handle('change-password', (_, { oldPassword, newPassword }) => {
 ipcMain.handle('get-subjects', async () => {
   try {
     ensureDb(); return { success: true, data: await prisma!.subject.findMany() }
-  } catch (err: unknown) { return { success: false, error: err instanceof Error ? err.message : String(err) } }
+  } catch (err: unknown) { return { success: false, error: sanitizeError(err) } }
 })
 
 ipcMain.handle('get-incidents', async () => {
   try {
     ensureDb(); return { success: true, data: await prisma!.incident.findMany({ include: { subject: true }, orderBy: { date: 'desc' } }) }
-  } catch (err: unknown) { return { success: false, error: err instanceof Error ? err.message : String(err) } }
+  } catch (err: unknown) { return { success: false, error: sanitizeError(err) } }
 })
 
 ipcMain.handle('get-summary', async () => {
@@ -347,7 +384,7 @@ ipcMain.handle('get-summary', async () => {
     }, { totalBooks: 0, available: 0, issued: 0, damagedLost: 0 })
 
     return { success: true, data: { totalBooks, available, issued, damagedLost, subjects, overdueCount } }
-  } catch (err: unknown) { return { success: false, error: err instanceof Error ? err.message : String(err) } }
+  } catch (err: unknown) { return { success: false, error: sanitizeError(err) } }
 })
 
 ipcMain.handle('add-subject', async (_, data) => {
@@ -364,7 +401,7 @@ ipcMain.handle('add-subject', async (_, data) => {
     })
     encryptTempDatabase()
     return { success: true, data: res }
-  } catch (err: unknown) { return { success: false, error: err instanceof Error ? err.message : String(err) } }
+  } catch (err: unknown) { return { success: false, error: sanitizeError(err) } }
 })
 
 const ALLOWED_INCIDENT_TYPES = Object.values(IncidentType)
@@ -409,16 +446,33 @@ ipcMain.handle('add-incident', async (_, data) => {
             where: { id: data.subjectId },
             data: updateData
           })
+          
+          const field = data.type === IncidentType.DAMAGED ? 'damaged' 
+            : data.type === IncidentType.LOST ? 'lost'
+            : data.type === IncidentType.RECOVERED ? 'recovered' : null
+            
+          if (field) {
+            await tx.auditLog.create({
+              data: {
+                subjectId: data.subjectId,
+                field: field,
+                oldValue: subject[field as keyof typeof subject]!.toString(),
+                newValue: (Number(subject[field as keyof typeof subject]) + 1).toString(),
+                changedBy: 'LIBRARIAN'
+              }
+            })
+          }
         }
       }
       return incident
     })
     encryptTempDatabase()
     return { success: true, data: res }
-  } catch (err: unknown) { return { success: false, error: err instanceof Error ? err.message : String(err) } }
+  } catch (err: unknown) { return { success: false, error: sanitizeError(err) } }
 })
 
 ipcMain.handle('set-theme', (_, mode) => {
+  if (mode !== 'light' && mode !== 'dark') return { success: false, error: 'Invalid theme mode' }
   if (win) {
     win.setTitleBarOverlay({
       color: mode === 'dark' ? '#0f172a' : '#f8fafc',
@@ -453,11 +507,20 @@ ipcMain.handle('add-checkout', async (_, data) => {
         where: { id: data.subjectId },
         data: { issued: { increment: 1 } }
       })
+      await tx.auditLog.create({
+        data: {
+          subjectId: data.subjectId,
+          field: 'issued',
+          oldValue: subject.issued.toString(),
+          newValue: (subject.issued + 1).toString(),
+          changedBy: 'LIBRARIAN'
+        }
+      })
       return checkout
     })
     encryptTempDatabase()
     return { success: true, data: res }
-  } catch (err: unknown) { return { success: false, error: err instanceof Error ? err.message : String(err) } }
+  } catch (err: unknown) { return { success: false, error: sanitizeError(err) } }
 })
 
 ipcMain.handle('return-checkout', async (_, { id, conditionIn }) => {
@@ -496,12 +559,21 @@ ipcMain.handle('return-checkout', async (_, { id, conditionIn }) => {
             averageCondition: newAverageCondition
           }
         })
+        await tx.auditLog.create({
+          data: {
+            subjectId: subject.id,
+            field: 'issued',
+            oldValue: subject.issued.toString(),
+            newValue: (subject.issued - 1).toString(),
+            changedBy: 'LIBRARIAN'
+          }
+        })
       }
       return checkout
     })
     encryptTempDatabase()
     return { success: true, data: res }
-  } catch (err: unknown) { return { success: false, error: err instanceof Error ? err.message : String(err) } }
+  } catch (err: unknown) { return { success: false, error: sanitizeError(err) } }
 })
 
 ipcMain.handle('get-overdue-checkouts', async () => {
@@ -513,7 +585,7 @@ ipcMain.handle('get-overdue-checkouts', async () => {
       orderBy: { dueDate: 'asc' }
     })
     return { success: true, data: res }
-  } catch (err: unknown) { return { success: false, error: err instanceof Error ? err.message : String(err) } }
+  } catch (err: unknown) { return { success: false, error: sanitizeError(err) } }
 })
 
 ipcMain.handle('update-subject', async (_, data) => {
@@ -521,15 +593,44 @@ ipcMain.handle('update-subject', async (_, data) => {
     ensureDb()
     if (!data.id || typeof data.id !== 'number') throw new Error('Invalid subject ID')
     
-    const res = await prisma!.subject.update({ 
-      where: { id: data.id }, 
-      data: {
-        name: typeof data.data?.name === 'string' ? data.data.name : undefined,
-        category: typeof data.data?.category === 'string' ? data.data.category : undefined,
-        openingCount: typeof data.data?.openingCount === 'number' ? data.data.openingCount : undefined
-      } 
+    const res = await prisma!.$transaction(async (tx) => {
+      const oldSubject = await tx.subject.findUnique({ where: { id: data.id } })
+      if (!oldSubject) throw new Error('Referenced subject does not exist')
+
+      const updated = await tx.subject.update({ 
+        where: { id: data.id }, 
+        data: {
+          name: typeof data.data?.name === 'string' ? data.data.name : undefined,
+          category: typeof data.data?.category === 'string' ? data.data.category : undefined,
+          openingCount: typeof data.data?.openingCount === 'number' ? data.data.openingCount : undefined
+        } 
+      })
+      
+      const logs = []
+      if (data.data?.name && data.data.name !== oldSubject.name) logs.push({ field: 'name', oldValue: oldSubject.name, newValue: data.data.name })
+      if (data.data?.category && data.data.category !== oldSubject.category) logs.push({ field: 'category', oldValue: oldSubject.category || '', newValue: data.data.category })
+      if (typeof data.data?.openingCount === 'number' && data.data.openingCount !== oldSubject.openingCount) logs.push({ field: 'openingCount', oldValue: oldSubject.openingCount.toString(), newValue: data.data.openingCount.toString() })
+      
+      if (logs.length > 0) {
+        await tx.auditLog.createMany({
+          data: logs.map(l => ({ subjectId: data.id, changedBy: 'LIBRARIAN', ...l }))
+        })
+      }
+      return updated
     })
     encryptTempDatabase()
     return { success: true, data: res }
-  } catch (err: unknown) { return { success: false, error: err instanceof Error ? err.message : String(err) } }
+  } catch (err: unknown) { return { success: false, error: sanitizeError(err) } }
+})
+
+ipcMain.handle('get-audit-logs', async () => {
+  try {
+    ensureDb()
+    const res = await prisma!.auditLog.findMany({
+      include: { subject: true },
+      orderBy: { changedAt: 'desc' },
+      take: 100
+    })
+    return { success: true, data: res }
+  } catch (err: unknown) { return { success: false, error: sanitizeError(err) } }
 })

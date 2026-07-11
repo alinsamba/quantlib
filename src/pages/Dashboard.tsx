@@ -5,7 +5,14 @@ import { db } from '../lib/ipc-client'
 import { useTheme } from '../hooks/ThemeContext'
 import { calculateAvailable } from '../lib/utils'
 import { useNavigate } from 'react-router-dom'
-import type { Subject } from '@prisma/client'
+export interface DashboardSummary {
+  totalBooks: number;
+  available: number;
+  issued: number;
+  damagedLost: number;
+  overdueCount: number;
+  subjects: SubjectSummary[];
+}
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
 

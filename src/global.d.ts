@@ -13,6 +13,7 @@ declare global {
       addCheckout: (data: any) => Promise<{ success: boolean, data?: any, error?: string }>
       returnCheckout: (data: any) => Promise<{ success: boolean, data?: any, error?: string }>
       getOverdueCheckouts: () => Promise<{ success: boolean, data?: any, error?: string }>
+      getAuditLogs: () => Promise<{ success: boolean, data?: any, error?: string }>
       checkDbStatus: () => Promise<'SETUP' | 'LOCKED'>
       setupDb: (password: string) => Promise<{ success: boolean, recoveryKey?: string, error?: string }>
       unlockDb: (args: { password?: string, isRecovery?: boolean }) => Promise<{ success: boolean, error?: string }>

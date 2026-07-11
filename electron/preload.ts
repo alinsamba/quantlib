@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   addCheckout: (data: any) => ipcRenderer.invoke('add-checkout', data),
   returnCheckout: (data: any) => ipcRenderer.invoke('return-checkout', data),
   getOverdueCheckouts: () => ipcRenderer.invoke('get-overdue-checkouts'),
+  getAuditLogs: () => ipcRenderer.invoke('get-audit-logs'),
   checkDbStatus: () => ipcRenderer.invoke('check-db-status'),
   setupDb: (password: string) => ipcRenderer.invoke('setup-db', password),
   unlockDb: (args: { password?: string, isRecovery?: boolean }) => ipcRenderer.invoke('unlock-db', args),

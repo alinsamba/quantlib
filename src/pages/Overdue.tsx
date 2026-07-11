@@ -1,17 +1,19 @@
-import { useState, useEffect } from 'react'
+import { useEffect } from 'react'
 import { Printer, Clock, AlertTriangle } from 'lucide-react'
 import { db } from '../lib/ipc-client'
+import { useAsync } from '../hooks/useAsync'
+import type { Checkout } from '../lib/types'
 
 export default function Overdue() {
-  const [overdueCheckouts, setOverdueCheckouts] = useState<any[]>([])
+  const { data: overdueCheckouts, isLoading, error, execute } = useAsync<Checkout[]>()
 
   useEffect(() => {
-    async function loadData() {
-      const data = await db.getOverdueCheckouts()
-      setOverdueCheckouts(data)
-    }
-    loadData()
-  }, [])
+    execute(async () => {
+      const res = await db.getOverdueCheckouts()
+      if (res.success) return res.data
+      throw new Error(res.error)
+    })
+  }, [execute])
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -32,13 +34,21 @@ export default function Overdue() {
         </button>
       </div>
 
-      {overdueCheckouts.length === 0 ? (
+      {isLoading && !overdueCheckouts ? (
+        <div className="bg-white dark:bg-slate-800 p-8 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 text-center text-slate-500 print:hidden">
+          Loading overdue checkouts...
+        </div>
+      ) : error ? (
+        <div className="bg-red-50 dark:bg-red-900/20 p-8 rounded-xl shadow-sm border border-red-200 dark:border-red-800 text-center text-red-600 dark:text-red-400 print:hidden">
+          {error}
+        </div>
+      ) : (overdueCheckouts || []).length === 0 ? (
         <div className="bg-white dark:bg-slate-800 p-8 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 text-center text-slate-500 print:hidden">
           No overdue books right now! Great job keeping track.
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 print:grid-cols-2 print:gap-4 print:text-black">
-          {overdueCheckouts.map((checkout, index) => (
+          {overdueCheckouts?.map((checkout, index) => (
             <div key={index} className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 print:border-black print:border-2 print:shadow-none print:break-inside-avoid">
               <div className="flex items-center space-x-3 mb-4">
                 <div className="p-2 bg-rose-50 dark:bg-rose-900/30 text-rose-600 rounded-lg print:bg-transparent print:p-0">

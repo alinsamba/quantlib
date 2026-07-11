@@ -26,5 +26,5 @@ prisma/*.db
 *.njsproj
 *.sln
 *.sw?
-node_modules
 .tmp.driveupload
+release/

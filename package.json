@@ -1,5 +1,7 @@
 {
   "name": "quantlib",
+  "description": "Library Management Tracker",
+  "author": "Mentor High School",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -9,11 +11,17 @@
     "build": "tsc -b && vite build && electron-builder",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "generate-icon": "node generate_icon.js",
+    "prisma:generate": "prisma generate",
+    "prisma:push": "prisma db push",
+    "seed": "node scripts/seed.js",
+    "smoke": "node scripts/test-prisma.js"
   },
   "build": {
     "appId": "com.quantlib.app",
     "productName": "QuantLib",
+    "icon": "public/icon.png",
     "asar": true,
     "directories": {
       "output": "release"
@@ -43,8 +51,7 @@
     "win": {
       "target": [
         "nsis"
-      ],
-      "sign": null
+      ]
     },
     "linux": {
       "target": [
