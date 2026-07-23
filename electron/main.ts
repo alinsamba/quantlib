@@ -164,7 +164,7 @@ app.whenReady().then(() => {
 })
 
 import { PrismaClient } from '@prisma/client'
-import { checkDbStatus, setupDatabase, unlockDatabase, encryptTempDatabase, cleanupTempDatabase, getTempDbPath, changePassword } from './crypto'
+import { checkDbStatus, setupDatabase, unlockDatabase, encryptTempDatabase, cleanupTempDatabase, getTempDbPath, getEncDbPath, changePassword } from './crypto'
 import { calculateAvailable, IncidentType, validateMasterPassword } from '../src/lib/utils'
 
 let prisma: PrismaClient | null = null
@@ -1023,7 +1023,10 @@ ipcMain.handle('backup-database', async () => {
     
     if (canceled || !filePath) return { success: false, error: 'Backup cancelled' }
     
-    const sourceDb = getTempDbPath()
+    // Ensure the latest changes are flushed to the encrypted file before backing up
+    encryptTempDatabase()
+
+    const sourceDb = getEncDbPath()
     fs.copyFileSync(sourceDb, filePath)
     
     return { success: true }
