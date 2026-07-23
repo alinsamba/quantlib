@@ -113,9 +113,9 @@ function decryptPayload(payloadBase64: string, key: Buffer): Buffer | null {
   }
 }
 
-export function unlockDatabase(password: string, isRecovery: boolean = false): { success: boolean, error?: string } {
+export async function unlockDatabase(password: string, isRecovery: boolean = false): Promise<{ success: boolean, error?: string }> {
   try {
-    const metaStr = fs.readFileSync(META_FILE, 'utf-8')
+    const metaStr = await fs.promises.readFile(META_FILE, 'utf-8')
     const meta = JSON.parse(metaStr)
     const salt = Buffer.from(meta.salt, 'base64')
     const iterations = meta.iterations || 100000
@@ -138,13 +138,13 @@ export function unlockDatabase(password: string, isRecovery: boolean = false): {
       
       meta.iterations = 600000
       meta.password_payload = Buffer.concat([iv1, tag1, passPayload]).toString('base64')
-      fs.writeFileSync(META_FILE, JSON.stringify(meta))
+      await fs.promises.writeFile(META_FILE, JSON.stringify(meta))
     }
     
     currentMasterKey = masterKey
     
     // Decrypt ENC_FILE to TEMP_DB
-    const encData = fs.readFileSync(ENC_FILE)
+    const encData = await fs.promises.readFile(ENC_FILE)
     if (encData.length > 0) {
       const iv = encData.subarray(0, 12)
       const tag = encData.subarray(12, 28)
@@ -153,9 +153,9 @@ export function unlockDatabase(password: string, isRecovery: boolean = false): {
       const decipher = crypto.createDecipheriv('aes-256-gcm', currentMasterKey, iv)
       decipher.setAuthTag(tag)
       const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()])
-      fs.writeFileSync(TEMP_DB, decrypted)
+      await fs.promises.writeFile(TEMP_DB, decrypted)
     } else {
-      fs.writeFileSync(TEMP_DB, '')
+      await fs.promises.writeFile(TEMP_DB, '')
     }
     
     return { success: true }
