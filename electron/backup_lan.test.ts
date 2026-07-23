@@ -40,9 +40,9 @@ vi.mock('electron', () => ({
 
 vi.mock('./crypto', () => ({
   checkDbStatus: vi.fn(),
-  setupDatabase: vi.fn(),
+  setupDatabase: vi.fn().mockResolvedValue({}),
   unlockDatabase: vi.fn(),
-  encryptTempDatabase: vi.fn(),
+  encryptTempDatabase: vi.fn().mockResolvedValue(undefined),
   cleanupTempDatabase: vi.fn(),
   getTempDbPath: vi.fn(() => path.join(os.tmpdir(), 'quantlib_test_temp.db')),
   changePassword: vi.fn()
@@ -108,8 +108,8 @@ describe('R3: Vault Backups & LAN Sync Unit & Integration Tests', () => {
   })
 
   describe('2. Vault File Backup & Recent Backup Listing', () => {
-    it('should copy encrypted vault file to target path and create directory if missing', () => {
-      const res = performVaultBackup(backupTargetDir, sourceVaultFile)
+    it('should copy encrypted vault file to target path and create directory if missing', async () => {
+      const res = await performVaultBackup(backupTargetDir, sourceVaultFile)
       expect(res.success).toBe(true)
       expect(res.backupPath).toBeDefined()
       expect(fs.existsSync(backupTargetDir)).toBe(true)
@@ -117,15 +117,15 @@ describe('R3: Vault Backups & LAN Sync Unit & Integration Tests', () => {
       expect(fs.readFileSync(res.backupPath!, 'utf-8')).toBe('ENCRYPTED_VAULT_DATA_CONTENT_12345')
     })
 
-    it('should return error if target directory is empty or invalid', () => {
-      const res = performVaultBackup('')
+    it('should return error if target directory is empty or invalid', async () => {
+      const res = await performVaultBackup('')
       expect(res.success).toBe(false)
       expect(res.error).toBe('Target directory is required')
     })
 
-    it('should list all timestamped backup files sorted by creation date descending', () => {
+    it('should list all timestamped backup files sorted by creation date descending', async () => {
       // Create backup files in backupTargetDir
-      performVaultBackup(backupTargetDir, sourceVaultFile)
+      await performVaultBackup(backupTargetDir, sourceVaultFile)
       const list = listVaultBackups(backupTargetDir)
       expect(list.length).toBeGreaterThan(0)
       expect(list[0].filename).toMatch(/^quantlib_backup_\d{8}_\d{6}\.enc$/)
