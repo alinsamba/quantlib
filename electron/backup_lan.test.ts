@@ -41,7 +41,7 @@ vi.mock('electron', () => ({
 vi.mock('./crypto', () => ({
   checkDbStatus: vi.fn(),
   setupDatabase: vi.fn(),
-  unlockDatabase: vi.fn(),
+  unlockDatabase: vi.fn().mockResolvedValue({ success: true }),
   encryptTempDatabase: vi.fn(),
   cleanupTempDatabase: vi.fn(),
   getTempDbPath: vi.fn(() => path.join(os.tmpdir(), 'quantlib_test_temp.db')),
