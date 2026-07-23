@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Save, Moon, Sun, ShieldCheck, Key, Copy, Printer, History, Database, Download } from 'lucide-react'
-import { useTheme } from '../hooks/ThemeContext'
+import { useTheme } from '../hooks/useTheme'
 import { validateMasterPassword } from '../lib/utils'
 import { Button } from '../components/Button'
 import { TextField } from '../components/TextField'

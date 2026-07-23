@@ -1,0 +1,3 @@
+## 2024-06-12 - List Rendering Bottleneck from Top-Level Modal State
+**Learning:** Placing modal form state (e.g. `issueData`, `newSubject`) at the top level of a component that renders a large list (like `Inventory.tsx`) causes O(N) re-renders on every O(1) keystroke in the modal input fields. This creates severe input lag.
+**Action:** Always memoize list/table rendering with `useMemo` and wrap callback handlers passed into list items with `useCallback` when complex components contain both large lists and interactive forms at the same level. Alternatively, separate the modals and their states into child components.
