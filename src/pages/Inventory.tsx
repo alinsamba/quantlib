@@ -4,10 +4,11 @@ import { exportToExcel, exportToCsv } from '../lib/exportUtils'
 import { db } from '../lib/ipc-client'
 import { calculateAvailable } from '../lib/utils'
 import { Button } from '../components/Button'
-import { TextField, SelectField } from '../components/TextField'
-import { Modal } from '../components/Modal'
 import { useAsync } from '../hooks/useAsync'
 import type { Subject, BorrowingRule } from '../lib/types'
+import { AddSubjectModal } from '../components/inventory/AddSubjectModal'
+import { IssueBookModal } from '../components/inventory/IssueBookModal'
+import { EditSubjectModal } from '../components/inventory/EditSubjectModal'
 
 export default function Inventory() {
   const [searchTerm, setSearchTerm] = useState('')
@@ -20,18 +21,12 @@ export default function Inventory() {
     }).catch((err: any) => console.error(err))
   }, [])
 
-
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
-  const [newSubject, setNewSubject] = useState({ name: '', category: 'General', openingCount: 0 })
-
   const [isIssueModalOpen, setIsIssueModalOpen] = useState(false)
-  const [issueData, setIssueData] = useState({ subjectId: 0, studentName: '', studentClass: '', conditionOut: 3 })
-  const [selectedSubjectName, setSelectedSubjectName] = useState('')
-
+  const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
-  const [editSubject, setEditSubject] = useState({ id: 0, name: '', category: '', openingCount: 0 })
 
-  useEffect(() => {
+  const fetchAllSubjects = useCallback(() => {
     fetchSubjects(async () => {
       const res = await db.getSubjects()
       if (res.success) return res.data
@@ -39,27 +34,9 @@ export default function Inventory() {
     })
   }, [fetchSubjects])
 
-  const handleAddSubject = async (e: React.FormEvent) => {
-    e.preventDefault()
-    try {
-      const res = await db.addSubject({
-        name: newSubject.name,
-        category: newSubject.category,
-        openingCount: Number(newSubject.openingCount)
-      })
-      if (!res.success) throw new Error(res.error)
-      
-      setIsAddModalOpen(false)
-      setNewSubject({ name: '', category: 'General', openingCount: 0 })
-      fetchSubjects(async () => {
-        const d = await db.getSubjects()
-        return d.data
-      })
-    } catch (err: unknown) {
-      console.error('Error adding subject', err)
-      alert('Failed to add subject: ' + (err instanceof Error ? err.message : String(err)))
-    }
-  }
+  useEffect(() => {
+    fetchAllSubjects()
+  }, [fetchAllSubjects])
 
   // ⚡ Bolt Optimization: Memoize the filtered array so it doesn't recalculate on modal keystrokes
   // Expected Impact: Prevents O(N) string matching on every keystroke when typing in modals.
@@ -68,123 +45,15 @@ export default function Inventory() {
     [subjects, searchTerm]
   )
 
-  const subjectsMap = useMemo(() => {
-    const map = new Map<number, Subject>()
-    for (const subject of subjects || []) {
-      map.set(subject.id, subject)
-    }
-    return map
-  }, [subjects])
-
-  const activeRule = useMemo(() => {
-    if (!borrowingRules || borrowingRules.length === 0) {
-      return { roleOrGrade: 'DEFAULT', maxBooksAllowed: 2, borrowDurationDays: 14, finePerDay: 0 }
-    }
-    const studentClass = issueData.studentClass?.trim() || ''
-    if (!studentClass) {
-      return borrowingRules.find(r => r.roleOrGrade === 'DEFAULT') || borrowingRules[0]
-    }
-    const normalized = studentClass.toUpperCase()
-    const exact = borrowingRules.find(r => r.roleOrGrade.toUpperCase() === normalized)
-    if (exact) return exact
-
-    for (const rule of borrowingRules) {
-      const key = rule.roleOrGrade.toUpperCase()
-      if (key.includes('-')) {
-        const parts = key.split('-').map(p => p.trim())
-        if (parts.length === 2) {
-          const [start, end] = parts
-          const startMatch = start.match(/^([A-Z.]+)(\d+)$/)
-          const endMatch = end.match(/^([A-Z.]+)(\d+)$/)
-          const classMatch = normalized.match(/^([A-Z.]+)(\d+)$/)
-          if (startMatch && endMatch && classMatch) {
-            const [, startPrefix, startNumStr] = startMatch
-            const [, endPrefix, endNumStr] = endMatch
-            const [, classPrefix, classNumStr] = classMatch
-            if (classPrefix === startPrefix && classPrefix === endPrefix) {
-              const startNum = parseInt(startNumStr, 10)
-              const endNum = parseInt(endNumStr, 10)
-              const classNum = parseInt(classNumStr, 10)
-              if (classNum >= startNum && classNum <= endNum) return rule
-            }
-          }
-        }
-      }
-    }
-    return borrowingRules.find(r => r.roleOrGrade === 'DEFAULT') || borrowingRules[0]
-  }, [borrowingRules, issueData.studentClass])
-
-  const calculatedDueDateStr = useMemo(() => {
-    const d = new Date()
-    d.setDate(d.getDate() + (activeRule?.borrowDurationDays || 14))
-    return d.toISOString().split('T')[0]
-  }, [activeRule])
-
-  const handleIssueSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    try {
-      const dueDate = new Date()
-      dueDate.setDate(dueDate.getDate() + (activeRule?.borrowDurationDays || 14))
-      const subject = subjectsMap.get(issueData.subjectId)
-
-      if (!subject || calculateAvailable(subject) <= 0) {
-        alert('No available books for this subject.')
-        return
-      }
-
-      const res = await db.addCheckout({
-        subjectId: issueData.subjectId,
-        studentName: issueData.studentName,
-        studentClass: issueData.studentClass,
-        conditionOut: Number(issueData.conditionOut),
-        dueDate
-      })
-      if (!res.success) throw new Error(res.error)
-
-      setIsIssueModalOpen(false)
-      setIssueData({ subjectId: 0, studentName: '', studentClass: '', conditionOut: 3 })
-      fetchSubjects(async () => {
-        const d = await db.getSubjects()
-        return d.data
-      })
-    } catch (err: unknown) {
-      console.error('Error issuing book', err)
-      alert('Failed to issue book: ' + (err instanceof Error ? err.message : String(err)))
-    }
-  }
-
-
   // ⚡ Bolt Optimization: Memoize callbacks so they don't change reference on every render
   // Expected Impact: Prevents child components (like memoized table rows) from breaking memoization.
   const openIssueModal = useCallback((sub: Subject) => {
-    setIssueData({ subjectId: sub.id, studentName: '', studentClass: '', conditionOut: 3 })
-    setSelectedSubjectName(sub.name)
+    setSelectedSubject(sub)
     setIsIssueModalOpen(true)
   }, [])
 
-  const handleEditSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    try {
-      const res = await db.updateSubject(editSubject.id, {
-        name: editSubject.name,
-        category: editSubject.category,
-        openingCount: Number(editSubject.openingCount)
-      })
-      if (!res.success) throw new Error(res.error)
-        
-      setIsEditModalOpen(false)
-      fetchSubjects(async () => {
-        const d = await db.getSubjects()
-        return d.data
-      })
-    } catch (err: unknown) {
-      console.error('Error editing subject', err)
-      alert('Failed to edit subject: ' + (err instanceof Error ? err.message : String(err)))
-    }
-  }
-
   const openEditModal = useCallback((sub: Subject) => {
-    setEditSubject({ id: sub.id, name: sub.name, category: sub.category || '', openingCount: sub.openingCount })
+    setSelectedSubject(sub)
     setIsEditModalOpen(true)
   }, [])
 
@@ -320,120 +189,35 @@ export default function Inventory() {
         </div>
       </div>
 
-      <Modal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} title="Add New Subject">
-        <form onSubmit={handleAddSubject} className="space-y-4">
-          <TextField 
-            label="Subject Name"
-            required
-            placeholder="e.g. Mathematics"
-            value={newSubject.name}
-            onChange={e => setNewSubject({...newSubject, name: e.target.value})}
-          />
-          
-          <TextField 
-            label="Category"
-            required
-            placeholder="e.g. Science"
-            value={newSubject.category}
-            onChange={e => setNewSubject({...newSubject, category: e.target.value})}
-          />
+      <AddSubjectModal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        onSuccess={() => {
+          setIsAddModalOpen(false)
+          fetchAllSubjects()
+        }}
+      />
 
-          <TextField 
-            label="Opening Stock Count"
-            required
-            type="number"
-            min="0"
-            value={newSubject.openingCount}
-            onChange={e => setNewSubject({...newSubject, openingCount: parseInt(e.target.value) || 0})}
-          />
+      <IssueBookModal
+        isOpen={isIssueModalOpen}
+        onClose={() => setIsIssueModalOpen(false)}
+        onSuccess={() => {
+          setIsIssueModalOpen(false)
+          fetchAllSubjects()
+        }}
+        subject={selectedSubject}
+        borrowingRules={borrowingRules}
+      />
 
-          <div className="pt-4 flex space-x-3">
-            <Button type="button" variant="secondary" onClick={() => setIsAddModalOpen(false)} className="flex-1">Cancel</Button>
-            <Button type="submit" className="flex-1">Save Subject</Button>
-          </div>
-        </form>
-      </Modal>
-
-      <Modal isOpen={isIssueModalOpen} onClose={() => setIsIssueModalOpen(false)} title="Issue Book">
-        <form onSubmit={handleIssueSubmit} className="space-y-4">
-          <TextField 
-            label="Subject"
-            disabled
-            className="cursor-not-allowed opacity-70"
-            value={selectedSubjectName}
-            readOnly
-          />
-
-          <TextField 
-            label="Student Name"
-            required
-            placeholder="e.g. John Doe"
-            value={issueData.studentName}
-            onChange={e => setIssueData({...issueData, studentName: e.target.value})}
-          />
-          
-          <TextField 
-            label="Class / Form"
-            placeholder="e.g. S.4"
-            value={issueData.studentClass}
-            onChange={e => setIssueData({...issueData, studentClass: e.target.value})}
-          />
-
-          <SelectField 
-            label="Outgoing Condition"
-            value={issueData.conditionOut}
-            onChange={e => setIssueData({...issueData, conditionOut: Number(e.target.value)})}
-            options={[
-              { value: '3', label: 'Good (3)' },
-              { value: '2', label: 'Normal (2)' },
-              { value: '1', label: 'Damaged (1)' },
-            ]}
-          />
-
-          <div className="p-3 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-lg text-xs text-blue-800 dark:text-blue-200 space-y-1">
-            <div><span className="font-bold">Rule ({activeRule?.roleOrGrade || 'DEFAULT'}):</span> Max {activeRule?.maxBooksAllowed || 2} book(s), {activeRule?.borrowDurationDays || 14} days loan duration.</div>
-            <div className="font-semibold text-blue-900 dark:text-blue-100">Calculated Due Date: {new Date(calculatedDueDateStr).toLocaleDateString()}</div>
-          </div>
-
-
-          <div className="pt-4 flex space-x-3">
-            <Button type="button" variant="secondary" onClick={() => setIsIssueModalOpen(false)} className="flex-1">Cancel</Button>
-            <Button type="submit" className="flex-1">Confirm Issue</Button>
-          </div>
-        </form>
-      </Modal>
-
-      <Modal isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} title="Edit Subject">
-        <form onSubmit={handleEditSubmit} className="space-y-4">
-          <TextField 
-            label="Subject Name"
-            required
-            value={editSubject.name}
-            onChange={e => setEditSubject({...editSubject, name: e.target.value})}
-          />
-          
-          <TextField 
-            label="Category"
-            required
-            value={editSubject.category}
-            onChange={e => setEditSubject({...editSubject, category: e.target.value})}
-          />
-
-          <TextField 
-            label="Opening Stock Count"
-            required
-            type="number"
-            min="0"
-            value={editSubject.openingCount}
-            onChange={e => setEditSubject({...editSubject, openingCount: parseInt(e.target.value) || 0})}
-          />
-
-          <div className="pt-4 flex space-x-3">
-            <Button type="button" variant="secondary" onClick={() => setIsEditModalOpen(false)} className="flex-1">Cancel</Button>
-            <Button type="submit" className="flex-1">Save Changes</Button>
-          </div>
-        </form>
-      </Modal>
+      <EditSubjectModal
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        onSuccess={() => {
+          setIsEditModalOpen(false)
+          fetchAllSubjects()
+        }}
+        subject={selectedSubject}
+      />
     </div>
   )
 }
