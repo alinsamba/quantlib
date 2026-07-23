@@ -495,6 +495,7 @@ ipcMain.handle('add-subject', async (_, data) => {
   try {
     ensureDb()
     if (!data.name || typeof data.name !== 'string') throw new Error('Invalid subject name')
+    if (typeof data.openingCount === 'number' && data.openingCount < 0) throw new Error('Invalid opening count: must be >= 0')
     
     const res = await prisma!.subject.create({ 
       data: {
@@ -962,6 +963,7 @@ ipcMain.handle('update-subject', async (_, data) => {
   try {
     ensureDb()
     if (!data.id || typeof data.id !== 'number') throw new Error('Invalid subject ID')
+    if (typeof data.data?.openingCount === 'number' && data.data.openingCount < 0) throw new Error('Invalid opening count: must be >= 0')
     
     const res = await prisma!.$transaction(async (tx) => {
       const oldSubject = await tx.subject.findUnique({ where: { id: data.id } })
