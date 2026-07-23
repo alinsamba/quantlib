@@ -472,20 +472,33 @@ ipcMain.handle('get-summary', async () => {
   try {
     ensureDb()
 
-    const [subjects, overdueCount] = await Promise.all([
+    const [subjects, overdueCount, subjectAgg] = await Promise.all([
       prisma!.subject.findMany(),
       prisma!.checkout.count({
         where: { status: 'ACTIVE', dueDate: { lt: new Date() } }
+      }),
+      prisma!.subject.aggregate({
+        _sum: {
+          openingCount: true,
+          recovered: true,
+          issued: true,
+          damaged: true,
+          lost: true
+        }
       })
     ])
 
-    const { totalBooks, available, issued, damagedLost } = subjects.reduce((acc, s) => {
-      acc.totalBooks += s.openingCount + s.recovered
-      acc.issued += s.issued
-      acc.damagedLost += s.damaged + s.lost
-      acc.available += calculateAvailable(s)
-      return acc
-    }, { totalBooks: 0, available: 0, issued: 0, damagedLost: 0 })
+    const sum = subjectAgg._sum
+    const sumOpening = sum.openingCount || 0
+    const sumRecovered = sum.recovered || 0
+    const sumIssued = sum.issued || 0
+    const sumDamaged = sum.damaged || 0
+    const sumLost = sum.lost || 0
+
+    const totalBooks = sumOpening + sumRecovered
+    const issued = sumIssued
+    const damagedLost = sumDamaged + sumLost
+    const available = totalBooks - issued - damagedLost
 
     return { success: true, data: { totalBooks, available, issued, damagedLost, subjects, overdueCount } }
   } catch (err: unknown) { return { success: false, error: sanitizeError(err) } }
