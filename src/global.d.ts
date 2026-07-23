@@ -19,6 +19,27 @@ declare global {
       unlockDb: (args: { password?: string, isRecovery?: boolean }) => Promise<{ success: boolean, error?: string }>
       changePassword: (args: { oldPassword?: string, newPassword?: string }) => Promise<{ success: boolean, recoveryKey?: string, error?: string }>
       backupDatabase: () => Promise<{ success: boolean, error?: string }>
+      getBorrowingRules: () => Promise<{ success: boolean, data?: any, error?: string }>
+      saveBorrowingRule: (data: any) => Promise<{ success: boolean, data?: any, error?: string }>
+      deleteBorrowingRule: (id: number) => Promise<{ success: boolean, data?: any, error?: string }>
+      getClearanceStatus: (data: { studentName: string, studentClass?: string }) => Promise<{ success: boolean, data?: any, error?: string }>
+      generateClearanceSlip: (data: { studentName: string, studentClass?: string }) => Promise<{ success: boolean, data?: any, error?: string }>
+      createStockAudit: (data?: { auditedBy?: string, notes?: string }) => Promise<{ success: boolean, data?: any, error?: string }>
+      saveStockAuditItem: (data: { auditId: number, subjectId: number, actualCount: number, notes?: string }) => Promise<{ success: boolean, data?: any, error?: string }>
+      completeStockAudit: (data: { auditId: number, notes?: string }) => Promise<{ success: boolean, data?: any, error?: string }>
+      getStockAudits: (id?: number) => Promise<{ success: boolean, data?: any, error?: string }>
+      getDepreciationAnalytics: () => Promise<{ success: boolean, data?: any, error?: string }>
+      getCirculationInsights: () => Promise<{ success: boolean, data?: any, error?: string }>
+      getBackupConfig: () => Promise<{ success: boolean, data?: any, error?: string }>
+      saveBackupConfig: (data: any) => Promise<{ success: boolean, data?: any, error?: string }>
+      triggerAutoBackup: (customPath?: string) => Promise<{ success: boolean, backupPath?: string, filename?: string, error?: string }>
+      listBackups: () => Promise<{ success: boolean, data?: any, error?: string }>
+      getLanSyncConfig: () => Promise<{ success: boolean, data?: any, error?: string }>
+      saveLanSyncConfig: (data: any) => Promise<{ success: boolean, data?: any, error?: string }>
+      syncWithLanPeer: (data: { peerIp: string, peerPort?: number, passcode?: string }) => Promise<{ success: boolean, data?: any, error?: string }>
+      getLanStatus: () => Promise<{ success: boolean, data?: any, error?: string }>
     }
   }
 }
+
+

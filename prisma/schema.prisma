@@ -38,7 +38,37 @@ model Subject {
   incidents        Incident[]
   auditLogs        AuditLog[]
   checkouts        Checkout[]
+  auditItems       StockAuditItem[]
 }
+
+model StockAudit {
+  id        Int              @id @default(autoincrement())
+  auditDate DateTime         @default(now())
+  auditedBy String?
+  notes     String?
+  status    String           @default("IN_PROGRESS")
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  items     StockAuditItem[]
+}
+
+model StockAuditItem {
+  id            Int        @id @default(autoincrement())
+  auditId       Int
+  audit         StockAudit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  subjectId     Int
+  subject       Subject    @relation(fields: [subjectId], references: [id])
+  expectedCount Int
+  actualCount   Int
+  discrepancy   Int
+  notes         String?
+
+  @@unique([auditId, subjectId])
+  @@index([auditId])
+  @@index([subjectId])
+}
+
 
 model Incident {
   id               Int      @id @default(autoincrement())
@@ -92,3 +122,28 @@ model Checkout {
 
   @@index([subjectId])
 }
+
+model BorrowingRule {
+  id                 Int      @id @default(autoincrement())
+  roleOrGrade        String   @unique
+  maxBooksAllowed    Int      @default(2)
+  borrowDurationDays Int      @default(14)
+  finePerDay         Float    @default(0.0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model AppConfig {
+  id                      Int       @id @default(1)
+  autoBackupEnabled       Boolean   @default(false)
+  autoBackupPath          String?
+  autoBackupIntervalHours Int       @default(24)
+  lastAutoBackupAt        DateTime?
+  lanSyncEnabled          Boolean   @default(false)
+  lanPort                 Int       @default(8085)
+  lanPasscode             String?   @default("quantlib-sync")
+  lastLanSyncAt           DateTime?
+  updatedAt               DateTime  @updatedAt
+}
+
+

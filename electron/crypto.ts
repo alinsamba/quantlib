@@ -213,7 +213,9 @@ function secureWipe(filePath: string) {
     if (fd !== null) {
       try {
         fs.closeSync(fd)
-      } catch (err: unknown) {
+      } catch {
+        // ignore err: unknownor when closing file
+      
         console.error(`Failed to close ${filePath}:`, err)
       }
     }

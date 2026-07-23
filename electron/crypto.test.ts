@@ -23,6 +23,7 @@ describe('crypto', () => {
       const mockError = new Error('Permission denied')
 
       vi.spyOn(cryptoModule, 'encryptTempDatabase').mockImplementation(() => {})
+      vi.spyOn(cryptoModule, 'getTempDbPath').mockReturnValue('/mock/userData/quantlib_temp.db')
 
       vi.spyOn(fs, 'existsSync').mockReturnValue(true)
       vi.spyOn(fs, 'statSync').mockReturnValue({ size: 1024 } as any)

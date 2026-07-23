@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Outlet, NavLink } from 'react-router-dom'
-import { LayoutDashboard, Book, AlertTriangle, Settings as SettingsIcon, Clock } from 'lucide-react'
+import { LayoutDashboard, Book, AlertTriangle, Settings as SettingsIcon, Clock, FileCheck, ClipboardCheck, BarChart3 } from 'lucide-react'
+
 import { ThemeProvider } from './hooks/ThemeContext'
 import Login from './pages/Login'
 
@@ -45,6 +46,20 @@ function App() {
             <span className="font-medium ml-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-75">Inventory</span>
           </NavLink>
           <NavLink 
+            to="/audit" 
+            className={({ isActive }) => `flex items-center px-4 py-3 rounded-lg transition-colors [webkit-app-region:no-drag] ${isActive ? 'bg-blue-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}
+          >
+            <ClipboardCheck size={20} className="flex-shrink-0" />
+            <span className="font-medium ml-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-75">Stock Audit</span>
+          </NavLink>
+          <NavLink 
+            to="/analytics" 
+            className={({ isActive }) => `flex items-center px-4 py-3 rounded-lg transition-colors [webkit-app-region:no-drag] ${isActive ? 'bg-blue-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}
+          >
+            <BarChart3 size={20} className="flex-shrink-0" />
+            <span className="font-medium ml-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-75 font-sans">Analytics</span>
+          </NavLink>
+          <NavLink 
             to="/incidents" 
             className={({ isActive }) => `flex items-center px-4 py-3 rounded-lg transition-colors [webkit-app-region:no-drag] ${isActive ? 'bg-blue-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}
           >
@@ -58,7 +73,15 @@ function App() {
             <Clock size={20} className="flex-shrink-0" />
             <span className="font-medium ml-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-75">Overdue</span>
           </NavLink>
+          <NavLink 
+            to="/clearance" 
+            className={({ isActive }) => `flex items-center px-4 py-3 rounded-lg transition-colors [webkit-app-region:no-drag] ${isActive ? 'bg-blue-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}
+          >
+            <FileCheck size={20} className="flex-shrink-0" />
+            <span className="font-medium ml-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-75">Clearance</span>
+          </NavLink>
         </nav>
+
         
         <div className="p-3 mb-4">
           <NavLink 

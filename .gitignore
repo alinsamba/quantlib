@@ -28,3 +28,4 @@ prisma/*.db
 *.sw?
 .tmp.driveupload
 release/
+.agents/

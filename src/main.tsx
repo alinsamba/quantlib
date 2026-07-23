@@ -8,6 +8,9 @@ import Inventory from './pages/Inventory'
 import Incidents from './pages/Incidents'
 import Settings from './pages/Settings'
 import Overdue from './pages/Overdue'
+import Clearance from './pages/Clearance'
+import StockAudit from './pages/StockAudit'
+import Analytics from './pages/Analytics'
 import { ErrorBoundary } from './components/ErrorBoundary'
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
@@ -17,11 +20,15 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         <Route path="/" element={<ErrorBoundary><App /></ErrorBoundary>}>
           <Route index element={<Dashboard />} />
           <Route path="inventory" element={<Inventory />} />
+          <Route path="audit" element={<StockAudit />} />
+          <Route path="analytics" element={<Analytics />} />
           <Route path="incidents" element={<Incidents />} />
           <Route path="settings" element={<Settings />} />
           <Route path="overdue" element={<Overdue />} />
+          <Route path="clearance" element={<Clearance />} />
         </Route>
       </Routes>
     </BrowserRouter>
   </React.StrictMode>,
 )
+
