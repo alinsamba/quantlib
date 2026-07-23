@@ -63,10 +63,10 @@ export default function Inventory() {
 
   // ⚡ Bolt Optimization: Memoize the filtered array so it doesn't recalculate on modal keystrokes
   // Expected Impact: Prevents O(N) string matching on every keystroke when typing in modals.
-  const filtered = useMemo(() =>
-    (subjects || []).filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase())),
-    [subjects, searchTerm]
-  )
+  const filtered = useMemo(() => {
+    const term = searchTerm.toLowerCase()
+    return (subjects || []).filter(s => s.name.toLowerCase().includes(term))
+  }, [subjects, searchTerm])
 
   const subjectsMap = useMemo(() => {
     const map = new Map<number, Subject>()
