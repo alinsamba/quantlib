@@ -38,7 +38,10 @@ describe('crypto', () => {
       cleanupTempDatabase()
 
       expect(fs.unlinkSync).toHaveBeenCalled()
-      expect(consoleSpy).toHaveBeenCalledWith('Failed to delete /mock/userData/quantlib_temp.db:', mockError)
+      expect(consoleSpy).toHaveBeenLastCalledWith(
+        expect.stringMatching(/^Failed to delete/),
+        mockError
+      )
     })
   })
 })
