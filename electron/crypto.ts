@@ -213,7 +213,9 @@ function secureWipe(filePath: string) {
     if (fd !== null) {
       try {
         fs.closeSync(fd)
-      } catch (err) {}
+      } catch {
+        // ignore error when closing file
+      }
     }
     // Try to unlink the file regardless of if secure wipe succeeded or failed
     try {
