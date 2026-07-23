@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Download, Printer } from 'lucide-react'
 import { exportToExcel, exportToCsv } from '../lib/exportUtils'
 import { db } from '../lib/ipc-client'
@@ -17,8 +17,7 @@ export default function Inventory() {
   const [newSubject, setNewSubject] = useState({ name: '', category: 'General', openingCount: 0 })
 
   const [isIssueModalOpen, setIsIssueModalOpen] = useState(false)
-  const defaultIssueData = { subjectId: 0, studentName: '', studentClass: '', conditionOut: 3 }
-  const [issueData, setIssueData] = useState(defaultIssueData)
+  const [issueData, setIssueData] = useState({ subjectId: 0, studentName: '', studentClass: '', conditionOut: 3 })
   const [selectedSubjectName, setSelectedSubjectName] = useState('')
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
@@ -54,7 +53,12 @@ export default function Inventory() {
     }
   }
 
-  const filtered = (subjects || []).filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()))
+  // ⚡ Bolt Optimization: Memoize the filtered array so it doesn't recalculate on modal keystrokes
+  // Expected Impact: Prevents O(N) string matching on every keystroke when typing in modals.
+  const filtered = useMemo(() =>
+    (subjects || []).filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase())),
+    [subjects, searchTerm]
+  )
 
   const subjectsMap = useMemo(() => {
     const map = new Map<number, Subject>()
@@ -97,11 +101,13 @@ export default function Inventory() {
     }
   }
 
-  const openIssueModal = (sub: Subject) => {
-    setIssueData({ ...defaultIssueData, subjectId: sub.id })
+  // ⚡ Bolt Optimization: Memoize callbacks so they don't change reference on every render
+  // Expected Impact: Prevents child components (like memoized table rows) from breaking memoization.
+  const openIssueModal = useCallback((sub: Subject) => {
+    setIssueData({ subjectId: sub.id, studentName: '', studentClass: '', conditionOut: 3 })
     setSelectedSubjectName(sub.name)
     setIsIssueModalOpen(true)
-  }
+  }, [])
 
   const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -124,10 +130,10 @@ export default function Inventory() {
     }
   }
 
-  const openEditModal = (sub: Subject) => {
+  const openEditModal = useCallback((sub: Subject) => {
     setEditSubject({ id: sub.id, name: sub.name, category: sub.category || '', openingCount: sub.openingCount })
     setIsEditModalOpen(true)
-  }
+  }, [])
 
   const handleExportExcel = () => {
     const data = filtered.map(s => ({
@@ -160,6 +166,47 @@ export default function Inventory() {
     }))
     exportToCsv(data, 'QuantLib_Inventory')
   }
+
+  // ⚡ Bolt Optimization: Memoize the entire table body mapping loop
+  // Expected Impact: Eliminates O(N) React render cycles for the table on every keystroke inside
+  // the Add/Issue/Edit modal input fields, drastically reducing input latency.
+  const tableRows = useMemo(() => (
+    <>
+      {filtered.map((sub) => {
+        const available = calculateAvailable(sub);
+        return (
+          <tr key={sub.id} className="border-b border-slate-50 dark:border-slate-700/50 hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
+            <td className="p-4 font-medium text-slate-900 dark:text-slate-100">{sub.name}</td>
+            <td className="p-4 text-slate-500 dark:text-slate-400">{sub.category}</td>
+            <td className="p-4 text-right">{sub.openingCount}</td>
+            <td className="p-4 text-right text-blue-600">{sub.recovered}</td>
+            <td className="p-4 text-right text-amber-600">{sub.issued}</td>
+            <td className="p-4 text-right text-red-500">{sub.damaged}</td>
+            <td className="p-4 text-right text-red-500">{sub.lost}</td>
+            <td className="p-4 text-right font-bold text-green-600">{available}</td>
+            <td className="p-4 text-right">
+              {sub.averageCondition ? sub.averageCondition.toFixed(1) : '3.0'}/3.0
+              {(sub.averageCondition ?? 3.0) < 2.0 && <span className="text-red-500 ml-1 font-bold" title="Replacement Warning">!</span>}
+            </td>
+            <td className="p-4 text-right text-slate-500">
+              -{sub.degradationRate ? sub.degradationRate.toFixed(2) : '0.00'}
+            </td>
+            <td className="p-4 text-center">
+              <div className="flex justify-center space-x-2">
+                <button onClick={() => openIssueModal(sub)} className="text-blue-600 hover:bg-blue-50 px-2 py-1 rounded transition-colors text-xs font-medium border border-blue-200">Issue</button>
+                <button onClick={() => openEditModal(sub)} className="text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700 px-2 py-1 rounded transition-colors text-xs font-medium">Edit</button>
+              </div>
+            </td>
+          </tr>
+        )
+      })}
+      {filtered.length === 0 && (
+        <tr>
+          <td colSpan={11} className="p-8 text-center text-slate-500 dark:text-slate-400">No subjects found</td>
+        </tr>
+      )}
+    </>
+  ), [filtered, openIssueModal, openEditModal])
 
   return (
     <div className="space-y-6">
@@ -213,39 +260,7 @@ export default function Inventory() {
                 </tr>
               </thead>
               <tbody className="text-slate-700 text-sm">
-                {filtered.map((sub) => {
-                  const available = calculateAvailable(sub);
-                  return (
-                    <tr key={sub.id} className="border-b border-slate-50 dark:border-slate-700/50 hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
-                      <td className="p-4 font-medium text-slate-900 dark:text-slate-100">{sub.name}</td>
-                      <td className="p-4 text-slate-500 dark:text-slate-400">{sub.category}</td>
-                      <td className="p-4 text-right">{sub.openingCount}</td>
-                      <td className="p-4 text-right text-blue-600">{sub.recovered}</td>
-                      <td className="p-4 text-right text-amber-600">{sub.issued}</td>
-                      <td className="p-4 text-right text-red-500">{sub.damaged}</td>
-                      <td className="p-4 text-right text-red-500">{sub.lost}</td>
-                      <td className="p-4 text-right font-bold text-green-600">{available}</td>
-                      <td className="p-4 text-right">
-                        {sub.averageCondition ? sub.averageCondition.toFixed(1) : '3.0'}/3.0
-                        {(sub.averageCondition ?? 3.0) < 2.0 && <span className="text-red-500 ml-1 font-bold" title="Replacement Warning">!</span>}
-                      </td>
-                      <td className="p-4 text-right text-slate-500">
-                        -{sub.degradationRate ? sub.degradationRate.toFixed(2) : '0.00'}
-                      </td>
-                      <td className="p-4 text-center">
-                        <div className="flex justify-center space-x-2">
-                          <button onClick={() => openIssueModal(sub)} className="text-blue-600 hover:bg-blue-50 px-2 py-1 rounded transition-colors text-xs font-medium border border-blue-200">Issue</button>
-                          <button onClick={() => openEditModal(sub)} className="text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700 px-2 py-1 rounded transition-colors text-xs font-medium">Edit</button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-                {filtered.length === 0 && (
-                   <tr>
-                     <td colSpan={11} className="p-8 text-center text-slate-500 dark:text-slate-400">No subjects found</td>
-                   </tr>
-                )}
+                {tableRows}
               </tbody>
             </table>
           )}
