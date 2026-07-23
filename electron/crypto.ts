@@ -12,6 +12,7 @@ const TEMP_DB = path.join(DATA_DIR, 'quantlib_temp.db')
 const LEGACY_DB = path.join(process.cwd(), 'quantlib.db') // Where prisma was storing it previously
 
 let currentMasterKey: Buffer | null = null
+let encryptionQueue: Promise<void> = Promise.resolve()
 
 export function getTempDbPath() {
   return TEMP_DB
@@ -38,7 +39,7 @@ function generateDistinctIv(domain: number): Buffer {
   return iv
 }
 
-export function setupDatabase(password: string): { success: boolean, recoveryKey?: string, error?: string } {
+export async function setupDatabase(password: string): Promise<{ success: boolean, recoveryKey?: string, error?: string }> {
   try {
     if (checkDbStatus() !== 'SETUP') {
       return { success: false, error: 'Database is already set up' }
@@ -90,7 +91,7 @@ export function setupDatabase(password: string): { success: boolean, recoveryKey
     }
     
     currentMasterKey = masterKey
-    encryptTempDatabase() // Initial encryption
+    await encryptTempDatabase() // Initial encryption
     
     return { success: true, recoveryKey }
   } catch (err: unknown) {
@@ -164,29 +165,34 @@ export function unlockDatabase(password: string, isRecovery: boolean = false): {
   }
 }
 
-export function encryptTempDatabase() {
+export async function encryptTempDatabase() {
   if (!currentMasterKey || !fs.existsSync(TEMP_DB)) return
   
-  try {
-    const dbData = fs.readFileSync(TEMP_DB)
-    const iv = generateDistinctIv(2)
-    const cipher = crypto.createCipheriv('aes-256-gcm', currentMasterKey, iv)
-    const encrypted = Buffer.concat([cipher.update(dbData), cipher.final()])
-    const tag = cipher.getAuthTag()
-    
-    fs.writeFileSync(ENC_TEMP_FILE, Buffer.concat([iv, tag, encrypted]))
-
-    if (fs.existsSync(ENC_FILE)) {
-      fs.copyFileSync(ENC_FILE, ENC_BACKUP_FILE)
-    }
-
-    fs.renameSync(ENC_TEMP_FILE, ENC_FILE)
-  } catch (err) {
-    console.error('Failed to encrypt database:', err)
+  const performEncryption = async () => {
     try {
-      if (fs.existsSync(ENC_TEMP_FILE)) fs.unlinkSync(ENC_TEMP_FILE)
-    } catch {}
+      const dbData = await fs.promises.readFile(TEMP_DB)
+      const iv = generateDistinctIv(2)
+      const cipher = crypto.createCipheriv('aes-256-gcm', currentMasterKey!, iv)
+      const encrypted = Buffer.concat([cipher.update(dbData), cipher.final()])
+      const tag = cipher.getAuthTag()
+
+      await fs.promises.writeFile(ENC_TEMP_FILE, Buffer.concat([iv, tag, encrypted]))
+
+      if (fs.existsSync(ENC_FILE)) {
+        await fs.promises.copyFile(ENC_FILE, ENC_BACKUP_FILE)
+      }
+
+      await fs.promises.rename(ENC_TEMP_FILE, ENC_FILE)
+    } catch (err) {
+      console.error('Failed to encrypt database:', err)
+      try {
+        if (fs.existsSync(ENC_TEMP_FILE)) await fs.promises.unlink(ENC_TEMP_FILE)
+      } catch {}
+    }
   }
+
+  encryptionQueue = encryptionQueue.then(performEncryption).catch(performEncryption)
+  await encryptionQueue
 }
 
 function secureWipe(filePath: string) {
@@ -228,10 +234,10 @@ function secureWipe(filePath: string) {
   }
 }
 
-export function cleanupTempDatabase() {
+export async function cleanupTempDatabase() {
   try {
     if (fs.existsSync(TEMP_DB)) {
-      encryptTempDatabase() // Final flush
+      await encryptTempDatabase() // Final flush
       secureWipe(TEMP_DB)
     }
   } catch (e) {

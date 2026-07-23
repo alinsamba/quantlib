@@ -19,10 +19,10 @@ describe('crypto', () => {
   })
 
   describe('cleanupTempDatabase', () => {
-    it('should handle fs.unlinkSync error gracefully', () => {
+    it('should handle fs.unlinkSync error gracefully', async () => {
       const mockError = new Error('Permission denied')
 
-      vi.spyOn(cryptoModule, 'encryptTempDatabase').mockImplementation(() => {})
+      vi.spyOn(cryptoModule, 'encryptTempDatabase').mockResolvedValue(undefined)
       vi.spyOn(cryptoModule, 'getTempDbPath').mockReturnValue('/mock/userData/quantlib_temp.db')
 
       vi.spyOn(fs, 'existsSync').mockReturnValue(true)
@@ -38,7 +38,7 @@ describe('crypto', () => {
 
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
-      cleanupTempDatabase()
+      await cleanupTempDatabase()
 
       expect(fs.unlinkSync).toHaveBeenCalled()
       expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Failed to delete'), mockError)
