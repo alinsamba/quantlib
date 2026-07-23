@@ -375,7 +375,7 @@ async function openPrismaDatabase() {
   process.env.DATABASE_URL = `file:${getTempDbPath()}`
   prisma = new PrismaClient()
   await initializeDatabase(prisma)
-  encryptTempDatabase()
+  await encryptTempDatabase()
 
   startAutoBackupScheduler()
 
@@ -503,7 +503,7 @@ ipcMain.handle('add-subject', async (_, data) => {
         openingCount: typeof data.openingCount === 'number' ? data.openingCount : 0
       } 
     })
-    encryptTempDatabase()
+    await encryptTempDatabase()
     return { success: true, data: res }
   } catch (err: unknown) { return { success: false, error: sanitizeError(err) } }
 })
@@ -570,7 +570,7 @@ ipcMain.handle('add-incident', async (_, data) => {
       }
       return incident
     })
-    encryptTempDatabase()
+    await encryptTempDatabase()
     return { success: true, data: res }
   } catch (err: unknown) { return { success: false, error: sanitizeError(err) } }
 })
@@ -779,7 +779,7 @@ ipcMain.handle('add-checkout', async (_, data) => {
       })
       return checkout
     })
-    encryptTempDatabase()
+    await encryptTempDatabase()
     return { success: true, data: res }
   } catch (err: unknown) { return { success: false, error: sanitizeError(err) } }
 })
@@ -808,7 +808,7 @@ ipcMain.handle('save-borrowing-rule', async (_, ruleData) => {
       update: { maxBooksAllowed, borrowDurationDays, finePerDay },
       create: { roleOrGrade, maxBooksAllowed, borrowDurationDays, finePerDay }
     })
-    encryptTempDatabase()
+    await encryptTempDatabase()
     return { success: true, data: res }
   } catch (err: unknown) { return { success: false, error: sanitizeError(err) } }
 })
@@ -825,7 +825,7 @@ ipcMain.handle('delete-borrowing-rule', async (_, data) => {
     }
 
     await (prisma as any).borrowingRule.delete({ where: { id } })
-    encryptTempDatabase()
+    await encryptTempDatabase()
     return { success: true }
   } catch (err: unknown) { return { success: false, error: sanitizeError(err) } }
 })
@@ -941,7 +941,7 @@ ipcMain.handle('return-checkout', async (_, { id, conditionIn }) => {
       }
       return checkout
     })
-    encryptTempDatabase()
+    await encryptTempDatabase()
     return { success: true, data: res }
   } catch (err: unknown) { return { success: false, error: sanitizeError(err) } }
 })
@@ -988,7 +988,7 @@ ipcMain.handle('update-subject', async (_, data) => {
       }
       return updated
     })
-    encryptTempDatabase()
+    await encryptTempDatabase()
     return { success: true, data: res }
   } catch (err: unknown) { return { success: false, error: sanitizeError(err) } }
 })
@@ -1269,7 +1269,7 @@ ipcMain.handle('create-stock-audit', async (_, data) => {
       })
     })
 
-    encryptTempDatabase()
+    await encryptTempDatabase()
     return { success: true, data: audit }
   } catch (err: unknown) { return { success: false, error: sanitizeError(err) } }
 })
@@ -1317,7 +1317,7 @@ ipcMain.handle('save-stock-audit-item', async (_, data) => {
       return item
     })
 
-    encryptTempDatabase()
+    await encryptTempDatabase()
     return { success: true, data: res }
   } catch (err: unknown) { return { success: false, error: sanitizeError(err) } }
 })
@@ -1372,7 +1372,7 @@ ipcMain.handle('complete-stock-audit', async (_, data) => {
       }
     })
 
-    encryptTempDatabase()
+    await encryptTempDatabase()
     return { success: true, data: res }
   } catch (err: unknown) { return { success: false, error: sanitizeError(err) } }
 })
@@ -1531,7 +1531,7 @@ export function isBackupDue(lastBackupAt: Date | string | null | undefined, inte
   return elapsedHours >= intervalHours
 }
 
-export function performVaultBackup(targetDir: string, customSourceFile?: string): { success: boolean; backupPath?: string; filename?: string; error?: string } {
+export async function performVaultBackup(targetDir: string, customSourceFile?: string): Promise<{ success: boolean; backupPath?: string; filename?: string; error?: string }> {
   try {
     if (!targetDir || !targetDir.trim()) {
       return { success: false, error: 'Target directory is required' }
@@ -1542,7 +1542,7 @@ export function performVaultBackup(targetDir: string, customSourceFile?: string)
       fs.mkdirSync(dirPath, { recursive: true })
     }
 
-    try { encryptTempDatabase() } catch {}
+    try { await encryptTempDatabase() } catch {}
 
     const userDataDir = app ? app.getPath('userData') : '/mock/userData'
     const encFile = customSourceFile || path.join(userDataDir, 'quantlib.enc')
@@ -1604,7 +1604,7 @@ export function startAutoBackupScheduler() {
       const config: any = await (prisma as any).appConfig.findUnique({ where: { id: 1 } })
       if (config && config.autoBackupEnabled && config.autoBackupPath) {
         if (isBackupDue(config.lastAutoBackupAt, config.autoBackupIntervalHours)) {
-          const result = performVaultBackup(config.autoBackupPath)
+          const result = await performVaultBackup(config.autoBackupPath)
           if (result.success) {
             await (prisma as any).appConfig.update({
               where: { id: 1 },
@@ -1794,7 +1794,7 @@ export async function mergeLanSyncPayload(client: PrismaClient, payload: any) {
     }
   })
 
-  try { encryptTempDatabase() } catch {}
+  try { await encryptTempDatabase() } catch {}
 
   return {
     mergedCounts: {
@@ -2005,7 +2005,7 @@ ipcMain.handle('trigger-auto-backup', async (_, customPath) => {
     ensureDb()
     const config = await (prisma as any).appConfig.findUnique({ where: { id: 1 } })
     const targetPath = customPath || config?.autoBackupPath || path.join(app.getPath('userData'), 'backups')
-    const result = performVaultBackup(targetPath)
+    const result = await performVaultBackup(targetPath)
     if (result.success) {
       await (prisma as any).appConfig.update({
         where: { id: 1 },

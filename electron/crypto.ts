@@ -90,7 +90,7 @@ export function setupDatabase(password: string): { success: boolean, recoveryKey
     }
     
     currentMasterKey = masterKey
-    encryptTempDatabase() // Initial encryption
+    encryptTempDatabaseSync() // Initial encryption
     
     return { success: true, recoveryKey }
   } catch (err: unknown) {
@@ -164,7 +164,53 @@ export function unlockDatabase(password: string, isRecovery: boolean = false): {
   }
 }
 
-export function encryptTempDatabase() {
+let encryptionPromise: Promise<void> | null = null
+
+export async function encryptTempDatabase() {
+  if (!currentMasterKey || !fs.existsSync(TEMP_DB)) return
+
+  const runEncryption = async () => {
+    try {
+      const dbData = await fs.promises.readFile(TEMP_DB)
+      const iv = generateDistinctIv(2)
+      const cipher = crypto.createCipheriv('aes-256-gcm', currentMasterKey, iv)
+      const encrypted = Buffer.concat([cipher.update(dbData), cipher.final()])
+      const tag = cipher.getAuthTag()
+
+      await fs.promises.writeFile(ENC_TEMP_FILE, Buffer.concat([iv, tag, encrypted]))
+
+      try {
+        await fs.promises.copyFile(ENC_FILE, ENC_BACKUP_FILE)
+      } catch (err: any) {
+        if (err.code !== 'ENOENT') throw err
+      }
+
+      await fs.promises.rename(ENC_TEMP_FILE, ENC_FILE)
+    } catch (err) {
+      console.error('Failed to encrypt database:', err)
+      try {
+        if (fs.existsSync(ENC_TEMP_FILE)) fs.unlinkSync(ENC_TEMP_FILE)
+      } catch {}
+    }
+  }
+
+  if (encryptionPromise) {
+    encryptionPromise = encryptionPromise.then(runEncryption).catch(runEncryption)
+  } else {
+    encryptionPromise = runEncryption()
+  }
+
+  const currentPromise = encryptionPromise
+  try {
+    await currentPromise
+  } finally {
+    if (encryptionPromise === currentPromise) {
+      encryptionPromise = null
+    }
+  }
+}
+
+export function encryptTempDatabaseSync() {
   if (!currentMasterKey || !fs.existsSync(TEMP_DB)) return
   
   try {
@@ -231,7 +277,7 @@ function secureWipe(filePath: string) {
 export function cleanupTempDatabase() {
   try {
     if (fs.existsSync(TEMP_DB)) {
-      encryptTempDatabase() // Final flush
+      encryptTempDatabaseSync() // Final flush
       secureWipe(TEMP_DB)
     }
   } catch (e) {
