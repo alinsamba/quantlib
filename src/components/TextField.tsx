@@ -2,10 +2,11 @@ import React, { forwardRef, useId } from 'react';
 
 interface TextFieldProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label: string;
+  helperText?: string;
 }
 
 export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(
-  ({ label, className = '', id, ...props }, ref) => {
+  ({ label, className = '', id, helperText, ...props }, ref) => {
     const defaultId = useId();
     const inputId = id || defaultId;
     return (
@@ -13,6 +14,9 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(
         <label htmlFor={inputId} className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
           {label}
         </label>
+        {helperText && (
+          <p className="text-xs text-slate-500 mb-1">{helperText}</p>
+        )}
         <input 
           id={inputId}
           ref={ref}
