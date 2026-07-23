@@ -760,7 +760,7 @@ ipcMain.handle('add-checkout', async (_, data) => {
           studentName: studentName,
           studentClass: studentClass,
           dueDate: dueDate,
-          conditionOut: typeof data.conditionOut === 'number' ? data.conditionOut : 3,
+          conditionOut: typeof data.conditionOut === 'number' && data.conditionOut >= 1 && data.conditionOut <= 3 ? Math.floor(data.conditionOut) : 3,
           status: 'ACTIVE'
         } 
       })
@@ -901,7 +901,7 @@ ipcMain.handle('return-checkout', async (_, { id, conditionIn }) => {
     const res = await prisma!.$transaction(async (tx) => {
       const checkout = await tx.checkout.update({
         where: { id },
-        data: { status: 'RETURNED', returnDate: new Date(), conditionIn: typeof conditionIn === 'number' ? conditionIn : null }
+        data: { status: 'RETURNED', returnDate: new Date(), conditionIn: typeof conditionIn === 'number' && conditionIn >= 1 && conditionIn <= 3 ? Math.floor(conditionIn) : null }
       })
       
       const subject = await tx.subject.findUnique({ where: { id: checkout.subjectId }, include: { checkouts: true } })
@@ -1753,8 +1753,8 @@ export async function mergeLanSyncPayload(client: PrismaClient, payload: any) {
                 dueDate: new Date(c.dueDate),
                 returnDate: c.returnDate ? new Date(c.returnDate) : null,
                 status: c.status || 'ACTIVE',
-                conditionOut: c.conditionOut ?? 3,
-                conditionIn: c.conditionIn ?? null
+                conditionOut: typeof c.conditionOut === 'number' && c.conditionOut >= 1 && c.conditionOut <= 3 ? Math.floor(c.conditionOut) : 3,
+                conditionIn: typeof c.conditionIn === 'number' && c.conditionIn >= 1 && c.conditionIn <= 3 ? Math.floor(c.conditionIn) : null
               }
             })
             checkoutsMerged++
