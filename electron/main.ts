@@ -427,7 +427,7 @@ ipcMain.handle('unlock-db', async (_, { password, isRecovery = false }) => {
     return { success: false, error: `Too many failed attempts. Try again in ${waitTime} seconds.` }
   }
 
-  const result = unlockDatabase(password, isRecovery)
+  const result = await unlockDatabase(password, isRecovery)
   if (!result.success) {
     state.attempts++
     const backoffSeconds = Math.min(60, Math.pow(2, state.attempts - 1))
