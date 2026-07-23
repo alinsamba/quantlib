@@ -39,5 +39,26 @@ export const db = {
     if (!window.electronAPI) return Promise.reject(new Error('Electron preload is not available.'))
     return window.electronAPI.changePassword(args)
   },
-  backupDatabase: () => invoke('backupDatabase')
+  backupDatabase: () => invoke('backupDatabase'),
+  getBorrowingRules: () => invoke('getBorrowingRules'),
+  saveBorrowingRule: (data: any) => invoke('saveBorrowingRule', data),
+  deleteBorrowingRule: (id: number) => invoke('deleteBorrowingRule', id),
+  getClearanceStatus: (data: { studentName: string, studentClass?: string }) => invoke('getClearanceStatus', data),
+  generateClearanceSlip: (data: { studentName: string, studentClass?: string }) => invoke('generateClearanceSlip', data),
+  createStockAudit: (data?: { auditedBy?: string, notes?: string }) => invoke('createStockAudit', data),
+  saveStockAuditItem: (data: { auditId: number, subjectId: number, actualCount: number, notes?: string }) => invoke('saveStockAuditItem', data),
+  completeStockAudit: (data: { auditId: number, notes?: string }) => invoke('completeStockAudit', data),
+  getStockAudits: (id?: number) => invoke('getStockAudits', id),
+  getDepreciationAnalytics: () => invoke('getDepreciationAnalytics'),
+  getCirculationInsights: () => invoke('getCirculationInsights'),
+  getBackupConfig: () => invoke('getBackupConfig'),
+  saveBackupConfig: (data: any) => invoke('saveBackupConfig', data),
+  triggerAutoBackup: (customPath?: string) => invoke('triggerAutoBackup', customPath),
+  listBackups: () => invoke('listBackups'),
+  getLanSyncConfig: () => invoke('getLanSyncConfig'),
+  saveLanSyncConfig: (data: any) => invoke('saveLanSyncConfig', data),
+  syncWithLanPeer: (data: { peerIp: string, peerPort?: number, passcode?: string }) => invoke('syncWithLanPeer', data),
+  getLanStatus: () => invoke('getLanStatus')
 }
+
+

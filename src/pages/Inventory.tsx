@@ -7,11 +7,19 @@ import { Button } from '../components/Button'
 import { TextField, SelectField } from '../components/TextField'
 import { Modal } from '../components/Modal'
 import { useAsync } from '../hooks/useAsync'
-import type { Subject } from '../lib/types'
+import type { Subject, BorrowingRule } from '../lib/types'
 
 export default function Inventory() {
   const [searchTerm, setSearchTerm] = useState('')
   const { data: subjects, isLoading: subjectsLoading, execute: fetchSubjects } = useAsync<Subject[]>()
+  const [borrowingRules, setBorrowingRules] = useState<BorrowingRule[]>([])
+
+  useEffect(() => {
+    db.getBorrowingRules().then((res: any) => {
+      if (res && res.success) setBorrowingRules(res.data || [])
+    }).catch((err: any) => console.error(err))
+  }, [])
+
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [newSubject, setNewSubject] = useState({ name: '', category: 'General', openingCount: 0 })
@@ -68,11 +76,55 @@ export default function Inventory() {
     return map
   }, [subjects])
 
+  const activeRule = useMemo(() => {
+    if (!borrowingRules || borrowingRules.length === 0) {
+      return { roleOrGrade: 'DEFAULT', maxBooksAllowed: 2, borrowDurationDays: 14, finePerDay: 0 }
+    }
+    const studentClass = issueData.studentClass?.trim() || ''
+    if (!studentClass) {
+      return borrowingRules.find(r => r.roleOrGrade === 'DEFAULT') || borrowingRules[0]
+    }
+    const normalized = studentClass.toUpperCase()
+    const exact = borrowingRules.find(r => r.roleOrGrade.toUpperCase() === normalized)
+    if (exact) return exact
+
+    for (const rule of borrowingRules) {
+      const key = rule.roleOrGrade.toUpperCase()
+      if (key.includes('-')) {
+        const parts = key.split('-').map(p => p.trim())
+        if (parts.length === 2) {
+          const [start, end] = parts
+          const startMatch = start.match(/^([A-Z.]+)(\d+)$/)
+          const endMatch = end.match(/^([A-Z.]+)(\d+)$/)
+          const classMatch = normalized.match(/^([A-Z.]+)(\d+)$/)
+          if (startMatch && endMatch && classMatch) {
+            const [, startPrefix, startNumStr] = startMatch
+            const [, endPrefix, endNumStr] = endMatch
+            const [, classPrefix, classNumStr] = classMatch
+            if (classPrefix === startPrefix && classPrefix === endPrefix) {
+              const startNum = parseInt(startNumStr, 10)
+              const endNum = parseInt(endNumStr, 10)
+              const classNum = parseInt(classNumStr, 10)
+              if (classNum >= startNum && classNum <= endNum) return rule
+            }
+          }
+        }
+      }
+    }
+    return borrowingRules.find(r => r.roleOrGrade === 'DEFAULT') || borrowingRules[0]
+  }, [borrowingRules, issueData.studentClass])
+
+  const calculatedDueDateStr = useMemo(() => {
+    const d = new Date()
+    d.setDate(d.getDate() + (activeRule?.borrowDurationDays || 14))
+    return d.toISOString().split('T')[0]
+  }, [activeRule])
+
   const handleIssueSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
       const dueDate = new Date()
-      dueDate.setDate(dueDate.getDate() + 14) // default 14 days
+      dueDate.setDate(dueDate.getDate() + (activeRule?.borrowDurationDays || 14))
       const subject = subjectsMap.get(issueData.subjectId)
 
       if (!subject || calculateAvailable(subject) <= 0) {
@@ -100,6 +152,7 @@ export default function Inventory() {
       alert('Failed to issue book: ' + (err instanceof Error ? err.message : String(err)))
     }
   }
+
 
   // ⚡ Bolt Optimization: Memoize callbacks so they don't change reference on every render
   // Expected Impact: Prevents child components (like memoized table rows) from breaking memoization.
@@ -336,6 +389,12 @@ export default function Inventory() {
               { value: '1', label: 'Damaged (1)' },
             ]}
           />
+
+          <div className="p-3 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-lg text-xs text-blue-800 dark:text-blue-200 space-y-1">
+            <div><span className="font-bold">Rule ({activeRule?.roleOrGrade || 'DEFAULT'}):</span> Max {activeRule?.maxBooksAllowed || 2} book(s), {activeRule?.borrowDurationDays || 14} days loan duration.</div>
+            <div className="font-semibold text-blue-900 dark:text-blue-100">Calculated Due Date: {new Date(calculatedDueDateStr).toLocaleDateString()}</div>
+          </div>
+
 
           <div className="pt-4 flex space-x-3">
             <Button type="button" variant="secondary" onClick={() => setIsIssueModalOpen(false)} className="flex-1">Cancel</Button>
