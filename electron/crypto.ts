@@ -17,6 +17,10 @@ export function getTempDbPath() {
   return TEMP_DB
 }
 
+export function getEncDbPath() {
+  return ENC_FILE
+}
+
 export function checkDbStatus(): 'SETUP' | 'LOCKED' {
   if (fs.existsSync(META_FILE) && fs.existsSync(ENC_FILE)) {
     return 'LOCKED'
