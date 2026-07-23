@@ -39,7 +39,7 @@ vi.mock('./crypto', () => ({
   checkDbStatus: vi.fn(),
   setupDatabase: vi.fn(),
   unlockDatabase: vi.fn(),
-  encryptTempDatabase: vi.fn(),
+  encryptTempDatabase: vi.fn().mockResolvedValue(undefined),
   cleanupTempDatabase: vi.fn(),
   getTempDbPath: vi.fn(() => '/mock/userData/temp.db'),
   changePassword: vi.fn()
