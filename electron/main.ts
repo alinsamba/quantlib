@@ -3,7 +3,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import os from 'node:os'
 import http from 'node:http'
-
+import fs from 'node:fs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -416,11 +416,38 @@ ipcMain.handle('setup-db', async (_, password) => {
   return result
 })
 
-const unlockAttempts = new Map<string, { attempts: number, nextAllowedTime: number }>()
+function getRateLimitPath() {
+  const userDataDir = app ? app.getPath('userData') : '/mock/userData'
+  return path.join(userDataDir, 'quantlib.ratelimit.json')
+}
+
+function readRateLimits(): Record<string, { attempts: number, nextAllowedTime: number }> {
+  try {
+    const filePath = getRateLimitPath()
+    if (fs.existsSync(filePath)) {
+      const data = fs.readFileSync(filePath, 'utf-8')
+      return JSON.parse(data)
+    }
+  } catch {
+    // Ignore read errors and start fresh
+  }
+  return {}
+}
+
+function saveRateLimits(limits: Record<string, { attempts: number, nextAllowedTime: number }>) {
+  try {
+    const filePath = getRateLimitPath()
+    fs.writeFileSync(filePath, JSON.stringify(limits), 'utf-8')
+  } catch {
+    // Ignore write errors
+  }
+}
 
 ipcMain.handle('unlock-db', async (_, { password, isRecovery = false }) => {
   const key = isRecovery ? 'recovery' : 'password'
-  const state = unlockAttempts.get(key) || { attempts: 0, nextAllowedTime: 0 }
+
+  const limits = readRateLimits()
+  const state = limits[key] || { attempts: 0, nextAllowedTime: 0 }
   
   if (Date.now() < state.nextAllowedTime) {
     const waitTime = Math.ceil((state.nextAllowedTime - Date.now()) / 1000)
@@ -432,11 +459,13 @@ ipcMain.handle('unlock-db', async (_, { password, isRecovery = false }) => {
     state.attempts++
     const backoffSeconds = Math.min(60, Math.pow(2, state.attempts - 1))
     state.nextAllowedTime = Date.now() + backoffSeconds * 1000
-    unlockAttempts.set(key, state)
+    limits[key] = state
+    saveRateLimits(limits)
     return { success: false, error: 'Invalid password or recovery key' }
   }
   
-  unlockAttempts.delete(key)
+  delete limits[key]
+  saveRateLimits(limits)
 
   if (result.success) {
     try {
@@ -1004,8 +1033,6 @@ ipcMain.handle('get-audit-logs', async () => {
     return { success: true, data: res }
   } catch (err: unknown) { return { success: false, error: sanitizeError(err) } }
 })
-
-import fs from 'node:fs'
 
 ipcMain.handle('backup-database', async () => {
   try {
