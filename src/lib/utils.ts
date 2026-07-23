@@ -16,8 +16,16 @@ export function calculateAvailable(subject: {
 }
 
 export function validateMasterPassword(password: string) {
+  if (typeof password !== 'string') {
+    return 'Password must be a string'
+  }
+
   if (password.length < 8) {
     return 'Password must be at least 8 characters long'
+  }
+
+  if (password.length > 128) {
+    return 'Password is too long'
   }
 
   if (!/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/\d/.test(password)) {

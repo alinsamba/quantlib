@@ -25,6 +25,11 @@ describe('crypto', () => {
       vi.spyOn(cryptoModule, 'encryptTempDatabase').mockImplementation(() => {})
 
       vi.spyOn(fs, 'existsSync').mockReturnValue(true)
+      vi.spyOn(fs, 'statSync').mockReturnValue({ size: 100 } as any)
+      vi.spyOn(fs, 'openSync').mockReturnValue(1)
+      vi.spyOn(fs, 'writeSync').mockReturnValue(100)
+      vi.spyOn(fs, 'fsyncSync').mockImplementation(() => {})
+      vi.spyOn(fs, 'closeSync').mockImplementation(() => {})
       vi.spyOn(fs, 'unlinkSync').mockImplementation(() => {
         throw mockError
       })
@@ -34,7 +39,7 @@ describe('crypto', () => {
       cleanupTempDatabase()
 
       expect(fs.unlinkSync).toHaveBeenCalled()
-      expect(consoleSpy).toHaveBeenCalledWith('Cleanup failed:', mockError)
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Failed to delete'), mockError)
     })
   })
 })

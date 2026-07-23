@@ -1,0 +1,4 @@
+## 2024-05-24 - Rate Limiting Bypass on Auxiliary Auth Endpoints
+**Vulnerability:** The auxiliary `change-password` IPC handler was missing the rate limiting applied to the primary `unlock-db` endpoint, and the master password validation lacked maximum length limits.
+**Learning:** Security mechanisms applied to primary authentication flows are often inadvertently omitted on auxiliary endpoints (like password reset or change password), allowing attackers to bypass rate limits and brute force credentials. Furthermore, PBKDF2 with a high iteration count (e.g. 600,000) combined with unlimited input length can lead to Denial of Service (DoS) attacks.
+**Prevention:** Ensure that all endpoints processing authentication or credentials, including auxiliary ones, share a unified rate limiting implementation. Always enforce strict bounds checking (both type and length) on user inputs processed by expensive cryptographic operations to prevent resource exhaustion.
