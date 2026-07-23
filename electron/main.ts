@@ -346,9 +346,27 @@ ipcMain.handle('unlock-db', async (_, { password, isRecovery = false }) => {
 })
 
 ipcMain.handle('change-password', (_, { oldPassword, newPassword }) => {
+  const key = 'password'
+  const state = unlockAttempts.get(key) || { attempts: 0, nextAllowedTime: 0 }
+
+  if (Date.now() < state.nextAllowedTime) {
+    const waitTime = Math.ceil((state.nextAllowedTime - Date.now()) / 1000)
+    return { success: false, error: `Too many failed attempts. Try again in ${waitTime} seconds.` }
+  }
+
   const pwdError = validateMasterPassword(newPassword)
   if (pwdError) return { success: false, error: pwdError }
-  return changePassword(oldPassword, newPassword)
+
+  const result = changePassword(oldPassword, newPassword)
+  if (!result.success && result.error === 'Incorrect current password') {
+    state.attempts++
+    const backoffSeconds = Math.min(60, Math.pow(2, state.attempts - 1))
+    state.nextAllowedTime = Date.now() + backoffSeconds * 1000
+    unlockAttempts.set(key, state)
+  } else if (result.success) {
+    unlockAttempts.delete(key)
+  }
+  return result
 })
 
 // IPC Handlers
