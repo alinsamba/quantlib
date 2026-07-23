@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 import { Book, AlertTriangle, CheckCircle, TrendingUp, Clock, Printer } from 'lucide-react'
 import { db } from '../lib/ipc-client'
-import { useTheme } from '../hooks/ThemeContext'
+import { useTheme } from '../hooks/useTheme'
 import { calculateAvailable } from '../lib/utils'
 import { useNavigate } from 'react-router-dom'
 export interface DashboardSummary {
