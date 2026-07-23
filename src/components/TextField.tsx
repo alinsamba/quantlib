@@ -11,7 +11,7 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(
     return (
       <div>
         <label htmlFor={inputId} className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-          {label}
+          {label} {props.required && <span className="text-red-500" aria-hidden="true">*</span>}
         </label>
         <input 
           id={inputId}
@@ -37,7 +37,7 @@ export const SelectField = forwardRef<HTMLSelectElement, SelectFieldProps>(
     return (
       <div>
         <label htmlFor={selectId} className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-          {label}
+          {label} {props.required && <span className="text-red-500" aria-hidden="true">*</span>}
         </label>
         <select 
           id={selectId}
@@ -66,7 +66,7 @@ export const TextAreaField = forwardRef<HTMLTextAreaElement, TextAreaFieldProps>
     return (
       <div>
         <label htmlFor={textAreaId} className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-          {label}
+          {label} {props.required && <span className="text-red-500" aria-hidden="true">*</span>}
         </label>
         <textarea 
           id={textAreaId}
