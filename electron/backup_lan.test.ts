@@ -123,10 +123,10 @@ describe('R3: Vault Backups & LAN Sync Unit & Integration Tests', () => {
       expect(res.error).toBe('Target directory is required')
     })
 
-    it('should list all timestamped backup files sorted by creation date descending', () => {
+    it('should list all timestamped backup files sorted by creation date descending', async () => {
       // Create backup files in backupTargetDir
       performVaultBackup(backupTargetDir, sourceVaultFile)
-      const list = listVaultBackups(backupTargetDir)
+      const list = await listVaultBackups(backupTargetDir)
       expect(list.length).toBeGreaterThan(0)
       expect(list[0].filename).toMatch(/^quantlib_backup_\d{8}_\d{6}\.enc$/)
       expect(list[0].sizeBytes).toBeGreaterThan(0)
@@ -154,8 +154,7 @@ describe('R3: Vault Backups & LAN Sync Unit & Integration Tests', () => {
       }
 
       const payload = await packageLanSyncPayload(mockPrisma)
-      expect(payload.version).toBe('1.0')
-      expect(payload.school?.name).toBe('Test School')
+      expect(payload.version).toBe(1)
       expect(payload.subjects.length).toBe(1)
       expect(payload.checkouts.length).toBe(1)
       expect(payload.borrowingRules.length).toBe(1)

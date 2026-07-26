@@ -27,7 +27,7 @@ export default function Settings() {
   const [isChangingPassword, setIsChangingPassword] = useState(false)
 
   // Audit Logs State
-  const { data: auditLogsRes, isLoading: logsLoading, execute: fetchLogs } = useAsync<{ success: boolean, data?: AuditLog[], error?: string }>()
+  const { data: auditLogs, isLoading: logsLoading, execute: fetchLogs } = useAsync<AuditLog[]>()
 
   useEffect(() => {
     fetchLogs(() => db.getAuditLogs())
@@ -79,11 +79,11 @@ export default function Settings() {
     setBackupError('')
     try {
       const res = await db.backupDatabase()
-      if (res.success) {
+      if (res && res.success) {
         setBackupMessage('Database backed up successfully!')
       } else {
-        if (res.error !== 'Backup cancelled') {
-          setBackupError(res.error || 'Backup failed')
+        if (res && res.error !== 'Backup cancelled') {
+          setBackupError(res?.error || 'Backup failed')
         }
       }
     } catch (err: unknown) {
@@ -126,7 +126,7 @@ export default function Settings() {
         setAutoBackupEnabled(res.data.autoBackupEnabled ?? false)
         setAutoBackupPath(res.data.autoBackupPath ?? '')
         setAutoBackupIntervalHours(res.data.autoBackupIntervalHours ?? 24)
-        setLastAutoBackupAt(res.data.lastAutoBackupAt ?? null)
+        setLastAutoBackupAt(res.data.lastAutoBackupAt ? String(res.data.lastAutoBackupAt) : null)
       }
       const listRes = await db.listBackups()
       if (listRes && listRes.success && listRes.data) {
@@ -148,7 +148,7 @@ export default function Settings() {
         setLanPasscode(res.data.lanPasscode ?? 'quantlib-sync')
         setLocalIp(res.data.localIp ?? '127.0.0.1')
         setIsServerRunning(res.data.isServerRunning ?? false)
-        setLastLanSyncAt(res.data.lastLanSyncAt ?? null)
+        setLastLanSyncAt(res.data.lastLanSyncAt ? String(res.data.lastLanSyncAt) : null)
       }
     } catch (err) {
       console.error('Failed to load LAN sync config:', err)
@@ -250,10 +250,8 @@ export default function Settings() {
   const fetchRules = useCallback(async () => {
     setRulesLoading(true)
     try {
-      const res = await db.getBorrowingRules()
-      if (res && res.success) {
-        setBorrowingRules(res.data || [])
-      }
+      const rules = await db.getBorrowingRules()
+      setBorrowingRules(rules || [])
     } catch (err: unknown) {
       console.error('Failed to fetch borrowing rules:', err)
     } finally {
@@ -287,19 +285,15 @@ export default function Settings() {
     e.preventDefault()
     setRuleError('')
     try {
-      const res = await db.saveBorrowingRule({
+      await db.saveBorrowingRule({
         id: ruleFormData.id || undefined,
         roleOrGrade: ruleFormData.roleOrGrade,
         maxBooksAllowed: Number(ruleFormData.maxBooksAllowed),
         borrowDurationDays: Number(ruleFormData.borrowDurationDays),
         finePerDay: Number(ruleFormData.finePerDay)
       })
-      if (res.success) {
-        setIsRuleModalOpen(false)
-        fetchRules()
-      } else {
-        setRuleError(res.error || 'Failed to save rule')
-      }
+      setIsRuleModalOpen(false)
+      fetchRules()
     } catch (err: unknown) {
       setRuleError(err instanceof Error ? err.message : 'Failed to save rule')
     }
@@ -312,12 +306,8 @@ export default function Settings() {
     }
     if (!confirm(`Are you sure you want to delete borrowing rule for "${roleOrGrade}"?`)) return
     try {
-      const res = await db.deleteBorrowingRule(id)
-      if (res.success) {
-        fetchRules()
-      } else {
-        alert('Failed to delete rule: ' + res.error)
-      }
+      await db.deleteBorrowingRule(id)
+      fetchRules()
     } catch (err: unknown) {
       alert('Failed to delete rule: ' + (err instanceof Error ? err.message : String(err)))
     }
@@ -781,15 +771,13 @@ export default function Settings() {
           </div>
           
           <div className="p-0 overflow-y-auto flex-1">
-            {logsLoading && !auditLogsRes?.data ? (
+            {logsLoading && !auditLogs ? (
               <div className="p-8 text-center text-slate-500">Loading logs...</div>
-            ) : auditLogsRes?.error ? (
-              <div className="p-8 text-center text-red-500">{auditLogsRes.error}</div>
-            ) : auditLogsRes?.data?.length === 0 ? (
+            ) : auditLogs?.length === 0 ? (
               <div className="p-8 text-center text-slate-500">No audit logs found.</div>
             ) : (
               <ul className="divide-y divide-slate-100 dark:divide-slate-700/50">
-                {auditLogsRes?.data?.map((log) => (
+                {auditLogs?.map((log) => (
                   <li key={log.id} className="p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                     <div className="flex justify-between items-start mb-1">
                       <span className="font-medium text-sm text-slate-800 dark:text-slate-200">

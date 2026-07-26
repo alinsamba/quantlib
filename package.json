@@ -14,9 +14,9 @@
     "test": "vitest run",
     "generate-icon": "node generate_icon.js",
     "prisma:generate": "prisma generate",
-    "prisma:push": "prisma db push",
-    "seed": "node scripts/seed.js",
-    "smoke": "node scripts/test-prisma.js"
+    "prisma:push": "cross-env DATABASE_URL=file:./quantlib.db prisma db push",
+    "seed": "cross-env DATABASE_URL=file:./quantlib.db node scripts/seed.js",
+    "smoke": "cross-env DATABASE_URL=file:./quantlib.db node scripts/test-prisma.js"
   },
   "build": {
     "appId": "com.quantlib.app",

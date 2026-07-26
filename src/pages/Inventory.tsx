@@ -33,27 +33,23 @@ export default function Inventory() {
 
   useEffect(() => {
     fetchSubjects(async () => {
-      const res = await db.getSubjects()
-      if (res.success) return res.data
-      throw new Error(res.error)
+      return db.getSubjects()
     })
   }, [fetchSubjects])
 
   const handleAddSubject = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      const res = await db.addSubject({
+      await db.addSubject({
         name: newSubject.name,
         category: newSubject.category,
         openingCount: Number(newSubject.openingCount)
       })
-      if (!res.success) throw new Error(res.error)
       
       setIsAddModalOpen(false)
       setNewSubject({ name: '', category: 'General', openingCount: 0 })
       fetchSubjects(async () => {
-        const d = await db.getSubjects()
-        return d.data
+        return db.getSubjects()
       })
     } catch (err: unknown) {
       console.error('Error adding subject', err)
@@ -132,20 +128,18 @@ export default function Inventory() {
         return
       }
 
-      const res = await db.addCheckout({
+      await db.addCheckout({
         subjectId: issueData.subjectId,
         studentName: issueData.studentName,
         studentClass: issueData.studentClass,
         conditionOut: Number(issueData.conditionOut),
-        dueDate
+        dueDate: dueDate.toISOString()
       })
-      if (!res.success) throw new Error(res.error)
 
       setIsIssueModalOpen(false)
       setIssueData({ subjectId: 0, studentName: '', studentClass: '', conditionOut: 3 })
       fetchSubjects(async () => {
-        const d = await db.getSubjects()
-        return d.data
+        return db.getSubjects()
       })
     } catch (err: unknown) {
       console.error('Error issuing book', err)
@@ -165,17 +159,15 @@ export default function Inventory() {
   const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      const res = await db.updateSubject(editSubject.id, {
+      await db.updateSubject(editSubject.id, {
         name: editSubject.name,
         category: editSubject.category,
         openingCount: Number(editSubject.openingCount)
       })
-      if (!res.success) throw new Error(res.error)
         
       setIsEditModalOpen(false)
       fetchSubjects(async () => {
-        const d = await db.getSubjects()
-        return d.data
+        return db.getSubjects()
       })
     } catch (err: unknown) {
       console.error('Error editing subject', err)

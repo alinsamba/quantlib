@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Search, CheckCircle, AlertOctagon, Printer, BookOpen, AlertTriangle, DollarSign } from 'lucide-react'
 import { Button } from '../components/Button'
-import { TextField } from '../components/TextField'
+import { TextField, SelectField } from '../components/TextField'
 import { Modal } from '../components/Modal'
 import { db } from '../lib/ipc-client'
 import type { ClearanceRecord, Checkout, Incident } from '../lib/types'
@@ -24,7 +24,9 @@ export default function Clearance() {
   const [isSlipModalOpen, setIsSlipModalOpen] = useState(false)
   const [slipData, setSlipData] = useState<ClearanceRecord | null>(null)
   const [slipLoading, setSlipLoading] = useState(false)
-
+  const [returningCheckout, setReturningCheckout] = useState<Checkout | null>(null)
+  const [returnCondition, setReturnCondition] = useState<number>(3)
+  const [returnSubmitting, setReturnSubmitting] = useState(false)
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!studentName.trim()) {
@@ -39,8 +41,8 @@ export default function Clearance() {
         studentName: studentName.trim(),
         studentClass: studentClass.trim() || undefined
       })
-      if (res && res.success) {
-        setClearanceData(res.data)
+      if (res && res.success && res.data) {
+        setClearanceData(res.data as any)
       } else {
         setError(res?.error || 'Failed to retrieve student clearance status.')
         setClearanceData(null)
@@ -61,7 +63,7 @@ export default function Clearance() {
         studentName: clearanceData.studentName,
         studentClass: clearanceData.studentClass || undefined
       })
-      if (res && res.success) {
+      if (res && res.success && res.data) {
         setSlipData(res.data)
         setIsSlipModalOpen(true)
       } else {
@@ -213,6 +215,7 @@ export default function Clearance() {
                     <th className="p-3 font-medium">Checkout Date</th>
                     <th className="p-3 font-medium">Due Date</th>
                     <th className="p-3 font-medium">Status</th>
+                    <th className="p-3 font-medium text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
@@ -239,6 +242,18 @@ export default function Clearance() {
                           >
                             {isOverdue ? 'OVERDUE' : 'ACTIVE'}
                           </span>
+                        </td>
+                        <td className="p-3 text-right">
+                          <Button
+                            variant="secondary"
+                            onClick={() => {
+                              setReturningCheckout(checkout)
+                              setReturnCondition(3)
+                            }}
+                            className="text-xs py-1 px-2"
+                          >
+                            Return
+                          </Button>
                         </td>
                       </tr>
                     )
@@ -408,6 +423,64 @@ export default function Clearance() {
               </Button>
               <Button icon={<Printer size={18} />} onClick={() => window.print()}>
                 Print Clearance Slip
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        isOpen={Boolean(returningCheckout)}
+        onClose={() => setReturningCheckout(null)}
+        title="Return Book to Clear Obligation"
+      >
+        {returningCheckout && (
+          <div className="space-y-4">
+            <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-lg space-y-1 text-sm">
+              <p className="text-xs text-slate-500 uppercase font-semibold">Student</p>
+              <p className="font-bold text-slate-800 dark:text-white">{returningCheckout.studentName}</p>
+              <p className="text-xs text-slate-500 uppercase font-semibold pt-2">Book Title / Subject</p>
+              <p className="font-bold text-slate-800 dark:text-white">{returningCheckout.subject?.name}</p>
+            </div>
+
+            <SelectField
+              label="Condition On Return"
+              value={String(returnCondition)}
+              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setReturnCondition(Number(e.target.value))}
+              options={[
+                { label: 'Good (Condition 3.0)', value: '3' },
+                { label: 'Normal Wear (Condition 2.0)', value: '2' },
+                { label: 'Damaged (Condition 1.0)', value: '1' }
+              ]}
+            />
+
+            <div className="flex space-x-3 justify-end pt-4">
+              <Button variant="secondary" onClick={() => setReturningCheckout(null)}>
+                Cancel
+              </Button>
+              <Button
+                isLoading={returnSubmitting}
+                onClick={async () => {
+                  setReturnSubmitting(true)
+                  try {
+                    await db.returnCheckout(returningCheckout.id, returnCondition)
+                    setReturningCheckout(null)
+                    // Refresh clearance
+                    const res = await db.getClearanceStatus({
+                      studentName: studentName.trim(),
+                      studentClass: studentClass.trim() || undefined
+                    })
+                    if (res && res.success && res.data) {
+                      setClearanceData(res.data as any)
+                    }
+                  } catch (err: unknown) {
+                    alert('Failed to return book: ' + (err instanceof Error ? err.message : String(err)))
+                  } finally {
+                    setReturnSubmitting(false)
+                  }
+                }}
+              >
+                Confirm Return
               </Button>
             </div>
           </div>

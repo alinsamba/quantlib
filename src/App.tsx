@@ -6,13 +6,20 @@ import { ThemeProvider } from './hooks/ThemeContext'
 import Login from './pages/Login'
 
 function App() {
-  const [isUnlocked, setIsUnlocked] = useState(false)
+  const [isUnlocked, setIsUnlocked] = useState(() => {
+    return sessionStorage.getItem('quantlib_unlocked') === 'true'
+  })
+
+  const handleUnlock = () => {
+    sessionStorage.setItem('quantlib_unlocked', 'true')
+    setIsUnlocked(true)
+  }
 
   if (!isUnlocked) {
     return (
       <ThemeProvider>
         <div className="absolute top-0 left-0 w-full h-8 [webkit-app-region:drag] z-50"></div>
-        <Login onUnlock={() => setIsUnlocked(true)} />
+        <Login onUnlock={handleUnlock} />
       </ThemeProvider>
     )
   }

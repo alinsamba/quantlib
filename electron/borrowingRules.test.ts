@@ -44,8 +44,16 @@ vi.mock('./crypto', () => ({
   getTempDbPath: vi.fn(() => '/mock/userData/temp.db'),
   changePassword: vi.fn()
 }))
+const mockPrismaClient = {
+  checkout: { findMany: vi.fn() },
+  incident: { findMany: vi.fn() },
+  borrowingRule: { findMany: vi.fn() }
+}
+vi.mock('./database', () => ({
+  ensureDb: () => mockPrismaClient
+}))
 
-import { getRuleForClass } from './main'
+import { getRuleForClass, calculateClearance } from './main'
 
 describe('Borrowing Rules & Student Clearance Unit Tests', () => {
   const sampleRules = [
@@ -136,37 +144,38 @@ describe('Borrowing Rules & Student Clearance Unit Tests', () => {
   })
 
   describe('Clearance Status & Replacement Charges Calculation', () => {
-    it('should mark student CLEARED when 0 active checkouts and 0 unresolved incidents', () => {
-      const activeCheckouts: any[] = []
-      const unresolvedIncidents: any[] = []
-      const isCleared = activeCheckouts.length === 0 && unresolvedIncidents.length === 0
-      const status = isCleared ? 'CLEARED' : 'HOLD'
+    it('should mark student CLEARED when 0 active checkouts and 0 unresolved incidents', async () => {
+      mockPrismaClient.checkout.findMany.mockResolvedValue([])
+      mockPrismaClient.incident.findMany.mockResolvedValue([])
+      mockPrismaClient.borrowingRule.findMany.mockResolvedValue(sampleRules)
 
-      expect(status).toBe('CLEARED')
+      const res = await calculateClearance('Alice', 'S.1')
+      expect(res.status).toBe('CLEARED')
+      expect(res.totalReplacementCharges).toBe(0)
     })
 
-    it('should mark student HOLD when active checkouts exist', () => {
-      const activeCheckouts = [{ id: 1, studentName: 'John', status: 'ACTIVE' }]
-      const unresolvedIncidents: any[] = []
-      const isCleared = activeCheckouts.length === 0 && unresolvedIncidents.length === 0
-      const status = isCleared ? 'CLEARED' : 'HOLD'
+    it('should mark student HOLD when active checkouts exist', async () => {
+      mockPrismaClient.checkout.findMany.mockResolvedValue([
+        { id: 1, studentName: 'Bob', studentClass: 'S.1', status: 'ACTIVE', dueDate: new Date() }
+      ])
+      mockPrismaClient.incident.findMany.mockResolvedValue([])
+      mockPrismaClient.borrowingRule.findMany.mockResolvedValue(sampleRules)
 
-      expect(status).toBe('HOLD')
+      const res = await calculateClearance('Bob', 'S.1')
+      expect(res.status).toBe('HOLD')
     })
 
-    it('should calculate replacement charges for LOST and DAMAGED incidents', () => {
-      const unresolvedIncidents = [
-        { id: 101, type: 'LOST', bookTitle: 'Biology Textbook' },
-        { id: 102, type: 'DAMAGED', bookTitle: 'Chemistry Guide' }
-      ]
+    it('should calculate replacement charges for LOST and DAMAGED incidents', async () => {
+      mockPrismaClient.checkout.findMany.mockResolvedValue([])
+      mockPrismaClient.incident.findMany.mockResolvedValue([
+        { id: 101, responsibleParty: 'Charlie', type: 'LOST', bookTitle: 'Biology Textbook', actionTaken: null },
+        { id: 102, responsibleParty: 'Charlie', type: 'DAMAGED', bookTitle: 'Chemistry Guide', actionTaken: null }
+      ])
+      mockPrismaClient.borrowingRule.findMany.mockResolvedValue(sampleRules)
 
-      let charges = 0
-      for (const inc of unresolvedIncidents) {
-        if (inc.type === 'LOST') charges += 25.0
-        else if (inc.type === 'DAMAGED') charges += 10.0
-      }
-
-      expect(charges).toBe(35.0)
+      const res = await calculateClearance('Charlie')
+      expect(res.status).toBe('HOLD')
+      expect(res.totalReplacementCharges).toBe(35.0)
     })
   })
 })

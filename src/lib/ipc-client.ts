@@ -1,64 +1,106 @@
-function invoke(method: string, ...args: any[]) {
+import type {
+  Subject,
+  Incident,
+  AuditLog,
+  Checkout,
+  BorrowingRule,
+  ClearanceRecord,
+  StockAudit,
+  StockAuditItem,
+  DepreciationAnalytics,
+  CirculationInsights,
+  BackupConfig,
+  BackupFileRecord,
+  LanSyncConfig,
+  LanStatusResponse,
+  LanSyncResult
+} from './types'
+
+type ElectronAPI = Window['electronAPI']
+
+async function invoke<T>(
+  method: keyof ElectronAPI,
+  ...args: unknown[]
+): Promise<T> {
   if (!window.electronAPI) {
-    return Promise.reject(new Error('Electron preload is not available. Restart the desktop app with npm run dev.'))
+    throw new Error('Electron preload is not available. Restart the desktop app with npm run dev.')
   }
-  const fn = (window.electronAPI as any)[method]
-  return fn(...args).then((res: any) => {
-    if (res && res.success === false) throw new Error(res.error)
-    return res && 'data' in res ? res.data : res
-  })
+  const fn = window.electronAPI[method] as (...a: unknown[]) => Promise<{ success?: boolean; error?: string; data?: T }>
+  const res = await fn(...args)
+  if (res && res.success === false) throw new Error(res.error || 'IPC call failed')
+  return (res && typeof res === 'object' && 'data' in res ? res.data : res) as T
+}
+
+function direct<T>(
+  method: keyof ElectronAPI,
+  ...args: unknown[]
+): Promise<T> {
+  if (!window.electronAPI) {
+    return Promise.reject(new Error('Electron preload is not available.'))
+  }
+  const fn = window.electronAPI[method] as (...a: unknown[]) => Promise<T>
+  return fn(...args)
 }
 
 export const db = {
-  getSubjects: () => invoke('getSubjects'),
-  getIncidents: () => invoke('getIncidents'),
-  getSummary: () => invoke('getSummary'),
-  addSubject: (data: any) => invoke('addSubject', data),
-  addIncident: (data: any) => invoke('addIncident', data),
-  updateSubject: (id: number, data: any) => invoke('updateSubject', { id, data }),
-  setTheme: (mode: 'light' | 'dark') => invoke('setTheme', mode),
-  addCheckout: (data: any) => invoke('addCheckout', data),
-  returnCheckout: (id: number, conditionIn: number) => invoke('returnCheckout', { id, conditionIn }),
-  getOverdueCheckouts: () => invoke('getOverdueCheckouts'),
-  getAuditLogs: () => invoke('getAuditLogs'),
-  
-  // Auth methods don't unwrap since Login.tsx expects the full response object
-  checkDbStatus: () => {
-    if (!window.electronAPI) return Promise.reject(new Error('Electron preload is not available.'))
-    return window.electronAPI.checkDbStatus()
-  },
-  setupDb: (password: string) => {
-    if (!window.electronAPI) return Promise.reject(new Error('Electron preload is not available.'))
-    return window.electronAPI.setupDb(password)
-  },
-  unlockDb: (args: { password?: string, isRecovery?: boolean }) => {
-    if (!window.electronAPI) return Promise.reject(new Error('Electron preload is not available.'))
-    return window.electronAPI.unlockDb(args)
-  },
-  changePassword: (args: { oldPassword?: string, newPassword?: string }) => {
-    if (!window.electronAPI) return Promise.reject(new Error('Electron preload is not available.'))
-    return window.electronAPI.changePassword(args)
-  },
-  backupDatabase: () => invoke('backupDatabase'),
-  getBorrowingRules: () => invoke('getBorrowingRules'),
-  saveBorrowingRule: (data: any) => invoke('saveBorrowingRule', data),
-  deleteBorrowingRule: (id: number) => invoke('deleteBorrowingRule', id),
-  getClearanceStatus: (data: { studentName: string, studentClass?: string }) => invoke('getClearanceStatus', data),
-  generateClearanceSlip: (data: { studentName: string, studentClass?: string }) => invoke('generateClearanceSlip', data),
-  createStockAudit: (data?: { auditedBy?: string, notes?: string }) => invoke('createStockAudit', data),
-  saveStockAuditItem: (data: { auditId: number, subjectId: number, actualCount: number, notes?: string }) => invoke('saveStockAuditItem', data),
-  completeStockAudit: (data: { auditId: number, notes?: string }) => invoke('completeStockAudit', data),
-  getStockAudits: (id?: number) => invoke('getStockAudits', id),
-  getDepreciationAnalytics: () => invoke('getDepreciationAnalytics'),
-  getCirculationInsights: () => invoke('getCirculationInsights'),
-  getBackupConfig: () => invoke('getBackupConfig'),
-  saveBackupConfig: (data: any) => invoke('saveBackupConfig', data),
-  triggerAutoBackup: (customPath?: string) => invoke('triggerAutoBackup', customPath),
-  listBackups: () => invoke('listBackups'),
-  getLanSyncConfig: () => invoke('getLanSyncConfig'),
-  saveLanSyncConfig: (data: any) => invoke('saveLanSyncConfig', data),
-  syncWithLanPeer: (data: { peerIp: string, peerPort?: number, passcode?: string }) => invoke('syncWithLanPeer', data),
-  getLanStatus: () => invoke('getLanStatus')
+  getSubjects: () => invoke<Subject[]>('getSubjects'),
+  getIncidents: () => invoke<Incident[]>('getIncidents'),
+  getSummary: () => invoke<{
+    totalBooks: number
+    available: number
+    issued: number
+    damagedLost: number
+    subjects: Subject[]
+    overdueCount: number
+  }>('getSummary'),
+  addSubject: (data: { name: string; category?: string; openingCount?: number }) => invoke<Subject>('addSubject', data),
+  addIncident: (data: {
+    type: string
+    date?: string
+    subjectId?: number | null
+    bookTitle: string
+    condition?: string
+    comment?: string
+    reportedBy?: string
+    responsibleParty?: string
+    studentClass?: string
+    actionTaken?: string
+  }) => invoke<Incident>('addIncident', data),
+  updateSubject: (id: number, data: Partial<Subject>) => invoke<Subject>('updateSubject', { id, data }),
+  setTheme: (mode: 'light' | 'dark') => invoke<void>('setTheme', mode),
+  addCheckout: (data: {
+    subjectId: number
+    studentName: string
+    studentClass?: string
+    dueDate?: string
+    conditionOut?: number
+  }) => invoke<Checkout>('addCheckout', data),
+  returnCheckout: (id: number, conditionIn: number) => invoke<Checkout>('returnCheckout', { id, conditionIn }),
+  getOverdueCheckouts: () => invoke<Checkout[]>('getOverdueCheckouts'),
+  getAuditLogs: () => invoke<AuditLog[]>('getAuditLogs'),
+
+  checkDbStatus: () => direct<'SETUP' | 'LOCKED'>('checkDbStatus'),
+  setupDb: (password: string) => direct<{ success: boolean; recoveryKey?: string; error?: string }>('setupDb', password),
+  unlockDb: (args: { password?: string; isRecovery?: boolean }) => direct<{ success: boolean; error?: string }>('unlockDb', args),
+  changePassword: (args: { oldPassword?: string; newPassword?: string }) => direct<{ success: boolean; recoveryKey?: string; error?: string }>('changePassword', args),
+  backupDatabase: () => direct<{ success: boolean; error?: string }>('backupDatabase'),
+  getBorrowingRules: () => invoke<BorrowingRule[]>('getBorrowingRules'),
+  saveBorrowingRule: (data: Partial<BorrowingRule>) => invoke<BorrowingRule>('saveBorrowingRule', data),
+  deleteBorrowingRule: (id: number) => invoke<void>('deleteBorrowingRule', id),
+  getClearanceStatus: (data: { studentName: string; studentClass?: string }) => direct<{ success: boolean; data?: ClearanceRecord; error?: string }>('getClearanceStatus', data),
+  generateClearanceSlip: (data: { studentName: string; studentClass?: string }) => direct<{ success: boolean; data?: ClearanceRecord; error?: string }>('generateClearanceSlip', data),
+  createStockAudit: (data?: { auditedBy?: string; notes?: string }) => invoke<StockAudit>('createStockAudit', data),
+  saveStockAuditItem: (data: { auditId: number; subjectId: number; actualCount: number; notes?: string }) => invoke<StockAuditItem>('saveStockAuditItem', data),
+  completeStockAudit: (data: { auditId: number; notes?: string }) => invoke<StockAudit>('completeStockAudit', data),
+  getStockAudits: (id?: number) => invoke<StockAudit[]>('getStockAudits', id),
+  getDepreciationAnalytics: () => invoke<DepreciationAnalytics>('getDepreciationAnalytics'),
+  getCirculationInsights: () => invoke<CirculationInsights>('getCirculationInsights'),
+  getBackupConfig: () => direct<{ success: boolean; data?: BackupConfig; error?: string }>('getBackupConfig'),
+  saveBackupConfig: (data: Partial<BackupConfig>) => direct<{ success: boolean; error?: string }>('saveBackupConfig', data),
+  triggerAutoBackup: (customPath?: string) => direct<{ success: boolean; backupPath?: string; filename?: string; error?: string }>('triggerAutoBackup', customPath),
+  listBackups: () => direct<{ success: boolean; data?: BackupFileRecord[]; error?: string }>('listBackups'),
+  getLanSyncConfig: () => direct<{ success: boolean; data?: LanSyncConfig; error?: string }>('getLanSyncConfig'),
+  saveLanSyncConfig: (data: Partial<LanSyncConfig>) => direct<{ success: boolean; error?: string }>('saveLanSyncConfig', data),
+  syncWithLanPeer: (data: { peerIp: string; peerPort?: number; passcode?: string }) => direct<{ success: boolean; data?: LanSyncResult; error?: string }>('syncWithLanPeer', data),
+  getLanStatus: () => direct<{ success: boolean; data?: LanStatusResponse; error?: string }>('getLanStatus')
 }
-
-

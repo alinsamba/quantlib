@@ -32,10 +32,8 @@ function deriveUserKey(password: string, salt: Buffer, iterations: number = 6000
  * Generates a 12-byte initialization vector where the first byte is set to the provided domain identifier.
  * This ensures distinct IV handling for different key streams, improving cryptographic hygiene.
  */
-function generateDistinctIv(domain: number): Buffer {
-  const iv = crypto.randomBytes(12)
-  iv[0] = domain & 0xFF
-  return iv
+function generateDistinctIv(_domain: number): Buffer {
+  return crypto.randomBytes(12)
 }
 
 export function setupDatabase(password: string): { success: boolean, recoveryKey?: string, error?: string } {
@@ -52,7 +50,8 @@ export function setupDatabase(password: string): { success: boolean, recoveryKey
     const masterKey = crypto.randomBytes(32)
     
     // Generate a 16 char recovery key
-    const recoveryKey = crypto.randomBytes(8).toString('hex').match(/.{1,4}/g)?.join('-').toUpperCase() || ''
+    // Generate a 32 char / 128-bit recovery key (e.g. XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX)
+    const recoveryKey = crypto.randomBytes(16).toString('hex').match(/.{1,4}/g)?.join('-').toUpperCase() || ''
     
     const userKey = deriveUserKey(password, salt)
     const recoveryUserKey = deriveUserKey(recoveryKey, salt)
@@ -164,9 +163,33 @@ export function unlockDatabase(password: string, isRecovery: boolean = false): {
   }
 }
 
-export function encryptTempDatabase() {
+export async function encryptTempDatabase(): Promise<void> {
   if (!currentMasterKey || !fs.existsSync(TEMP_DB)) return
   
+  try {
+    const dbData = await fs.promises.readFile(TEMP_DB)
+    const iv = generateDistinctIv(2)
+    const cipher = crypto.createCipheriv('aes-256-gcm', currentMasterKey, iv)
+    const encrypted = Buffer.concat([cipher.update(dbData), cipher.final()])
+    const tag = cipher.getAuthTag()
+    
+    await fs.promises.writeFile(ENC_TEMP_FILE, Buffer.concat([iv, tag, encrypted]))
+
+    if (fs.existsSync(ENC_FILE)) {
+      await fs.promises.copyFile(ENC_FILE, ENC_BACKUP_FILE)
+    }
+
+    await fs.promises.rename(ENC_TEMP_FILE, ENC_FILE)
+  } catch (err) {
+    console.error('Failed to encrypt database:', err)
+    try {
+      if (fs.existsSync(ENC_TEMP_FILE)) await fs.promises.unlink(ENC_TEMP_FILE)
+    } catch {}
+  }
+}
+
+export function encryptTempDatabaseSync(): void {
+  if (!currentMasterKey || !fs.existsSync(TEMP_DB)) return
   try {
     const dbData = fs.readFileSync(TEMP_DB)
     const iv = generateDistinctIv(2)
@@ -175,14 +198,12 @@ export function encryptTempDatabase() {
     const tag = cipher.getAuthTag()
     
     fs.writeFileSync(ENC_TEMP_FILE, Buffer.concat([iv, tag, encrypted]))
-
     if (fs.existsSync(ENC_FILE)) {
       fs.copyFileSync(ENC_FILE, ENC_BACKUP_FILE)
     }
-
     fs.renameSync(ENC_TEMP_FILE, ENC_FILE)
   } catch (err) {
-    console.error('Failed to encrypt database:', err)
+    console.error('Failed to encrypt database sync:', err)
     try {
       if (fs.existsSync(ENC_TEMP_FILE)) fs.unlinkSync(ENC_TEMP_FILE)
     } catch {}
@@ -213,9 +234,7 @@ function secureWipe(filePath: string) {
     if (fd !== null) {
       try {
         fs.closeSync(fd)
-      } catch {
-        // ignore err: unknownor when closing file
-      
+      } catch (err: unknown) {
         console.error(`Failed to close ${filePath}:`, err)
       }
     }
@@ -231,8 +250,10 @@ function secureWipe(filePath: string) {
 export function cleanupTempDatabase() {
   try {
     if (fs.existsSync(TEMP_DB)) {
-      encryptTempDatabase() // Final flush
+      encryptTempDatabaseSync() // Final flush
       secureWipe(TEMP_DB)
+      secureWipe(`${TEMP_DB}-wal`)
+      secureWipe(`${TEMP_DB}-shm`)
     }
   } catch (e) {
     console.error('Cleanup failed:', e)
@@ -260,7 +281,7 @@ export function changePassword(oldPassword: string, newPassword: string): { succ
     
     // Generate new salt for extra security
     const newSalt = crypto.randomBytes(16)
-    const recoveryKey = crypto.randomBytes(8).toString('hex').match(/.{1,4}/g)?.join('-').toUpperCase() || ''
+    const recoveryKey = crypto.randomBytes(16).toString('hex').match(/.{1,4}/g)?.join('-').toUpperCase() || ''
     
     const newUserKey = deriveUserKey(newPassword, newSalt)
     const newRecoveryUserKey = deriveUserKey(recoveryKey, newSalt)
