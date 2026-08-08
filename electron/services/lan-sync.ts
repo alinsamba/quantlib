@@ -335,10 +335,15 @@ export function startLanSyncServer(
           const headerPasscode = req.headers['x-sync-passcode'] as string
           const providedPasscode = body.passcode || headerPasscode
 
-          if (lanServerPasscode && providedPasscode !== lanServerPasscode) {
-            res.writeHead(401)
-            res.end(JSON.stringify({ success: false, error: 'Invalid sync passcode' }))
-            return
+          if (lanServerPasscode) {
+            const expectedBuf = Buffer.from(lanServerPasscode)
+            const providedBuf = Buffer.from(typeof providedPasscode === 'string' ? providedPasscode : '')
+            const isMatch = expectedBuf.length === providedBuf.length && crypto.timingSafeEqual(expectedBuf, providedBuf)
+            if (!isMatch) {
+              res.writeHead(401)
+              res.end(JSON.stringify({ success: false, error: 'Invalid sync passcode' }))
+              return
+            }
           }
 
           // Fetch database reference dynamically

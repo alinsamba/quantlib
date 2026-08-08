@@ -65,10 +65,13 @@ async function main() {
   console.log('Seeded borrowing rules.')
 
   // 5. Sample Checkouts (Active, Overdue, Returned)
-  const mathSubject = createdSubjects.find(s => s.name === 'Mathematics')!
-  const englishSubject = createdSubjects.find(s => s.name === 'English Literature')!
-  const physicsSubject = createdSubjects.find(s => s.name === 'Physics')!
-  const chemSubject = createdSubjects.find(s => s.name === 'Chemistry')!
+  const mathSubject = createdSubjects.find(s => s.name === 'Mathematics')
+  const englishSubject = createdSubjects.find(s => s.name === 'English Literature')
+  const physicsSubject = createdSubjects.find(s => s.name === 'Physics')
+  const chemSubject = createdSubjects.find(s => s.name === 'Chemistry')
+  if (!mathSubject || !englishSubject || !physicsSubject || !chemSubject) {
+    throw new Error('Failed to locate created subjects for checkouts')
+  }
 
   const now = new Date()
   const tenDaysAgo = new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000)

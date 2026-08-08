@@ -1,6 +1,4 @@
 import { PrismaClient } from '@prisma/client'
-import path from 'node:path'
-import { app } from 'electron'
 import { cleanupTempDatabase, getTempDbPath } from './crypto'
 
 let prisma: PrismaClient | null = null

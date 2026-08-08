@@ -203,6 +203,10 @@ export function registerCheckoutHandlers() {
       if (typeof id !== 'number') throw new Error('Invalid checkout ID')
 
       const res = await prisma.$transaction(async (tx) => {
+        const existingCheckout = await tx.checkout.findUnique({ where: { id } })
+        if (!existingCheckout) throw new Error('Checkout record not found')
+        if (existingCheckout.status !== 'ACTIVE') throw new Error('Checkout is not active')
+
         const checkout = await tx.checkout.update({
           where: { id },
           data: {

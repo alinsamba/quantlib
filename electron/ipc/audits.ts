@@ -129,6 +129,7 @@ export function registerAuditHandlers() {
           include: { items: { include: { subject: true } } }
         })
         if (!audit) throw new Error('Stock audit not found')
+        if (audit.status === 'COMPLETED') throw new Error('Stock audit is already completed')
 
         const updatedAudit = await tx.stockAudit.update({
           where: { id: auditId },
