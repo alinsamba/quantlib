@@ -99,5 +99,6 @@ export const db = {
   getLanSyncConfig: () => direct<{ success: boolean; data?: LanSyncConfig; error?: string }>('getLanSyncConfig'),
   saveLanSyncConfig: (data: Partial<LanSyncConfig>) => direct<{ success: boolean; error?: string }>('saveLanSyncConfig', data),
   syncWithLanPeer: (data: { peerIp: string; peerPort?: number; passcode?: string }) => direct<{ success: boolean; data?: LanSyncResult; error?: string }>('syncWithLanPeer', data),
-  getLanStatus: () => direct<{ success: boolean; data?: LanStatusResponse; error?: string }>('getLanStatus')
+  getLanStatus: () => direct<{ success: boolean; data?: LanStatusResponse; error?: string }>('getLanStatus'),
+  exportEntireDbCsv: () => direct<{ success: boolean; data?: DatabaseExportResult; error?: string }>('exportEntireDbCsv')
 }

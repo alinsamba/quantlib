@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, memo } from 'react'
-import { Save, Moon, Sun, ShieldCheck, Key, Copy, Printer, History, Database, Download, BookOpen, Plus, Trash2, Edit2, HardDrive, RefreshCw, Network, Wifi, CheckCircle2, AlertCircle, Clock } from 'lucide-react'
+import { Save, Moon, Sun, ShieldCheck, Key, Copy, Printer, History, Database, Download, BookOpen, Plus, Trash2, Edit2, HardDrive, RefreshCw, Network, Wifi, CheckCircle2, AlertCircle, Clock, FileSpreadsheet } from 'lucide-react'
 import { useTheme } from '../hooks/ThemeContext'
 import { validateMasterPassword } from '../lib/utils'
 import { Button } from '../components/Button'
@@ -579,37 +579,113 @@ const MultiDeskLanSyncSection = memo(function MultiDeskLanSyncSection({
   )
 })
 
-interface UnencryptedDbExportSectionProps {
+interface DatabaseExportSectionProps {
+  isExportingCsv: boolean
+  csvMessage: string
+  csvError: string
+  onExportCsv: () => void
   isBackingUp: boolean
   backupMessage: string
   backupError: string
-  onExport: () => void
+  onExportDb: () => void
 }
 
-const UnencryptedDbExportSection = memo(function UnencryptedDbExportSection({
+const DatabaseExportSection = memo(function DatabaseExportSection({
+  isExportingCsv,
+  csvMessage,
+  csvError,
+  onExportCsv,
   isBackingUp,
   backupMessage,
   backupError,
-  onExport
-}: UnencryptedDbExportSectionProps) {
+  onExportDb
+}: DatabaseExportSectionProps) {
   return (
-    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 space-y-4">
-      <h2 className="text-lg font-semibold text-slate-800 dark:text-white border-b border-slate-100 dark:border-slate-700 pb-2 flex items-center space-x-2">
-        <Database size={20} className="text-blue-500" />
-        <span>Unencrypted DB Export</span>
-      </h2>
-      <p className="text-sm text-slate-500 dark:text-slate-400">Export your unencrypted SQLite database for manual backup, migration, or third-party analysis.</p>
-      <div className="pt-2">
-        <Button 
-          variant="secondary" 
-          icon={<Download size={18} />}
-          onClick={onExport}
-          isLoading={isBackingUp}
-        >
-          Export Unencrypted DB (.db)
-        </Button>
-        {backupMessage && <p className="text-sm mt-2 font-medium text-green-500">{backupMessage}</p>}
-        {backupError && <p className="text-sm mt-2 font-medium text-red-500">{backupError}</p>}
+    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xs border border-slate-200/80 dark:border-slate-700/80 p-6 space-y-5">
+      <div className="border-b border-slate-100 dark:border-slate-700/80 pb-3 flex items-center justify-between">
+        <h2 className="text-base sm:text-lg font-semibold text-slate-800 dark:text-white flex items-center space-x-2.5">
+          <Database size={20} className="text-blue-500" />
+          <span>Database Export & Data Portability</span>
+        </h2>
+        <span className="text-xs bg-slate-100 dark:bg-slate-700/60 text-slate-600 dark:text-slate-300 px-2.5 py-0.5 rounded-full font-medium">
+          CSV &bull; SQLite
+        </span>
+      </div>
+
+      <p className="text-sm text-slate-500 dark:text-slate-400">
+        Export your complete library catalog, checkout history, incident logs, stock audits, and borrowing rules for spreadsheet analysis, auditing, or migration.
+      </p>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+        {/* CSV Export Option */}
+        <div className="p-4 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-slate-200/70 dark:border-slate-700/70 flex flex-col justify-between space-y-3">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center space-x-2">
+              <FileSpreadsheet size={16} className="text-emerald-500" />
+              <span>Full Database CSV Export</span>
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              Exports separate standard CSV files for all 8 tables (Subjects, Checkouts, Incidents, Rules, Audits, Logs).
+            </p>
+          </div>
+          <div>
+            <Button
+              variant="primary"
+              size="sm"
+              icon={<Download size={16} />}
+              onClick={onExportCsv}
+              isLoading={isExportingCsv}
+              className="w-full"
+            >
+              Export All CSVs (.csv)
+            </Button>
+            {csvMessage && (
+              <p className="text-xs mt-2 font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 p-2 rounded-lg border border-emerald-200 dark:border-emerald-800">
+                {csvMessage}
+              </p>
+            )}
+            {csvError && (
+              <p className="text-xs mt-2 font-medium text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 p-2 rounded-lg border border-rose-200 dark:border-rose-800">
+                {csvError}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* SQLite DB Export Option */}
+        <div className="p-4 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-slate-200/70 dark:border-slate-700/70 flex flex-col justify-between space-y-3">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center space-x-2">
+              <Database size={16} className="text-blue-500" />
+              <span>Raw SQLite DB Export</span>
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              Exports an unencrypted copy of your SQLite database file (.db) for manual backup or external SQL tools.
+            </p>
+          </div>
+          <div>
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={<Download size={16} />}
+              onClick={onExportDb}
+              isLoading={isBackingUp}
+              className="w-full"
+            >
+              Export Raw DB (.db)
+            </Button>
+            {backupMessage && (
+              <p className="text-xs mt-2 font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 p-2 rounded-lg border border-emerald-200 dark:border-emerald-800">
+                {backupMessage}
+              </p>
+            )}
+            {backupError && (
+              <p className="text-xs mt-2 font-medium text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 p-2 rounded-lg border border-rose-200 dark:border-rose-800">
+                {backupError}
+              </p>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -755,6 +831,30 @@ export default function Settings() {
       setBackupError(err instanceof Error ? err.message : 'Backup failed')
     } finally {
       setIsBackingUp(false)
+    }
+  }, [])
+
+  const [isExportingCsv, setIsExportingCsv] = useState(false)
+  const [csvMessage, setCsvMessage] = useState('')
+  const [csvError, setCsvError] = useState('')
+
+  const handleExportCsv = useCallback(async () => {
+    setIsExportingCsv(true)
+    setCsvMessage('')
+    setCsvError('')
+    try {
+      const res = await db.exportEntireDbCsv()
+      if (res && res.success && res.data) {
+        setCsvMessage(`Successfully exported ${res.data.exportedCount || 8} table CSVs to ${res.data.targetDir || 'folder'}`)
+      } else {
+        if (res && res.error !== 'Export cancelled') {
+          setCsvError(res?.error || 'CSV export failed')
+        }
+      }
+    } catch (err: unknown) {
+      setCsvError(err instanceof Error ? err.message : 'CSV export failed')
+    } finally {
+      setIsExportingCsv(false)
     }
   }, [])
 
@@ -1067,11 +1167,15 @@ export default function Settings() {
             onSyncWithPeer={handleSyncWithPeer}
           />
 
-          <UnencryptedDbExportSection
+          <DatabaseExportSection
+            isExportingCsv={isExportingCsv}
+            csvMessage={csvMessage}
+            csvError={csvError}
+            onExportCsv={handleExportCsv}
             isBackingUp={isBackingUp}
             backupMessage={backupMessage}
             backupError={backupError}
-            onExport={handleBackupDatabase}
+            onExportDb={handleBackupDatabase}
           />
 
           <AuditLogsSection

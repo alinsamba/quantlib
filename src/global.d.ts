@@ -14,7 +14,8 @@ import type {
   LanSyncConfig,
   LanStatusResponse,
   LanSyncResult,
-  DashboardSummary
+  DashboardSummary,
+  DatabaseExportResult
 } from './lib/types'
 
 export {}
@@ -66,6 +67,7 @@ declare global {
       saveLanSyncConfig: (data: Partial<LanSyncConfig>) => Promise<{ success: boolean; data?: LanSyncConfig; error?: string }>
       syncWithLanPeer: (data: { peerIp: string; peerPort?: number; passcode?: string }) => Promise<{ success: boolean; data?: LanSyncResult; error?: string }>
       getLanStatus: () => Promise<{ success: boolean; data?: LanStatusResponse; error?: string }>
+      exportEntireDbCsv: () => Promise<{ success: boolean; data?: DatabaseExportResult; error?: string }>
     }
   }
 }

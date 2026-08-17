@@ -39,5 +39,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getLanSyncConfig: () => ipcRenderer.invoke('get-lan-sync-config'),
   saveLanSyncConfig: (data: unknown) => ipcRenderer.invoke('save-lan-sync-config', data),
   syncWithLanPeer: (data: unknown) => ipcRenderer.invoke('sync-with-lan-peer', data),
-  getLanStatus: () => ipcRenderer.invoke('get-lan-status')
+  getLanStatus: () => ipcRenderer.invoke('get-lan-status'),
+  exportEntireDbCsv: () => ipcRenderer.invoke('export-entire-db-csv')
 })

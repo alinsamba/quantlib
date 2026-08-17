@@ -260,6 +260,13 @@ export interface DashboardSummary {
   subjects: SubjectSummary[];
 }
 
+export interface DatabaseExportResult {
+  targetDir?: string;
+  exportedCount?: number;
+  filenames?: string[];
+}
+
+
 
 
 
