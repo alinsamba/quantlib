@@ -242,5 +242,24 @@ export interface LanSyncResult {
   error?: string;
 }
 
+export interface SubjectSummary {
+  name: string;
+  openingCount: number;
+  recovered: number;
+  issued: number;
+  damaged: number;
+  lost: number;
+}
+
+export interface DashboardSummary {
+  totalBooks: number;
+  available: number;
+  issued: number;
+  damagedLost: number;
+  overdueCount: number;
+  subjects: SubjectSummary[];
+}
+
+
 
 

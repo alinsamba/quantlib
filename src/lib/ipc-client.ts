@@ -13,7 +13,8 @@ import type {
   BackupFileRecord,
   LanSyncConfig,
   LanStatusResponse,
-  LanSyncResult
+  LanSyncResult,
+  DashboardSummary
 } from './types'
 
 type ElectronAPI = Window['electronAPI']
@@ -45,15 +46,8 @@ function direct<T>(
 export const db = {
   getSubjects: () => invoke<Subject[]>('getSubjects'),
   getIncidents: () => invoke<Incident[]>('getIncidents'),
-  getSummary: () => invoke<{
-    totalBooks: number
-    available: number
-    issued: number
-    damagedLost: number
-    subjects: Subject[]
-    overdueCount: number
-  }>('getSummary'),
-  addSubject: (data: { name: string; category?: string; openingCount?: number }) => invoke<Subject>('addSubject', data),
+  getSummary: () => invoke<DashboardSummary>('getSummary'),
+  addSubject: (data: Omit<Subject, 'id' | 'createdAt' | 'updatedAt'> | Partial<Subject>) => invoke<Subject>('addSubject', data),
   addIncident: (data: {
     type: string
     date?: string
@@ -65,17 +59,20 @@ export const db = {
     responsibleParty?: string
     studentClass?: string
     actionTaken?: string
-  }) => invoke<Incident>('addIncident', data),
+  } | Partial<Incident>) => invoke<Incident>('addIncident', data),
   updateSubject: (id: number, data: Partial<Subject>) => invoke<Subject>('updateSubject', { id, data }),
   setTheme: (mode: 'light' | 'dark') => invoke<void>('setTheme', mode),
   addCheckout: (data: {
     subjectId: number
     studentName: string
-    studentClass?: string
+    studentClass?: string | null
     dueDate?: string
     conditionOut?: number
   }) => invoke<Checkout>('addCheckout', data),
   returnCheckout: (id: number, conditionIn: number) => invoke<Checkout>('returnCheckout', { id, conditionIn }),
+  getActiveCheckouts: (subjectId?: number) => invoke<Checkout[]>('getActiveCheckouts', subjectId),
+  recordFinePayment: (data: { studentName: string; studentClass?: string; amount: number; paymentMethod: string; notes?: string }) => direct<{ success: boolean; data?: ClearanceRecord; error?: string }>('recordFinePayment', data),
+  waiveFine: (data: { studentName: string; studentClass?: string; reason: string; approvedBy?: string }) => direct<{ success: boolean; data?: ClearanceRecord; error?: string }>('waiveFine', data),
   getOverdueCheckouts: () => invoke<Checkout[]>('getOverdueCheckouts'),
   getAuditLogs: () => invoke<AuditLog[]>('getAuditLogs'),
 

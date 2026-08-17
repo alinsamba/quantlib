@@ -12,6 +12,22 @@ const TEMP_DB = path.join(DATA_DIR, 'quantlib_temp.db')
 const LEGACY_DB = path.join(process.cwd(), 'quantlib.db') // Where prisma was storing it previously
 
 let currentMasterKey: Buffer | null = null
+let activePrismaClient: any = null
+
+export function setCryptoPrismaClient(client: any) {
+  activePrismaClient = client
+}
+
+export function runWalCheckpoint(prisma?: any) {
+  const client = prisma || activePrismaClient
+  if (client && typeof client.$executeRawUnsafe === 'function') {
+    try {
+      client.$executeRawUnsafe('PRAGMA wal_checkpoint(FULL)').catch(() => {})
+    } catch {
+      // ignore
+    }
+  }
+}
 
 export function getTempDbPath() {
   return TEMP_DB
@@ -29,7 +45,7 @@ function deriveUserKey(password: string, salt: Buffer, iterations: number = 6000
 }
 
 /**
- * Generates a 12-byte initialization vector where the first byte is set to the provided domain identifier.
+ * Generates a 12-byte (96-bit) initialization vector where the first byte is set to the provided domain identifier.
  * This ensures distinct IV handling for different key streams, improving cryptographic hygiene.
  */
 function generateDistinctIv(_domain: number): Buffer {
@@ -37,6 +53,8 @@ function generateDistinctIv(_domain: number): Buffer {
 }
 
 export function setupDatabase(password: string): { success: boolean, recoveryKey?: string, error?: string } {
+  let userKey: Buffer | null = null
+  let recoveryUserKey: Buffer | null = null
   try {
     if (checkDbStatus() !== 'SETUP') {
       return { success: false, error: 'Database is already set up' }
@@ -53,8 +71,8 @@ export function setupDatabase(password: string): { success: boolean, recoveryKey
     // Generate a 32 char / 128-bit recovery key (e.g. XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX)
     const recoveryKey = crypto.randomBytes(16).toString('hex').match(/.{1,4}/g)?.join('-').toUpperCase() || ''
     
-    const userKey = deriveUserKey(password, salt)
-    const recoveryUserKey = deriveUserKey(recoveryKey, salt)
+    userKey = deriveUserKey(password, salt)
+    recoveryUserKey = deriveUserKey(recoveryKey, salt)
     
     // Encrypt MasterKey with UserKey
     const iv1 = generateDistinctIv(0)
@@ -94,6 +112,9 @@ export function setupDatabase(password: string): { success: boolean, recoveryKey
     return { success: true, recoveryKey }
   } catch (err: unknown) {
     return { success: false, error: err instanceof Error ? err.message : String(err) }
+  } finally {
+    if (userKey) userKey.fill(0)
+    if (recoveryUserKey) recoveryUserKey.fill(0)
   }
 }
 
@@ -113,13 +134,15 @@ function decryptPayload(payloadBase64: string, key: Buffer): Buffer | null {
 }
 
 export function unlockDatabase(password: string, isRecovery: boolean = false): { success: boolean, error?: string } {
+  let userKey: Buffer | null = null
+  let newUserKey: Buffer | null = null
   try {
     const metaStr = fs.readFileSync(META_FILE, 'utf-8')
     const meta = JSON.parse(metaStr)
     const salt = Buffer.from(meta.salt, 'base64')
     const iterations = meta.iterations || 100000
     
-    const userKey = deriveUserKey(password, salt, iterations)
+    userKey = deriveUserKey(password, salt, iterations)
     const payload = isRecovery ? meta.recovery_payload : meta.password_payload
     
     const masterKey = decryptPayload(payload, userKey)
@@ -129,7 +152,7 @@ export function unlockDatabase(password: string, isRecovery: boolean = false): {
     
     // Transparently re-wrap with 600k iterations if upgrading from legacy setting
     if (iterations < 600000 && !isRecovery) {
-      const newUserKey = deriveUserKey(password, salt, 600000)
+      newUserKey = deriveUserKey(password, salt, 600000)
       const iv1 = generateDistinctIv(0)
       const cipher1 = crypto.createCipheriv('aes-256-gcm', newUserKey, iv1)
       const passPayload = Buffer.concat([cipher1.update(masterKey), cipher1.final()])
@@ -160,13 +183,17 @@ export function unlockDatabase(password: string, isRecovery: boolean = false): {
     return { success: true }
   } catch (err: unknown) {
     return { success: false, error: err instanceof Error ? err.message : 'Unlock failed' }
+  } finally {
+    if (userKey) userKey.fill(0)
+    if (newUserKey) newUserKey.fill(0)
   }
 }
 
-export async function encryptTempDatabase(): Promise<void> {
+export async function encryptTempDatabase(prisma?: any): Promise<void> {
   if (!currentMasterKey || !fs.existsSync(TEMP_DB)) return
   
   try {
+    runWalCheckpoint(prisma)
     const dbData = await fs.promises.readFile(TEMP_DB)
     const iv = generateDistinctIv(2)
     const cipher = crypto.createCipheriv('aes-256-gcm', currentMasterKey, iv)
@@ -188,9 +215,10 @@ export async function encryptTempDatabase(): Promise<void> {
   }
 }
 
-export function encryptTempDatabaseSync(): void {
+export function encryptTempDatabaseSync(prisma?: any): void {
   if (!currentMasterKey || !fs.existsSync(TEMP_DB)) return
   try {
+    runWalCheckpoint(prisma)
     const dbData = fs.readFileSync(TEMP_DB)
     const iv = generateDistinctIv(2)
     const cipher = crypto.createCipheriv('aes-256-gcm', currentMasterKey, iv)
@@ -247,10 +275,11 @@ function secureWipe(filePath: string) {
   }
 }
 
-export function cleanupTempDatabase() {
+export function cleanupTempDatabase(prisma?: any) {
   try {
     if (fs.existsSync(TEMP_DB)) {
-      encryptTempDatabaseSync() // Final flush
+      runWalCheckpoint(prisma)
+      encryptTempDatabaseSync(prisma) // Final flush
       secureWipe(TEMP_DB)
       secureWipe(`${TEMP_DB}-wal`)
       secureWipe(`${TEMP_DB}-shm`)
@@ -266,6 +295,9 @@ export function cleanupTempDatabase() {
 }
 
 export function changePassword(oldPassword: string, newPassword: string): { success: boolean, recoveryKey?: string, error?: string } {
+  let oldUserKey: Buffer | null = null
+  let newUserKey: Buffer | null = null
+  let newRecoveryUserKey: Buffer | null = null
   try {
     const metaStr = fs.readFileSync(META_FILE, 'utf-8')
     const meta = JSON.parse(metaStr)
@@ -273,7 +305,7 @@ export function changePassword(oldPassword: string, newPassword: string): { succ
     const oldIterations = meta.iterations || 100000
     
     // Verify old password
-    const oldUserKey = deriveUserKey(oldPassword, salt, oldIterations)
+    oldUserKey = deriveUserKey(oldPassword, salt, oldIterations)
     const masterKey = decryptPayload(meta.password_payload, oldUserKey)
     if (!masterKey) {
       return { success: false, error: 'Incorrect current password' }
@@ -283,8 +315,8 @@ export function changePassword(oldPassword: string, newPassword: string): { succ
     const newSalt = crypto.randomBytes(16)
     const recoveryKey = crypto.randomBytes(16).toString('hex').match(/.{1,4}/g)?.join('-').toUpperCase() || ''
     
-    const newUserKey = deriveUserKey(newPassword, newSalt)
-    const newRecoveryUserKey = deriveUserKey(recoveryKey, newSalt)
+    newUserKey = deriveUserKey(newPassword, newSalt)
+    newRecoveryUserKey = deriveUserKey(recoveryKey, newSalt)
     
     // Encrypt MasterKey with new UserKey
     const iv1 = generateDistinctIv(0)
@@ -310,5 +342,9 @@ export function changePassword(oldPassword: string, newPassword: string): { succ
     return { success: true, recoveryKey }
   } catch (err: unknown) {
     return { success: false, error: err instanceof Error ? err.message : 'Failed to change password' }
+  } finally {
+    if (oldUserKey) oldUserKey.fill(0)
+    if (newUserKey) newUserKey.fill(0)
+    if (newRecoveryUserKey) newRecoveryUserKey.fill(0)
   }
 }

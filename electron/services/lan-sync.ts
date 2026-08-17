@@ -94,6 +94,15 @@ export async function mergeLanSyncPayload(client: PrismaClient, payload: unknown
   const p = (payload && typeof payload === 'object') ? (payload as Record<string, unknown>) : null
   if (!p) return { mergedCounts: { subjects: 0, checkouts: 0, incidents: 0, rules: 0 } }
 
+  const hasRules = Array.isArray(p.borrowingRules) && p.borrowingRules.length > 0
+  const hasSubjects = Array.isArray(p.subjects) && p.subjects.length > 0
+  const hasCheckouts = Array.isArray(p.checkouts) && p.checkouts.length > 0
+  const hasIncidents = Array.isArray(p.incidents) && p.incidents.length > 0
+
+  if (!hasRules && !hasSubjects && !hasCheckouts && !hasIncidents) {
+    return { mergedCounts: { subjects: 0, checkouts: 0, incidents: 0, rules: 0 } }
+  }
+
   let subjectsMerged = 0
   let checkoutsMerged = 0
   let incidentsMerged = 0

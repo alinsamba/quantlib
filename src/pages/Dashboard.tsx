@@ -5,25 +5,9 @@ import { db } from '../lib/ipc-client'
 import { useTheme } from '../hooks/ThemeContext'
 import { calculateAvailable } from '../lib/utils'
 import { useNavigate } from 'react-router-dom'
-export interface DashboardSummary {
-  totalBooks: number;
-  available: number;
-  issued: number;
-  damagedLost: number;
-  overdueCount: number;
-  subjects: SubjectSummary[];
-}
+import type { DashboardSummary, SubjectSummary } from '../lib/types'
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
-
-interface SubjectSummary {
-  name: string
-  openingCount: number
-  recovered: number
-  issued: number
-  damaged: number
-  lost: number
-}
 
 export default function Dashboard() {
   const [summaryData, setSummaryData] = useState<DashboardSummary | null>(null)

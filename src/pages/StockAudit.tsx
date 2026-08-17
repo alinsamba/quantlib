@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useCallback, memo } from 'react'
 import {
   ClipboardCheck,
   Plus,
@@ -14,6 +14,120 @@ import {
 } from 'lucide-react'
 import { db } from '../lib/ipc-client'
 import type { StockAudit, StockAuditItem, Subject } from '../lib/types'
+
+interface StockAuditRowProps {
+  subject: Subject
+  auditItem?: StockAuditItem
+  edit?: { actualCount: number; notes: string }
+  isReadOnly: boolean
+  savingSubjectId: number | null
+  onActualCountChange: (subjectId: number, val: number) => void
+  onNotesChange: (subjectId: number, notes: string) => void
+  onSaveItem: (subjectId: number) => void
+}
+
+const StockAuditRow = memo(function StockAuditRow({
+  subject,
+  auditItem,
+  edit,
+  isReadOnly,
+  savingSubjectId,
+  onActualCountChange,
+  onNotesChange,
+  onSaveItem
+}: StockAuditRowProps) {
+  const currentEdit = edit || {
+    actualCount: auditItem
+      ? auditItem.actualCount
+      : Math.max(0, subject.openingCount + subject.recovered - subject.damaged - subject.lost - subject.issued),
+    notes: auditItem?.notes || ''
+  }
+
+  const expected = auditItem
+    ? auditItem.expectedCount
+    : Math.max(0, subject.openingCount + subject.recovered - subject.damaged - subject.lost - subject.issued)
+
+  const actual = currentEdit.actualCount
+  const discrepancy = actual - expected
+
+  return (
+    <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+      <td className="p-4 font-medium text-slate-900 dark:text-slate-100 flex items-center space-x-3">
+        <BookOpen className="w-4 h-4 text-blue-500 flex-shrink-0" />
+        <span>{subject.name}</span>
+      </td>
+      <td className="p-4 text-slate-500 dark:text-slate-400">
+        <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 text-xs rounded-md">
+          {subject.category || 'General'}
+        </span>
+      </td>
+      <td className="p-4 text-center font-semibold text-slate-700 dark:text-slate-300">{expected}</td>
+      <td className="p-4 text-center">
+        <input
+          type="number"
+          min="0"
+          disabled={isReadOnly}
+          value={currentEdit.actualCount}
+          onChange={(e) => {
+            const val = parseInt(e.target.value, 10)
+            onActualCountChange(subject.id, isNaN(val) ? 0 : val)
+          }}
+          className="w-20 px-2 py-1 text-center font-bold bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:opacity-60"
+        />
+      </td>
+      <td className="p-4 text-center">
+        <span
+          className={`font-bold px-2.5 py-1 text-xs rounded-md ${
+            discrepancy === 0
+              ? 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+              : discrepancy < 0
+              ? 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300'
+              : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+          }`}
+        >
+          {discrepancy > 0 ? `+${discrepancy}` : discrepancy}
+        </span>
+      </td>
+      <td className="p-4">
+        {discrepancy === 0 ? (
+          <span className="flex items-center space-x-1 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+            <CheckCircle className="w-4 h-4" />
+            <span>Verified Match</span>
+          </span>
+        ) : discrepancy < 0 ? (
+          <span className="flex items-center space-x-1 text-xs text-red-600 dark:text-red-400 font-medium">
+            <AlertTriangle className="w-4 h-4" />
+            <span>Missing ({Math.abs(discrepancy)})</span>
+          </span>
+        ) : (
+          <span className="flex items-center space-x-1 text-xs text-amber-600 dark:text-amber-400 font-medium">
+            <AlertTriangle className="w-4 h-4" />
+            <span>Misplaced / Extra (+{discrepancy})</span>
+          </span>
+        )}
+      </td>
+      <td className="p-4">
+        <input
+          type="text"
+          placeholder="Add shelf notes..."
+          disabled={isReadOnly}
+          value={currentEdit.notes}
+          onChange={(e) => onNotesChange(subject.id, e.target.value)}
+          className="w-full px-2.5 py-1 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-60 text-slate-700 dark:text-slate-300"
+        />
+      </td>
+      <td className="p-4 text-right">
+        <button
+          onClick={() => onSaveItem(subject.id)}
+          disabled={isReadOnly || savingSubjectId === subject.id}
+          className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition disabled:opacity-50"
+        >
+          {savingSubjectId === subject.id ? 'Saving...' : 'Save'}
+        </button>
+      </td>
+    </tr>
+  )
+})
 
 export default function StockAuditPage() {
   const [audits, setAudits] = useState<StockAudit[]>([])
@@ -33,11 +147,20 @@ export default function StockAuditPage() {
   const [completing, setCompleting] = useState(false)
   const [viewHistory, setViewHistory] = useState(false)
 
-  useEffect(() => {
-    loadData()
+  const initItemEdits = useCallback((audit: StockAudit) => {
+    const edits: Record<number, { actualCount: number; notes: string }> = {}
+    if (audit.items) {
+      for (const item of audit.items) {
+        edits[item.subjectId] = {
+          actualCount: item.actualCount,
+          notes: item.notes || ''
+        }
+      }
+    }
+    setItemEdits(edits)
   }, [])
 
-  async function loadData() {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
@@ -55,27 +178,18 @@ export default function StockAuditPage() {
       if (current) {
         initItemEdits(current)
       }
-    } catch (err: any) {
-      setError(err.message || 'Failed to load stock audits')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to load stock audits')
     } finally {
       setLoading(false)
     }
-  }
+  }, [initItemEdits])
 
-  function initItemEdits(audit: StockAudit) {
-    const edits: Record<number, { actualCount: number; notes: string }> = {}
-    if (audit.items) {
-      for (const item of audit.items) {
-        edits[item.subjectId] = {
-          actualCount: item.actualCount,
-          notes: item.notes || ''
-        }
-      }
-    }
-    setItemEdits(edits)
-  }
+  useEffect(() => {
+    loadData()
+  }, [loadData])
 
-  async function handleStartNewAudit() {
+  const handleStartNewAudit = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
@@ -87,14 +201,34 @@ export default function StockAuditPage() {
         initItemEdits(newAudit)
       }
       setViewHistory(false)
-    } catch (err: any) {
-      setError(err.message || 'Failed to start stock audit')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to start stock audit')
     } finally {
       setLoading(false)
     }
-  }
+  }, [auditorName, auditNotes, loadData, initItemEdits])
 
-  async function handleSaveItem(subjectId: number) {
+  const handleActualCountChange = useCallback((subjectId: number, val: number) => {
+    setItemEdits((prev) => ({
+      ...prev,
+      [subjectId]: {
+        actualCount: val,
+        notes: prev[subjectId]?.notes || ''
+      }
+    }))
+  }, [])
+
+  const handleNotesChange = useCallback((subjectId: number, notes: string) => {
+    setItemEdits((prev) => ({
+      ...prev,
+      [subjectId]: {
+        actualCount: prev[subjectId]?.actualCount ?? 0,
+        notes
+      }
+    }))
+  }, [])
+
+  const handleSaveItem = useCallback(async (subjectId: number) => {
     if (!activeAudit) return
     const edit = itemEdits[subjectId]
     if (!edit) return
@@ -126,14 +260,14 @@ export default function StockAuditPage() {
 
       setSuccessMsg('Audited count saved.')
       setTimeout(() => setSuccessMsg(null), 3000)
-    } catch (err: any) {
-      setError(err.message || 'Failed to save item count')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to save item count')
     } finally {
       setSavingSubjectId(null)
     }
-  }
+  }, [activeAudit, itemEdits])
 
-  async function handleCompleteAudit() {
+  const handleCompleteAudit = useCallback(async () => {
     if (!activeAudit) return
     if (!window.confirm('Are you sure you want to complete and finalize this stock audit session?')) return
 
@@ -147,49 +281,65 @@ export default function StockAuditPage() {
       setActiveAudit(completed)
       setSuccessMsg('Stock audit session completed and finalized!')
       await loadData()
-    } catch (err: any) {
-      setError(err.message || 'Failed to complete audit')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to complete audit')
     } finally {
       setCompleting(false)
     }
-  }
+  }, [activeAudit, auditNotes, loadData])
 
-  // Helper calculations for active session
-  const categories = Array.from(new Set(subjects.map((s) => s.category || 'General')))
+  // Helper calculations for active session (Memoized)
+  const categories = useMemo(
+    () => Array.from(new Set(subjects.map((s) => s.category || 'General'))),
+    [subjects]
+  )
 
-  const filteredSubjects = subjects.filter((s) => {
-    const matchesSearch = s.name.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesCat = selectedCategory === 'ALL' || (s.category || 'General') === selectedCategory
-    return matchesSearch && matchesCat
-  })
+  const filteredSubjects = useMemo(
+    () =>
+      subjects.filter((s) => {
+        const matchesSearch = s.name.toLowerCase().includes(searchQuery.toLowerCase())
+        const matchesCat = selectedCategory === 'ALL' || (s.category || 'General') === selectedCategory
+        return matchesSearch && matchesCat
+      }),
+    [subjects, searchQuery, selectedCategory]
+  )
 
-  // Summary Metrics
-  const auditItemsMap = new Map<number, StockAuditItem>()
-  if (activeAudit?.items) {
-    for (const item of activeAudit.items) {
-      auditItemsMap.set(item.subjectId, item)
+  // Summary Metrics (Memoized)
+  const auditItemsMap = useMemo(() => {
+    const map = new Map<number, StockAuditItem>()
+    if (activeAudit?.items) {
+      for (const item of activeAudit.items) {
+        map.set(item.subjectId, item)
+      }
     }
-  }
+    return map
+  }, [activeAudit?.items])
 
-  let totalExpected = 0
-  let totalActual = 0
-  let totalDiscrepancy = 0
-  let missingItemsCount = 0
-  let misplacedItemsCount = 0
+  const metrics = useMemo(() => {
+    let totalExpected = 0
+    let totalActual = 0
+    let totalDiscrepancy = 0
+    let missingItemsCount = 0
+    let misplacedItemsCount = 0
 
-  subjects.forEach((s) => {
-    const item = auditItemsMap.get(s.id)
-    const edit = itemEdits[s.id]
-    const exp = item ? item.expectedCount : Math.max(0, s.openingCount + s.recovered - s.damaged - s.lost - s.issued)
-    const act = edit ? edit.actualCount : item ? item.actualCount : exp
-    const disc = act - exp
+    subjects.forEach((s) => {
+      const item = auditItemsMap.get(s.id)
+      const edit = itemEdits[s.id]
+      const exp = item ? item.expectedCount : Math.max(0, s.openingCount + s.recovered - s.damaged - s.lost - s.issued)
+      const act = edit ? edit.actualCount : item ? item.actualCount : exp
+      const disc = act - exp
 
-    totalExpected += exp
-    totalActual += act
-    totalDiscrepancy += disc
-    if (disc < 0) missingItemsCount += Math.abs(disc)
-    if (disc > 0) misplacedItemsCount += disc
-  })
+      totalExpected += exp
+      totalActual += act
+      totalDiscrepancy += disc
+      if (disc < 0) missingItemsCount += Math.abs(disc)
+      if (disc > 0) misplacedItemsCount += disc
+    })
+
+    return { totalExpected, totalActual, totalDiscrepancy, missingItemsCount, misplacedItemsCount }
+  }, [subjects, auditItemsMap, itemEdits])
+
+  const isReadOnly = !activeAudit || activeAudit.status === 'COMPLETED'
 
   return (
     <div className="space-y-6">
@@ -291,29 +441,33 @@ export default function StockAuditPage() {
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 pt-2">
             <div className="bg-slate-800/60 p-3 rounded-lg border border-slate-700/50">
               <p className="text-xs text-slate-400">Expected Stock</p>
-              <p className="text-xl font-bold text-slate-100">{totalExpected}</p>
+              <p className="text-xl font-bold text-slate-100">{metrics.totalExpected}</p>
             </div>
             <div className="bg-slate-800/60 p-3 rounded-lg border border-slate-700/50">
               <p className="text-xs text-slate-400">Actual Counted</p>
-              <p className="text-xl font-bold text-slate-100">{totalActual}</p>
+              <p className="text-xl font-bold text-slate-100">{metrics.totalActual}</p>
             </div>
             <div className="bg-slate-800/60 p-3 rounded-lg border border-slate-700/50">
               <p className="text-xs text-slate-400">Total Variance</p>
               <p
                 className={`text-xl font-bold ${
-                  totalDiscrepancy === 0 ? 'text-slate-100' : totalDiscrepancy < 0 ? 'text-red-400' : 'text-amber-400'
+                  metrics.totalDiscrepancy === 0
+                    ? 'text-slate-100'
+                    : metrics.totalDiscrepancy < 0
+                    ? 'text-red-400'
+                    : 'text-amber-400'
                 }`}
               >
-                {totalDiscrepancy > 0 ? `+${totalDiscrepancy}` : totalDiscrepancy}
+                {metrics.totalDiscrepancy > 0 ? `+${metrics.totalDiscrepancy}` : metrics.totalDiscrepancy}
               </p>
             </div>
             <div className="bg-slate-800/60 p-3 rounded-lg border border-slate-700/50">
               <p className="text-xs text-slate-400">Missing Books</p>
-              <p className="text-xl font-bold text-red-400">{missingItemsCount}</p>
+              <p className="text-xl font-bold text-red-400">{metrics.missingItemsCount}</p>
             </div>
             <div className="bg-slate-800/60 p-3 rounded-lg border border-slate-700/50">
               <p className="text-xs text-slate-400">Misplaced / Extra</p>
-              <p className="text-xl font-bold text-amber-400">{misplacedItemsCount}</p>
+              <p className="text-xl font-bold text-amber-400">{metrics.misplacedItemsCount}</p>
             </div>
           </div>
         </div>
@@ -479,115 +633,19 @@ export default function StockAuditPage() {
                     </td>
                   </tr>
                 ) : (
-                  filteredSubjects.map((subject) => {
-                    const item = auditItemsMap.get(subject.id)
-                    const edit = itemEdits[subject.id] || {
-                      actualCount: item
-                        ? item.actualCount
-                        : Math.max(0, subject.openingCount + subject.recovered - subject.damaged - subject.lost - subject.issued),
-                      notes: item?.notes || ''
-                    }
-
-                    const expected = item
-                      ? item.expectedCount
-                      : Math.max(0, subject.openingCount + subject.recovered - subject.damaged - subject.lost - subject.issued)
-
-                    const actual = edit.actualCount
-                    const discrepancy = actual - expected
-                    const isReadOnly = !activeAudit || activeAudit.status === 'COMPLETED'
-
-                    return (
-                      <tr key={subject.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
-                        <td className="p-4 font-medium text-slate-900 dark:text-slate-100 flex items-center space-x-3">
-                          <BookOpen className="w-4 h-4 text-blue-500 flex-shrink-0" />
-                          <span>{subject.name}</span>
-                        </td>
-                        <td className="p-4 text-slate-500 dark:text-slate-400">
-                          <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 text-xs rounded-md">
-                            {subject.category || 'General'}
-                          </span>
-                        </td>
-                        <td className="p-4 text-center font-semibold text-slate-700 dark:text-slate-300">{expected}</td>
-                        <td className="p-4 text-center">
-                          <input
-                            type="number"
-                            min="0"
-                            disabled={isReadOnly}
-                            value={edit.actualCount}
-                            onChange={(e) => {
-                              const val = parseInt(e.target.value, 10)
-                              setItemEdits((prev) => ({
-                                ...prev,
-                                [subject.id]: {
-                                  ...edit,
-                                  actualCount: isNaN(val) ? 0 : val
-                                }
-                              }))
-                            }}
-                            className="w-20 px-2 py-1 text-center font-bold bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:opacity-60"
-                          />
-                        </td>
-                        <td className="p-4 text-center">
-                          <span
-                            className={`font-bold px-2.5 py-1 text-xs rounded-md ${
-                              discrepancy === 0
-                                ? 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
-                                : discrepancy < 0
-                                ? 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300'
-                                : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
-                            }`}
-                          >
-                            {discrepancy > 0 ? `+${discrepancy}` : discrepancy}
-                          </span>
-                        </td>
-                        <td className="p-4">
-                          {discrepancy === 0 ? (
-                            <span className="flex items-center space-x-1 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
-                              <CheckCircle className="w-4 h-4" />
-                              <span>Verified Match</span>
-                            </span>
-                          ) : discrepancy < 0 ? (
-                            <span className="flex items-center space-x-1 text-xs text-red-600 dark:text-red-400 font-medium">
-                              <AlertTriangle className="w-4 h-4" />
-                              <span>Missing ({Math.abs(discrepancy)})</span>
-                            </span>
-                          ) : (
-                            <span className="flex items-center space-x-1 text-xs text-amber-600 dark:text-amber-400 font-medium">
-                              <AlertTriangle className="w-4 h-4" />
-                              <span>Misplaced / Extra (+{discrepancy})</span>
-                            </span>
-                          )}
-                        </td>
-                        <td className="p-4">
-                          <input
-                            type="text"
-                            placeholder="Add shelf notes..."
-                            disabled={isReadOnly}
-                            value={edit.notes}
-                            onChange={(e) => {
-                              setItemEdits((prev) => ({
-                                ...prev,
-                                [subject.id]: {
-                                  ...edit,
-                                  notes: e.target.value
-                                }
-                              }))
-                            }}
-                            className="w-full px-2.5 py-1 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-60 text-slate-700 dark:text-slate-300"
-                          />
-                        </td>
-                        <td className="p-4 text-right">
-                          <button
-                            onClick={() => handleSaveItem(subject.id)}
-                            disabled={isReadOnly || savingSubjectId === subject.id}
-                            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition disabled:opacity-50"
-                          >
-                            {savingSubjectId === subject.id ? 'Saving...' : 'Save'}
-                          </button>
-                        </td>
-                      </tr>
-                    )
-                  })
+                  filteredSubjects.map((subject) => (
+                    <StockAuditRow
+                      key={subject.id}
+                      subject={subject}
+                      auditItem={auditItemsMap.get(subject.id)}
+                      edit={itemEdits[subject.id]}
+                      isReadOnly={isReadOnly}
+                      savingSubjectId={savingSubjectId}
+                      onActualCountChange={handleActualCountChange}
+                      onNotesChange={handleNotesChange}
+                      onSaveItem={handleSaveItem}
+                    />
+                  ))
                 )}
               </tbody>
             </table>

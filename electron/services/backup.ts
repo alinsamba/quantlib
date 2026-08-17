@@ -18,8 +18,8 @@ export function isBackupDue(
   now: Date = new Date()
 ): boolean {
   if (!lastBackupAt) return true
-  const lastDate = typeof lastBackupAt === 'string' ? new Date(lastBackupAt) : lastBackupAt
-  if (isNaN(lastDate.getTime())) return true
+  const lastDate = lastBackupAt instanceof Date ? lastBackupAt : new Date(lastBackupAt as string)
+  if (!(lastDate instanceof Date) || isNaN(lastDate.getTime())) return true
 
   const diffMs = now.getTime() - lastDate.getTime()
   const diffHours = diffMs / (1000 * 60 * 60)

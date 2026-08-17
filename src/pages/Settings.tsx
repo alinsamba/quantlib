@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, memo } from 'react'
 import { Save, Moon, Sun, ShieldCheck, Key, Copy, Printer, History, Database, Download, BookOpen, Plus, Trash2, Edit2, HardDrive, RefreshCw, Network, Wifi, CheckCircle2, AlertCircle, Clock } from 'lucide-react'
 import { useTheme } from '../hooks/ThemeContext'
 import { validateMasterPassword } from '../lib/utils'
@@ -9,7 +9,672 @@ import { db } from '../lib/ipc-client'
 import type { AuditLog, BorrowingRule, BackupFileRecord } from '../lib/types'
 import { Modal } from '../components/Modal'
 
+// --- Sub-components wrapped with React.memo ---
 
+interface BorrowingRulesSectionProps {
+  borrowingRules: BorrowingRule[]
+  rulesLoading: boolean
+  onAddRule: () => void
+  onEditRule: (rule: BorrowingRule) => void
+  onDeleteRule: (id: number, roleOrGrade: string) => void
+}
+
+const BorrowingRulesSection = memo(function BorrowingRulesSection({
+  borrowingRules,
+  rulesLoading,
+  onAddRule,
+  onEditRule,
+  onDeleteRule
+}: BorrowingRulesSectionProps) {
+  return (
+    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 space-y-6">
+      <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-700 pb-2">
+        <h2 className="text-lg font-semibold text-slate-800 dark:text-white flex items-center space-x-2">
+          <BookOpen size={20} className="text-blue-500" />
+          <span>Borrowing Rules</span>
+        </h2>
+        <Button size="sm" icon={<Plus size={16} />} onClick={onAddRule}>
+          Add Rule
+        </Button>
+      </div>
+
+      {rulesLoading ? (
+        <div className="text-center py-4 text-slate-500">Loading rules...</div>
+      ) : borrowingRules.length === 0 ? (
+        <div className="text-center py-4 text-slate-500">No borrowing rules configured.</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-slate-100 dark:border-slate-700 text-slate-500 dark:text-slate-400">
+                <th className="pb-2 font-medium">Role/Grade</th>
+                <th className="pb-2 font-medium text-center">Max Books</th>
+                <th className="pb-2 font-medium text-center">Duration</th>
+                <th className="pb-2 font-medium text-right">Fine/Day</th>
+                <th className="pb-2 font-medium text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+              {borrowingRules.map((rule) => (
+                <tr key={rule.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                  <td className="py-2.5 font-medium text-slate-800 dark:text-slate-200">
+                    {rule.roleOrGrade}
+                  </td>
+                  <td className="py-2.5 text-center text-slate-600 dark:text-slate-400">
+                    {rule.maxBooksAllowed}
+                  </td>
+                  <td className="py-2.5 text-center text-slate-600 dark:text-slate-400">
+                    {rule.borrowDurationDays} days
+                  </td>
+                  <td className="py-2.5 text-right text-slate-600 dark:text-slate-400">
+                    ${rule.finePerDay.toFixed(2)}
+                  </td>
+                  <td className="py-2.5 text-right">
+                    <div className="flex justify-end space-x-1">
+                      <button
+                        onClick={() => onEditRule(rule)}
+                        className="p-1 text-slate-500 hover:text-blue-600 dark:hover:text-blue-400"
+                        title="Edit Rule"
+                      >
+                        <Edit2 size={16} />
+                      </button>
+                      {rule.roleOrGrade !== 'DEFAULT' && (
+                        <button
+                          onClick={() => onDeleteRule(rule.id, rule.roleOrGrade)}
+                          className="p-1 text-slate-500 hover:text-red-600 dark:hover:text-red-400"
+                          title="Delete Rule"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <div className="p-3 bg-blue-50 dark:bg-blue-950/40 rounded-lg border border-blue-200 dark:border-blue-800 text-xs text-blue-800 dark:text-blue-200 flex items-center justify-between">
+        <div>
+          <span className="font-bold">Fine Capping Policy:</span> Overdue fines are automatically capped at a maximum of <span className="font-semibold">$15.00 per book</span> to prevent excessive penalty accumulation.
+        </div>
+      </div>
+    </div>
+  )
+})
+
+interface SchoolInfoSectionProps {
+  schoolName: string
+  motto: string
+  academicYear: string
+  onSchoolNameChange: (val: string) => void
+  onMottoChange: (val: string) => void
+  onAcademicYearChange: (val: string) => void
+}
+
+const SchoolInfoSection = memo(function SchoolInfoSection({
+  schoolName,
+  motto,
+  academicYear,
+  onSchoolNameChange,
+  onMottoChange,
+  onAcademicYearChange
+}: SchoolInfoSectionProps) {
+  return (
+    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 space-y-6">
+      <h2 className="text-lg font-semibold text-slate-800 dark:text-white border-b border-slate-100 dark:border-slate-700 pb-2">School Information</h2>
+      
+      <div className="space-y-4">
+        <TextField 
+          label="School Name"
+          value={schoolName}
+          onChange={(e) => onSchoolNameChange(e.target.value)}
+        />
+        <TextField 
+          label="School Motto"
+          value={motto}
+          onChange={(e) => onMottoChange(e.target.value)}
+        />
+        <TextField 
+          label="Academic Year"
+          value={academicYear}
+          onChange={(e) => onAcademicYearChange(e.target.value)}
+        />
+      </div>
+
+      <div className="pt-4 flex justify-end">
+        <Button icon={<Save size={18} />}>Save Changes</Button>
+      </div>
+    </div>
+  )
+})
+
+interface AppearanceSectionProps {
+  theme: 'light' | 'dark'
+  onThemeChange: (theme: 'light' | 'dark') => void
+}
+
+const AppearanceSection = memo(function AppearanceSection({ theme, onThemeChange }: AppearanceSectionProps) {
+  return (
+    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 space-y-6">
+      <h2 className="text-lg font-semibold text-slate-800 dark:text-white border-b border-slate-100 dark:border-slate-700 pb-2">Appearance</h2>
+      
+      <div className="space-y-4">
+        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Theme Preference</label>
+        <div className="grid grid-cols-2 gap-4">
+          <button
+            onClick={() => onThemeChange('light')}
+            className={`flex items-center justify-center space-x-2 p-4 rounded-xl border-2 transition-all ${theme === 'light' ? 'border-blue-600 bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-blue-300 dark:hover:border-slate-600'}`}
+          >
+            <Sun size={20} />
+            <span className="font-medium">Light Mode</span>
+          </button>
+          <button
+            onClick={() => onThemeChange('dark')}
+            className={`flex items-center justify-center space-x-2 p-4 rounded-xl border-2 transition-all ${theme === 'dark' ? 'border-blue-600 bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-blue-300 dark:hover:border-slate-600'}`}
+          >
+            <Moon size={20} />
+            <span className="font-medium">Dark Mode</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+})
+
+interface SecuritySectionProps {
+  oldPassword: string
+  newPassword: string
+  confirmPassword: string
+  passwordError: string
+  passwordSuccess: string
+  isChangingPassword: boolean
+  onOldPasswordChange: (val: string) => void
+  onNewPasswordChange: (val: string) => void
+  onConfirmPasswordChange: (val: string) => void
+  onSubmit: (e: React.FormEvent) => void
+}
+
+const SecuritySection = memo(function SecuritySection({
+  oldPassword,
+  newPassword,
+  confirmPassword,
+  passwordError,
+  passwordSuccess,
+  isChangingPassword,
+  onOldPasswordChange,
+  onNewPasswordChange,
+  onConfirmPasswordChange,
+  onSubmit
+}: SecuritySectionProps) {
+  return (
+    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 space-y-6">
+      <h2 className="text-lg font-semibold text-slate-800 dark:text-white border-b border-slate-100 dark:border-slate-700 pb-2 flex items-center space-x-2">
+        <ShieldCheck size={20} className="text-blue-500" />
+        <span>Security</span>
+      </h2>
+      
+      <form onSubmit={onSubmit} className="space-y-4">
+        <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Change your master password. This will generate a new recovery key.</p>
+        
+        <TextField 
+          label="Current Password"
+          type="password"
+          required
+          value={oldPassword}
+          onChange={(e) => onOldPasswordChange(e.target.value)}
+        />
+        
+        <TextField 
+          label="New Password"
+          type="password"
+          required
+          minLength={8}
+          pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}"
+          title="Use at least 8 characters with uppercase, lowercase, and a number."
+          value={newPassword}
+          onChange={(e) => onNewPasswordChange(e.target.value)}
+        />
+
+        <TextField 
+          label="Confirm New Password"
+          type="password"
+          required
+          value={confirmPassword}
+          onChange={(e) => onConfirmPasswordChange(e.target.value)}
+        />
+
+        {passwordError && <div className="text-red-500 text-sm font-medium">{passwordError}</div>}
+        {passwordSuccess && <div className="text-green-500 text-sm font-medium">{passwordSuccess}</div>}
+
+        <div className="pt-2">
+          <Button 
+            type="submit" 
+            variant="secondary"
+            disabled={isChangingPassword}
+            isLoading={isChangingPassword}
+            icon={<Key size={18} />}
+          >
+            Change Password
+          </Button>
+        </div>
+      </form>
+    </div>
+  )
+})
+
+interface VaultBackupSectionProps {
+  autoBackupEnabled: boolean
+  autoBackupPath: string
+  autoBackupIntervalHours: number
+  lastAutoBackupAt: string | null
+  recentBackups: BackupFileRecord[]
+  backupConfigLoading: boolean
+  backupSaveSuccess: string
+  backupTriggerMessage: string
+  isTriggeringBackup: boolean
+  onToggleAutoBackup: (val: boolean) => void
+  onAutoBackupPathChange: (val: string) => void
+  onIntervalHoursChange: (val: number) => void
+  onSaveBackupConfig: (e: React.FormEvent) => void
+  onTriggerBackupNow: () => void
+  onRefreshConfig: () => void
+}
+
+const VaultBackupSection = memo(function VaultBackupSection({
+  autoBackupEnabled,
+  autoBackupPath,
+  autoBackupIntervalHours,
+  lastAutoBackupAt,
+  recentBackups,
+  backupConfigLoading,
+  backupSaveSuccess,
+  backupTriggerMessage,
+  isTriggeringBackup,
+  onToggleAutoBackup,
+  onAutoBackupPathChange,
+  onIntervalHoursChange,
+  onSaveBackupConfig,
+  onTriggerBackupNow,
+  onRefreshConfig
+}: VaultBackupSectionProps) {
+  return (
+    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 space-y-6">
+      <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-700 pb-2">
+        <h2 className="text-lg font-semibold text-slate-800 dark:text-white flex items-center space-x-2">
+          <HardDrive size={20} className="text-blue-500" />
+          <span>Vault Backup System</span>
+        </h2>
+        <Button variant="secondary" size="sm" icon={<RefreshCw size={14} />} onClick={onRefreshConfig} isLoading={backupConfigLoading}>
+          Refresh
+        </Button>
+      </div>
+
+      <form onSubmit={onSaveBackupConfig} className="space-y-4">
+        <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-700">
+          <div>
+            <span className="font-medium text-sm text-slate-800 dark:text-slate-200">Auto-Scheduled Vault Backups</span>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Automatically copy encrypted vault (.enc) to designated target path</p>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={autoBackupEnabled}
+              onChange={(e) => onToggleAutoBackup(e.target.checked)}
+              className="sr-only peer"
+            />
+            <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:after:border-slate-600 peer-checked:bg-blue-600"></div>
+          </label>
+        </div>
+
+        <TextField 
+          label="Backup Target Path (Local Directory or USB Drive)"
+          placeholder="e.g. D:\QuantLib_Backups or E:\USB_Backup"
+          value={autoBackupPath}
+          onChange={(e) => onAutoBackupPathChange(e.target.value)}
+        />
+
+        <div>
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+            Backup Schedule Interval
+          </label>
+          <select
+            value={autoBackupIntervalHours}
+            onChange={(e) => onIntervalHoursChange(Number(e.target.value))}
+            className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900/50 border border-slate-300 dark:border-slate-700 rounded-lg text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value={6}>Every 6 Hours</option>
+            <option value={12}>Every 12 Hours</option>
+            <option value={24}>Daily (Every 24 Hours)</option>
+            <option value={168}>Weekly (Every 7 Days)</option>
+          </select>
+        </div>
+
+        {lastAutoBackupAt && (
+          <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center space-x-1">
+            <Clock size={14} />
+            <span>Last Auto-Backup: {new Date(lastAutoBackupAt).toLocaleString()}</span>
+          </div>
+        )}
+
+        {backupSaveSuccess && <p className="text-xs font-medium text-green-500">{backupSaveSuccess}</p>}
+
+        <div className="pt-2 flex justify-between items-center">
+          <Button type="submit" variant="secondary" size="sm" icon={<Save size={16} />}>
+            Save Backup Config
+          </Button>
+
+          <Button 
+            type="button"
+            size="sm"
+            icon={<HardDrive size={16} />}
+            onClick={onTriggerBackupNow}
+            isLoading={isTriggeringBackup}
+          >
+            Backup Now
+          </Button>
+        </div>
+
+        {backupTriggerMessage && (
+          <p className="text-xs font-medium text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 p-2 rounded border border-green-200 dark:border-green-800">
+            {backupTriggerMessage}
+          </p>
+        )}
+      </form>
+
+      {/* Recent Backup History */}
+      <div className="pt-4 border-t border-slate-100 dark:border-slate-700">
+        <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3 flex items-center space-x-1.5">
+          <History size={16} />
+          <span>Recent Backup History</span>
+        </h3>
+        {recentBackups.length === 0 ? (
+          <p className="text-xs text-slate-500 dark:text-slate-400 italic text-center py-2">No backups found in target path.</p>
+        ) : (
+          <div className="max-h-40 overflow-y-auto space-y-2 pr-1">
+            {recentBackups.slice(0, 5).map((file) => (
+              <div key={file.fullPath} className="text-xs p-2 bg-slate-50 dark:bg-slate-900/40 rounded border border-slate-200 dark:border-slate-700 flex justify-between items-center">
+                <div>
+                  <p className="font-mono font-medium text-slate-800 dark:text-slate-200">{file.filename}</p>
+                  <p className="text-slate-400 truncate max-w-xs">{file.fullPath}</p>
+                </div>
+                <div className="text-right">
+                  <span className="text-slate-500 font-semibold">{Math.round(file.sizeBytes / 1024)} KB</span>
+                  <p className="text-slate-400">{new Date(file.createdAt).toLocaleDateString()}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+})
+
+interface MultiDeskLanSyncSectionProps {
+  lanSyncEnabled: boolean
+  lanPort: number
+  lanPasscode: string
+  localIp: string
+  isServerRunning: boolean
+  lastLanSyncAt: string | null
+  peerIp: string
+  peerPort: number
+  isSyncingPeer: boolean
+  syncStatusMsg: string
+  syncErrorMsg: string
+  lanSaveSuccess: string
+  onToggleLanSync: (val: boolean) => void
+  onPortChange: (val: number) => void
+  onPasscodeChange: (val: string) => void
+  onPeerIpChange: (val: string) => void
+  onPeerPortChange: (val: number) => void
+  onSaveLanConfig: (e: React.FormEvent) => void
+  onSyncWithPeer: (e: React.FormEvent) => void
+}
+
+const MultiDeskLanSyncSection = memo(function MultiDeskLanSyncSection({
+  lanSyncEnabled,
+  lanPort,
+  lanPasscode,
+  localIp,
+  isServerRunning,
+  lastLanSyncAt,
+  peerIp,
+  peerPort,
+  isSyncingPeer,
+  syncStatusMsg,
+  syncErrorMsg,
+  lanSaveSuccess,
+  onToggleLanSync,
+  onPortChange,
+  onPasscodeChange,
+  onPeerIpChange,
+  onPeerPortChange,
+  onSaveLanConfig,
+  onSyncWithPeer
+}: MultiDeskLanSyncSectionProps) {
+  return (
+    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 space-y-6">
+      <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-700 pb-2">
+        <h2 className="text-lg font-semibold text-slate-800 dark:text-white flex items-center space-x-2">
+          <Network size={20} className="text-blue-500" />
+          <span>Multi-Desk LAN Sync</span>
+        </h2>
+        <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${isServerRunning ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400'}`}>
+          {isServerRunning ? `Server Active (Port ${lanPort})` : 'Server Inactive'}
+        </span>
+      </div>
+
+      <form onSubmit={onSaveLanConfig} className="space-y-4">
+        <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-700">
+          <div>
+            <span className="font-medium text-sm text-slate-800 dark:text-slate-200">Enable LAN Sync Server</span>
+            <p className="text-xs text-slate-500 dark:text-slate-400">Allow secondary desktop instances on local network to synchronize SQLite vault</p>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={lanSyncEnabled}
+              onChange={(e) => onToggleLanSync(e.target.checked)}
+              className="sr-only peer"
+            />
+            <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:after:border-slate-600 peer-checked:bg-blue-600"></div>
+          </label>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Local IP Address</label>
+            <div className="px-3 py-2 bg-slate-100 dark:bg-slate-900 rounded-lg font-mono text-sm font-semibold text-slate-800 dark:text-slate-200">
+              {localIp}
+            </div>
+          </div>
+          <TextField
+            label="LAN Server Port"
+            type="number"
+            value={lanPort}
+            onChange={(e) => onPortChange(Number(e.target.value))}
+          />
+        </div>
+
+        <TextField
+          label="Sync Security Passcode"
+          type="password"
+          placeholder="Secret passcode for LAN sync authorization"
+          value={lanPasscode}
+          onChange={(e) => onPasscodeChange(e.target.value)}
+        />
+
+        {lastLanSyncAt && (
+          <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center space-x-1">
+            <Clock size={14} />
+            <span>Last LAN Sync: {new Date(lastLanSyncAt).toLocaleString()}</span>
+          </div>
+        )}
+
+        {lanSaveSuccess && <p className="text-xs font-medium text-green-500">{lanSaveSuccess}</p>}
+
+        <div className="pt-1 flex justify-end">
+          <Button type="submit" variant="secondary" size="sm" icon={<Save size={16} />}>
+            Save LAN Config
+          </Button>
+        </div>
+      </form>
+
+      {/* Peer Sync Connection Form */}
+      <div className="pt-4 border-t border-slate-100 dark:border-slate-700 space-y-4">
+        <h3 className="text-sm font-semibold text-slate-800 dark:text-white flex items-center space-x-1.5">
+          <Wifi size={16} className="text-blue-500" />
+          <span>Synchronize with Peer Instance</span>
+        </h3>
+
+        <form onSubmit={onSyncWithPeer} className="space-y-3">
+          <div className="grid grid-cols-3 gap-3">
+            <div className="col-span-2">
+              <TextField
+                label="Peer Machine IP"
+                placeholder="e.g. 192.168.1.105"
+                value={peerIp}
+                onChange={(e) => onPeerIpChange(e.target.value)}
+              />
+            </div>
+            <TextField
+              label="Peer Port"
+              type="number"
+              value={peerPort}
+              onChange={(e) => onPeerPortChange(Number(e.target.value))}
+            />
+          </div>
+
+          <div className="flex justify-end">
+            <Button
+              type="submit"
+              size="sm"
+              icon={<RefreshCw size={16} />}
+              isLoading={isSyncingPeer}
+              disabled={!peerIp.trim()}
+            >
+              Sync Now
+            </Button>
+          </div>
+
+          {syncStatusMsg && (
+            <div className="text-xs font-medium text-green-700 dark:text-green-300 bg-green-50 dark:bg-green-900/30 p-2.5 rounded-lg border border-green-200 dark:border-green-800 flex items-start space-x-2">
+              <CheckCircle2 size={16} className="text-green-500 shrink-0 mt-0.5" />
+              <span>{syncStatusMsg}</span>
+            </div>
+          )}
+
+          {syncErrorMsg && (
+            <div className="text-xs font-medium text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-900/30 p-2.5 rounded-lg border border-rose-200 dark:border-rose-800 flex items-start space-x-2">
+              <AlertCircle size={16} className="text-rose-500 shrink-0 mt-0.5" />
+              <span>{syncErrorMsg}</span>
+            </div>
+          )}
+        </form>
+      </div>
+    </div>
+  )
+})
+
+interface UnencryptedDbExportSectionProps {
+  isBackingUp: boolean
+  backupMessage: string
+  backupError: string
+  onExport: () => void
+}
+
+const UnencryptedDbExportSection = memo(function UnencryptedDbExportSection({
+  isBackingUp,
+  backupMessage,
+  backupError,
+  onExport
+}: UnencryptedDbExportSectionProps) {
+  return (
+    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 space-y-4">
+      <h2 className="text-lg font-semibold text-slate-800 dark:text-white border-b border-slate-100 dark:border-slate-700 pb-2 flex items-center space-x-2">
+        <Database size={20} className="text-blue-500" />
+        <span>Unencrypted DB Export</span>
+      </h2>
+      <p className="text-sm text-slate-500 dark:text-slate-400">Export your unencrypted SQLite database for manual backup, migration, or third-party analysis.</p>
+      <div className="pt-2">
+        <Button 
+          variant="secondary" 
+          icon={<Download size={18} />}
+          onClick={onExport}
+          isLoading={isBackingUp}
+        >
+          Export Unencrypted DB (.db)
+        </Button>
+        {backupMessage && <p className="text-sm mt-2 font-medium text-green-500">{backupMessage}</p>}
+        {backupError && <p className="text-sm mt-2 font-medium text-red-500">{backupError}</p>}
+      </div>
+    </div>
+  )
+})
+
+interface AuditLogsSectionProps {
+  auditLogs?: AuditLog[] | null
+  logsLoading: boolean
+  logsError?: string | null
+  onRefresh: () => void
+}
+
+const AuditLogsSection = memo(function AuditLogsSection({ auditLogs, logsLoading, logsError, onRefresh }: AuditLogsSectionProps) {
+  return (
+    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden flex flex-col max-h-[800px]">
+      <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-900/50">
+        <h2 className="text-lg font-semibold text-slate-800 dark:text-white flex items-center space-x-2">
+          <History size={20} className="text-blue-500" />
+          <span>Audit Logs</span>
+        </h2>
+        <Button variant="secondary" onClick={onRefresh} isLoading={logsLoading}>
+          Refresh
+        </Button>
+      </div>
+      
+      <div className="p-0 overflow-y-auto flex-1">
+        {logsLoading && !auditLogs ? (
+          <div className="p-8 text-center text-slate-500">Loading logs...</div>
+        ) : logsError ? (
+          <div className="p-8 text-center text-red-500">{logsError}</div>
+        ) : auditLogs?.length === 0 ? (
+          <div className="p-8 text-center text-slate-500">No audit logs found.</div>
+        ) : (
+          <ul className="divide-y divide-slate-100 dark:divide-slate-700/50">
+            {auditLogs?.map((log) => (
+              <li key={log.id} className="p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                <div className="flex justify-between items-start mb-1">
+                  <span className="font-medium text-sm text-slate-800 dark:text-slate-200">
+                    {log.subject?.name || `Subject #${log.subjectId}`}
+                  </span>
+                  <span className="text-xs text-slate-500">
+                    {new Date(log.changedAt).toLocaleString()}
+                  </span>
+                </div>
+                <div className="text-sm text-slate-600 dark:text-slate-400">
+                  Changed <span className="font-semibold text-slate-700 dark:text-slate-300">{log.field}</span> from{' '}
+                  <span className="bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 px-1.5 py-0.5 rounded text-xs line-through">{log.oldValue}</span>{' '}
+                  to{' '}
+                  <span className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 px-1.5 py-0.5 rounded text-xs">{log.newValue}</span>
+                </div>
+                {log.changedBy && (
+                  <div className="text-xs text-slate-400 mt-2">
+                    By: {log.changedBy}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  )
+})
+
+// --- Main Settings Component ---
 
 export default function Settings() {
   const [schoolName, setSchoolName] = useState('Mentor High School - Kitende')
@@ -27,13 +692,13 @@ export default function Settings() {
   const [isChangingPassword, setIsChangingPassword] = useState(false)
 
   // Audit Logs State
-  const { data: auditLogs, isLoading: logsLoading, execute: fetchLogs } = useAsync<AuditLog[]>()
+  const { data: auditLogs, isLoading: logsLoading, error: logsError, execute: fetchLogs } = useAsync<AuditLog[]>()
 
   useEffect(() => {
     fetchLogs(() => db.getAuditLogs())
   }, [fetchLogs])
 
-  const handleChangePassword = async (e: React.FormEvent) => {
+  const handleChangePassword = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
     setPasswordError('')
     setPasswordSuccess('')
@@ -67,13 +732,13 @@ export default function Settings() {
     } finally {
       setIsChangingPassword(false)
     }
-  }
+  }, [oldPassword, newPassword, confirmPassword])
 
   const [isBackingUp, setIsBackingUp] = useState(false)
   const [backupMessage, setBackupMessage] = useState('')
   const [backupError, setBackupError] = useState('')
 
-  const handleBackupDatabase = async () => {
+  const handleBackupDatabase = useCallback(async () => {
     setIsBackingUp(true)
     setBackupMessage('')
     setBackupError('')
@@ -91,7 +756,7 @@ export default function Settings() {
     } finally {
       setIsBackingUp(false)
     }
-  }
+  }, [])
 
   // Vault Backup System State
   const [autoBackupEnabled, setAutoBackupEnabled] = useState(false)
@@ -160,7 +825,7 @@ export default function Settings() {
     fetchLanConfig()
   }, [fetchBackupConfig, fetchLanConfig])
 
-  const handleSaveBackupConfig = async (e: React.FormEvent) => {
+  const handleSaveBackupConfig = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
     setBackupSaveSuccess('')
     try {
@@ -176,9 +841,9 @@ export default function Settings() {
     } catch (err: unknown) {
       alert('Failed to save backup config: ' + (err instanceof Error ? err.message : String(err)))
     }
-  }
+  }, [autoBackupEnabled, autoBackupPath, autoBackupIntervalHours, fetchBackupConfig])
 
-  const handleTriggerBackupNow = async () => {
+  const handleTriggerBackupNow = useCallback(async () => {
     setIsTriggeringBackup(true)
     setBackupTriggerMessage('')
     try {
@@ -194,9 +859,9 @@ export default function Settings() {
     } finally {
       setIsTriggeringBackup(false)
     }
-  }
+  }, [autoBackupPath, fetchBackupConfig])
 
-  const handleSaveLanConfig = async (e: React.FormEvent) => {
+  const handleSaveLanConfig = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
     setLanSaveSuccess('')
     try {
@@ -212,9 +877,9 @@ export default function Settings() {
     } catch (err: unknown) {
       alert('Failed to save LAN config: ' + (err instanceof Error ? err.message : String(err)))
     }
-  }
+  }, [lanSyncEnabled, lanPort, lanPasscode, fetchLanConfig])
 
-  const handleSyncWithPeer = async (e: React.FormEvent) => {
+  const handleSyncWithPeer = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
     if (!peerIp.trim()) return
     setIsSyncingPeer(true)
@@ -237,8 +902,7 @@ export default function Settings() {
     } finally {
       setIsSyncingPeer(false)
     }
-  }
-
+  }, [peerIp, peerPort, lanPasscode, fetchLanConfig])
 
   // Borrowing Rules State
   const [borrowingRules, setBorrowingRules] = useState<BorrowingRule[]>([])
@@ -263,13 +927,13 @@ export default function Settings() {
     fetchRules()
   }, [fetchRules])
 
-  const handleOpenAddRule = () => {
+  const handleOpenAddRule = useCallback(() => {
     setRuleFormData({ id: 0, roleOrGrade: '', maxBooksAllowed: 2, borrowDurationDays: 14, finePerDay: 0 })
     setRuleError('')
     setIsRuleModalOpen(true)
-  }
+  }, [])
 
-  const handleOpenEditRule = (rule: BorrowingRule) => {
+  const handleOpenEditRule = useCallback((rule: BorrowingRule) => {
     setRuleFormData({
       id: rule.id,
       roleOrGrade: rule.roleOrGrade,
@@ -279,9 +943,9 @@ export default function Settings() {
     })
     setRuleError('')
     setIsRuleModalOpen(true)
-  }
+  }, [])
 
-  const handleSaveRule = async (e: React.FormEvent) => {
+  const handleSaveRule = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
     setRuleError('')
     try {
@@ -297,9 +961,9 @@ export default function Settings() {
     } catch (err: unknown) {
       setRuleError(err instanceof Error ? err.message : 'Failed to save rule')
     }
-  }
+  }, [ruleFormData, fetchRules])
 
-  const handleDeleteRule = async (id: number, roleOrGrade: string) => {
+  const handleDeleteRule = useCallback(async (id: number, roleOrGrade: string) => {
     if (roleOrGrade === 'DEFAULT') {
       alert('Cannot delete the DEFAULT borrowing rule.')
       return
@@ -311,10 +975,13 @@ export default function Settings() {
     } catch (err: unknown) {
       alert('Failed to delete rule: ' + (err instanceof Error ? err.message : String(err)))
     }
-  }
+  }, [fetchRules])
+
+  const handleRefreshAuditLogs = useCallback(() => {
+    fetchLogs(() => db.getAuditLogs())
+  }, [fetchLogs])
 
   return (
-
     <div className="space-y-6 max-w-4xl mx-auto pb-12">
       <div>
         <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Settings</h1>
@@ -323,487 +990,96 @@ export default function Settings() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="space-y-6">
-          {/* Borrowing Rules */}
-          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 space-y-6">
-            <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-700 pb-2">
-              <h2 className="text-lg font-semibold text-slate-800 dark:text-white flex items-center space-x-2">
-                <BookOpen size={20} className="text-blue-500" />
-                <span>Borrowing Rules</span>
-              </h2>
-              <Button size="sm" icon={<Plus size={16} />} onClick={handleOpenAddRule}>
-                Add Rule
-              </Button>
-            </div>
+          <BorrowingRulesSection
+            borrowingRules={borrowingRules}
+            rulesLoading={rulesLoading}
+            onAddRule={handleOpenAddRule}
+            onEditRule={handleOpenEditRule}
+            onDeleteRule={handleDeleteRule}
+          />
 
-            {rulesLoading ? (
-              <div className="text-center py-4 text-slate-500">Loading rules...</div>
-            ) : borrowingRules.length === 0 ? (
-              <div className="text-center py-4 text-slate-500">No borrowing rules configured.</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-100 dark:border-slate-700 text-slate-500 dark:text-slate-400">
-                      <th className="pb-2 font-medium">Role/Grade</th>
-                      <th className="pb-2 font-medium text-center">Max Books</th>
-                      <th className="pb-2 font-medium text-center">Duration</th>
-                      <th className="pb-2 font-medium text-right">Fine/Day</th>
-                      <th className="pb-2 font-medium text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
-                    {borrowingRules.map((rule) => (
-                      <tr key={rule.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
-                        <td className="py-2.5 font-medium text-slate-800 dark:text-slate-200">
-                          {rule.roleOrGrade}
-                        </td>
-                        <td className="py-2.5 text-center text-slate-600 dark:text-slate-400">
-                          {rule.maxBooksAllowed}
-                        </td>
-                        <td className="py-2.5 text-center text-slate-600 dark:text-slate-400">
-                          {rule.borrowDurationDays} days
-                        </td>
-                        <td className="py-2.5 text-right text-slate-600 dark:text-slate-400">
-                          ${rule.finePerDay.toFixed(2)}
-                        </td>
-                        <td className="py-2.5 text-right">
-                          <div className="flex justify-end space-x-1">
-                            <button
-                              onClick={() => handleOpenEditRule(rule)}
-                              className="p-1 text-slate-500 hover:text-blue-600 dark:hover:text-blue-400"
-                              title="Edit Rule"
-                            >
-                              <Edit2 size={16} />
-                            </button>
-                            {rule.roleOrGrade !== 'DEFAULT' && (
-                              <button
-                                onClick={() => handleDeleteRule(rule.id, rule.roleOrGrade)}
-                                className="p-1 text-slate-500 hover:text-red-600 dark:hover:text-red-400"
-                                title="Delete Rule"
-                              >
-                                <Trash2 size={16} />
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+          <SchoolInfoSection
+            schoolName={schoolName}
+            motto={motto}
+            academicYear={academicYear}
+            onSchoolNameChange={setSchoolName}
+            onMottoChange={setMotto}
+            onAcademicYearChange={setAcademicYear}
+          />
 
-          {/* School Info */}
+          <AppearanceSection
+            theme={theme}
+            onThemeChange={setTheme}
+          />
 
-          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 space-y-6">
-            <h2 className="text-lg font-semibold text-slate-800 dark:text-white border-b border-slate-100 dark:border-slate-700 pb-2">School Information</h2>
-            
-            <div className="space-y-4">
-              <TextField 
-                label="School Name"
-                value={schoolName}
-                onChange={(e) => setSchoolName(e.target.value)}
-              />
-              <TextField 
-                label="School Motto"
-                value={motto}
-                onChange={(e) => setMotto(e.target.value)}
-              />
-              <TextField 
-                label="Academic Year"
-                value={academicYear}
-                onChange={(e) => setAcademicYear(e.target.value)}
-              />
-            </div>
-
-            <div className="pt-4 flex justify-end">
-              <Button icon={<Save size={18} />}>Save Changes</Button>
-            </div>
-          </div>
-
-          {/* Appearance */}
-          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 space-y-6">
-            <h2 className="text-lg font-semibold text-slate-800 dark:text-white border-b border-slate-100 dark:border-slate-700 pb-2">Appearance</h2>
-            
-            <div className="space-y-4">
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Theme Preference</label>
-              <div className="grid grid-cols-2 gap-4">
-                <button
-                  onClick={() => setTheme('light')}
-                  className={`flex items-center justify-center space-x-2 p-4 rounded-xl border-2 transition-all ${theme === 'light' ? 'border-blue-600 bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-blue-300 dark:hover:border-slate-600'}`}
-                >
-                  <Sun size={20} />
-                  <span className="font-medium">Light Mode</span>
-                </button>
-                <button
-                  onClick={() => setTheme('dark')}
-                  className={`flex items-center justify-center space-x-2 p-4 rounded-xl border-2 transition-all ${theme === 'dark' ? 'border-blue-600 bg-blue-50 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400' : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-blue-300 dark:hover:border-slate-600'}`}
-                >
-                  <Moon size={20} />
-                  <span className="font-medium">Dark Mode</span>
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Security */}
-          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 space-y-6">
-            <h2 className="text-lg font-semibold text-slate-800 dark:text-white border-b border-slate-100 dark:border-slate-700 pb-2 flex items-center space-x-2">
-              <ShieldCheck size={20} className="text-blue-500" />
-              <span>Security</span>
-            </h2>
-            
-            <form onSubmit={handleChangePassword} className="space-y-4">
-              <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Change your master password. This will generate a new recovery key.</p>
-              
-              <TextField 
-                label="Current Password"
-                type="password"
-                required
-                value={oldPassword}
-                onChange={(e) => setOldPassword(e.target.value)}
-              />
-              
-              <TextField 
-                label="New Password"
-                type="password"
-                required
-                minLength={8}
-                pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}"
-                title="Use at least 8 characters with uppercase, lowercase, and a number."
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-              />
-
-              <TextField 
-                label="Confirm New Password"
-                type="password"
-                required
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-              />
-
-              {passwordError && <div className="text-red-500 text-sm font-medium">{passwordError}</div>}
-              {passwordSuccess && <div className="text-green-500 text-sm font-medium">{passwordSuccess}</div>}
-
-              <div className="pt-2">
-                <Button 
-                  type="submit" 
-                  variant="secondary"
-                  disabled={isChangingPassword}
-                  isLoading={isChangingPassword}
-                  icon={<Key size={18} />}
-                >
-                  Change Password
-                </Button>
-              </div>
-            </form>
-          </div>
+          <SecuritySection
+            oldPassword={oldPassword}
+            newPassword={newPassword}
+            confirmPassword={confirmPassword}
+            passwordError={passwordError}
+            passwordSuccess={passwordSuccess}
+            isChangingPassword={isChangingPassword}
+            onOldPasswordChange={setOldPassword}
+            onNewPasswordChange={setNewPassword}
+            onConfirmPasswordChange={setConfirmPassword}
+            onSubmit={handleChangePassword}
+          />
         </div>
 
         <div className="space-y-6">
-          {/* Vault Backup System */}
-          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 space-y-6">
-            <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-700 pb-2">
-              <h2 className="text-lg font-semibold text-slate-800 dark:text-white flex items-center space-x-2">
-                <HardDrive size={20} className="text-blue-500" />
-                <span>Vault Backup System</span>
-              </h2>
-              <Button variant="secondary" size="sm" icon={<RefreshCw size={14} />} onClick={fetchBackupConfig} isLoading={backupConfigLoading}>
-                Refresh
-              </Button>
-            </div>
+          <VaultBackupSection
+            autoBackupEnabled={autoBackupEnabled}
+            autoBackupPath={autoBackupPath}
+            autoBackupIntervalHours={autoBackupIntervalHours}
+            lastAutoBackupAt={lastAutoBackupAt}
+            recentBackups={recentBackups}
+            backupConfigLoading={backupConfigLoading}
+            backupSaveSuccess={backupSaveSuccess}
+            backupTriggerMessage={backupTriggerMessage}
+            isTriggeringBackup={isTriggeringBackup}
+            onToggleAutoBackup={setAutoBackupEnabled}
+            onAutoBackupPathChange={setAutoBackupPath}
+            onIntervalHoursChange={setAutoBackupIntervalHours}
+            onSaveBackupConfig={handleSaveBackupConfig}
+            onTriggerBackupNow={handleTriggerBackupNow}
+            onRefreshConfig={fetchBackupConfig}
+          />
 
-            <form onSubmit={handleSaveBackupConfig} className="space-y-4">
-              <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-700">
-                <div>
-                  <span className="font-medium text-sm text-slate-800 dark:text-slate-200">Auto-Scheduled Vault Backups</span>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Automatically copy encrypted vault (.enc) to designated target path</p>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={autoBackupEnabled}
-                    onChange={(e) => setAutoBackupEnabled(e.target.checked)}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:after:border-slate-600 peer-checked:bg-blue-600"></div>
-                </label>
-              </div>
+          <MultiDeskLanSyncSection
+            lanSyncEnabled={lanSyncEnabled}
+            lanPort={lanPort}
+            lanPasscode={lanPasscode}
+            localIp={localIp}
+            isServerRunning={isServerRunning}
+            lastLanSyncAt={lastLanSyncAt}
+            peerIp={peerIp}
+            peerPort={peerPort}
+            isSyncingPeer={isSyncingPeer}
+            syncStatusMsg={syncStatusMsg}
+            syncErrorMsg={syncErrorMsg}
+            lanSaveSuccess={lanSaveSuccess}
+            onToggleLanSync={setLanSyncEnabled}
+            onPortChange={setLanPort}
+            onPasscodeChange={setLanPasscode}
+            onPeerIpChange={setPeerIp}
+            onPeerPortChange={setPeerPort}
+            onSaveLanConfig={handleSaveLanConfig}
+            onSyncWithPeer={handleSyncWithPeer}
+          />
 
-              <TextField 
-                label="Backup Target Path (Local Directory or USB Drive)"
-                placeholder="e.g. D:\QuantLib_Backups or E:\USB_Backup"
-                value={autoBackupPath}
-                onChange={(e) => setAutoBackupPath(e.target.value)}
-              />
+          <UnencryptedDbExportSection
+            isBackingUp={isBackingUp}
+            backupMessage={backupMessage}
+            backupError={backupError}
+            onExport={handleBackupDatabase}
+          />
 
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                  Backup Schedule Interval
-                </label>
-                <select
-                  value={autoBackupIntervalHours}
-                  onChange={(e) => setAutoBackupIntervalHours(Number(e.target.value))}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-900/50 border border-slate-300 dark:border-slate-700 rounded-lg text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value={6}>Every 6 Hours</option>
-                  <option value={12}>Every 12 Hours</option>
-                  <option value={24}>Daily (Every 24 Hours)</option>
-                  <option value={168}>Weekly (Every 7 Days)</option>
-                </select>
-              </div>
-
-              {lastAutoBackupAt && (
-                <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center space-x-1">
-                  <Clock size={14} />
-                  <span>Last Auto-Backup: {new Date(lastAutoBackupAt).toLocaleString()}</span>
-                </div>
-              )}
-
-              {backupSaveSuccess && <p className="text-xs font-medium text-green-500">{backupSaveSuccess}</p>}
-
-              <div className="pt-2 flex justify-between items-center">
-                <Button type="submit" variant="secondary" size="sm" icon={<Save size={16} />}>
-                  Save Backup Config
-                </Button>
-
-                <Button 
-                  type="button"
-                  size="sm"
-                  icon={<HardDrive size={16} />}
-                  onClick={handleTriggerBackupNow}
-                  isLoading={isTriggeringBackup}
-                >
-                  Backup Now
-                </Button>
-              </div>
-
-              {backupTriggerMessage && (
-                <p className="text-xs font-medium text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 p-2 rounded border border-green-200 dark:border-green-800">
-                  {backupTriggerMessage}
-                </p>
-              )}
-            </form>
-
-            {/* Recent Backup History */}
-            <div className="pt-4 border-t border-slate-100 dark:border-slate-700">
-              <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3 flex items-center space-x-1.5">
-                <History size={16} />
-                <span>Recent Backup History</span>
-              </h3>
-              {recentBackups.length === 0 ? (
-                <p className="text-xs text-slate-500 dark:text-slate-400 italic text-center py-2">No backups found in target path.</p>
-              ) : (
-                <div className="max-h-40 overflow-y-auto space-y-2 pr-1">
-                  {recentBackups.slice(0, 5).map((file) => (
-                    <div key={file.fullPath} className="text-xs p-2 bg-slate-50 dark:bg-slate-900/40 rounded border border-slate-200 dark:border-slate-700 flex justify-between items-center">
-                      <div>
-                        <p className="font-mono font-medium text-slate-800 dark:text-slate-200">{file.filename}</p>
-                        <p className="text-slate-400 truncate max-w-xs">{file.fullPath}</p>
-                      </div>
-                      <div className="text-right">
-                        <span className="text-slate-500 font-semibold">{Math.round(file.sizeBytes / 1024)} KB</span>
-                        <p className="text-slate-400">{new Date(file.createdAt).toLocaleDateString()}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Multi-Desk LAN Sync */}
-          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 space-y-6">
-            <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-700 pb-2">
-              <h2 className="text-lg font-semibold text-slate-800 dark:text-white flex items-center space-x-2">
-                <Network size={20} className="text-blue-500" />
-                <span>Multi-Desk LAN Sync</span>
-              </h2>
-              <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${isServerRunning ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400'}`}>
-                {isServerRunning ? `Server Active (Port ${lanPort})` : 'Server Inactive'}
-              </span>
-            </div>
-
-            <form onSubmit={handleSaveLanConfig} className="space-y-4">
-              <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900/50 rounded-lg border border-slate-200 dark:border-slate-700">
-                <div>
-                  <span className="font-medium text-sm text-slate-800 dark:text-slate-200">Enable LAN Sync Server</span>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Allow secondary desktop instances on local network to synchronize SQLite vault</p>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={lanSyncEnabled}
-                    onChange={(e) => setLanSyncEnabled(e.target.checked)}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:after:border-slate-600 peer-checked:bg-blue-600"></div>
-                </label>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Local IP Address</label>
-                  <div className="px-3 py-2 bg-slate-100 dark:bg-slate-900 rounded-lg font-mono text-sm font-semibold text-slate-800 dark:text-slate-200">
-                    {localIp}
-                  </div>
-                </div>
-                <TextField
-                  label="LAN Server Port"
-                  type="number"
-                  value={lanPort}
-                  onChange={(e) => setLanPort(Number(e.target.value))}
-                />
-              </div>
-
-              <TextField
-                label="Sync Security Passcode"
-                type="password"
-                placeholder="Secret passcode for LAN sync authorization"
-                value={lanPasscode}
-                onChange={(e) => setLanPasscode(e.target.value)}
-              />
-
-              {lastLanSyncAt && (
-                <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center space-x-1">
-                  <Clock size={14} />
-                  <span>Last LAN Sync: {new Date(lastLanSyncAt).toLocaleString()}</span>
-                </div>
-              )}
-
-              {lanSaveSuccess && <p className="text-xs font-medium text-green-500">{lanSaveSuccess}</p>}
-
-              <div className="pt-1 flex justify-end">
-                <Button type="submit" variant="secondary" size="sm" icon={<Save size={16} />}>
-                  Save LAN Config
-                </Button>
-              </div>
-            </form>
-
-            {/* Peer Sync Connection Form */}
-            <div className="pt-4 border-t border-slate-100 dark:border-slate-700 space-y-4">
-              <h3 className="text-sm font-semibold text-slate-800 dark:text-white flex items-center space-x-1.5">
-                <Wifi size={16} className="text-blue-500" />
-                <span>Synchronize with Peer Instance</span>
-              </h3>
-
-              <form onSubmit={handleSyncWithPeer} className="space-y-3">
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="col-span-2">
-                    <TextField
-                      label="Peer Machine IP"
-                      placeholder="e.g. 192.168.1.105"
-                      value={peerIp}
-                      onChange={(e) => setPeerIp(e.target.value)}
-                    />
-                  </div>
-                  <TextField
-                    label="Peer Port"
-                    type="number"
-                    value={peerPort}
-                    onChange={(e) => setPeerPort(Number(e.target.value))}
-                  />
-                </div>
-
-                <div className="flex justify-end">
-                  <Button
-                    type="submit"
-                    size="sm"
-                    icon={<RefreshCw size={16} />}
-                    isLoading={isSyncingPeer}
-                    disabled={!peerIp.trim()}
-                  >
-                    Sync Now
-                  </Button>
-                </div>
-
-                {syncStatusMsg && (
-                  <div className="text-xs font-medium text-green-700 dark:text-green-300 bg-green-50 dark:bg-green-900/30 p-2.5 rounded-lg border border-green-200 dark:border-green-800 flex items-start space-x-2">
-                    <CheckCircle2 size={16} className="text-green-500 shrink-0 mt-0.5" />
-                    <span>{syncStatusMsg}</span>
-                  </div>
-                )}
-
-                {syncErrorMsg && (
-                  <div className="text-xs font-medium text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-900/30 p-2.5 rounded-lg border border-rose-200 dark:border-rose-800 flex items-start space-x-2">
-                    <AlertCircle size={16} className="text-rose-500 shrink-0 mt-0.5" />
-                    <span>{syncErrorMsg}</span>
-                  </div>
-                )}
-              </form>
-            </div>
-          </div>
-
-          {/* Unencrypted DB Manual Export */}
-          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 space-y-4">
-            <h2 className="text-lg font-semibold text-slate-800 dark:text-white border-b border-slate-100 dark:border-slate-700 pb-2 flex items-center space-x-2">
-              <Database size={20} className="text-blue-500" />
-              <span>Unencrypted DB Export</span>
-            </h2>
-            <p className="text-sm text-slate-500 dark:text-slate-400">Export your unencrypted SQLite database for manual backup, migration, or third-party analysis.</p>
-            <div className="pt-2">
-              <Button 
-                variant="secondary" 
-                icon={<Download size={18} />}
-                onClick={handleBackupDatabase}
-                isLoading={isBackingUp}
-              >
-                Export Unencrypted DB (.db)
-              </Button>
-              {backupMessage && <p className="text-sm mt-2 font-medium text-green-500">{backupMessage}</p>}
-              {backupError && <p className="text-sm mt-2 font-medium text-red-500">{backupError}</p>}
-            </div>
-          </div>
-
-
-          {/* Audit Logs */}
-          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden flex flex-col max-h-[800px]">
-          <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50 dark:bg-slate-900/50">
-            <h2 className="text-lg font-semibold text-slate-800 dark:text-white flex items-center space-x-2">
-              <History size={20} className="text-blue-500" />
-              <span>Audit Logs</span>
-            </h2>
-            <Button variant="secondary" onClick={() => fetchLogs(() => db.getAuditLogs())} isLoading={logsLoading}>
-              Refresh
-            </Button>
-          </div>
-          
-          <div className="p-0 overflow-y-auto flex-1">
-            {logsLoading && !auditLogs ? (
-              <div className="p-8 text-center text-slate-500">Loading logs...</div>
-            ) : auditLogs?.length === 0 ? (
-              <div className="p-8 text-center text-slate-500">No audit logs found.</div>
-            ) : (
-              <ul className="divide-y divide-slate-100 dark:divide-slate-700/50">
-                {auditLogs?.map((log) => (
-                  <li key={log.id} className="p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                    <div className="flex justify-between items-start mb-1">
-                      <span className="font-medium text-sm text-slate-800 dark:text-slate-200">
-                        {log.subject?.name || `Subject #${log.subjectId}`}
-                      </span>
-                      <span className="text-xs text-slate-500">
-                        {new Date(log.changedAt).toLocaleString()}
-                      </span>
-                    </div>
-                    <div className="text-sm text-slate-600 dark:text-slate-400">
-                      Changed <span className="font-semibold text-slate-700 dark:text-slate-300">{log.field}</span> from{' '}
-                      <span className="bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 px-1.5 py-0.5 rounded text-xs line-through">{log.oldValue}</span>{' '}
-                      to{' '}
-                      <span className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 px-1.5 py-0.5 rounded text-xs">{log.newValue}</span>
-                    </div>
-                    {log.changedBy && (
-                      <div className="text-xs text-slate-400 mt-2">
-                        By: {log.changedBy}
-                      </div>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
+          <AuditLogsSection
+            auditLogs={auditLogs}
+            logsLoading={logsLoading}
+            logsError={logsError}
+            onRefresh={handleRefreshAuditLogs}
+          />
         </div>
       </div>
 
@@ -888,4 +1164,3 @@ export default function Settings() {
     </div>
   )
 }
-

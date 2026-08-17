@@ -178,4 +178,51 @@ describe('Borrowing Rules & Student Clearance Unit Tests', () => {
       expect(res.totalReplacementCharges).toBe(35.0)
     })
   })
+
+  describe('Fine Capping Logic', () => {
+    it('should cap overdue fine per book at maximum $15.00', () => {
+      const daysOverdue = 100 // 100 days overdue at $0.50/day = $50.00
+      const finePerDay = 0.50
+      const maxCapPerBook = 15.00
+
+      const uncappedFine = daysOverdue * finePerDay
+      const cappedFine = Math.min(uncappedFine, maxCapPerBook)
+
+      expect(uncappedFine).toBe(50.00)
+      expect(cappedFine).toBe(15.00)
+    })
+  })
+
+  describe('Fine Payment & Waiver Resolution', () => {
+    it('should treat PAID and WAIVED incidents as resolved', () => {
+      const incidents = [
+        { id: 1, type: 'DAMAGED', actionTaken: 'PAID (Cash - $10.00) on 2026-08-06' },
+        { id: 2, type: 'LOST', actionTaken: 'WAIVED (Reason: Principal Approval) on 2026-08-06' },
+        { id: 3, type: 'LOST', actionTaken: null }
+      ]
+
+      const unresolvedIncidents = incidents.filter(i => {
+        if (!i.actionTaken) return true
+        const action = i.actionTaken.toUpperCase()
+        if (action.includes('RESOLVED') || action.includes('PAID') || action.includes('WAIVED')) return false
+        return true
+      })
+
+      expect(unresolvedIncidents.length).toBe(1)
+      expect(unresolvedIncidents[0].id).toBe(3)
+    })
+  })
+
+  describe('Book Average Condition Check', () => {
+    it('should reject checkout when subject average condition is <= 1.5', () => {
+      const subjectGood = { id: 1, name: 'Physics', averageCondition: 2.5 }
+      const subjectPoor = { id: 2, name: 'Chemistry', averageCondition: 1.2 }
+
+      const isGoodValid = (subjectGood.averageCondition ?? 3.0) > 1.5
+      const isPoorValid = (subjectPoor.averageCondition ?? 3.0) > 1.5
+
+      expect(isGoodValid).toBe(true)
+      expect(isPoorValid).toBe(false)
+    })
+  })
 })

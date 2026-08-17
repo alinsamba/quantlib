@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Search, CheckCircle, AlertOctagon, Printer, BookOpen, AlertTriangle, DollarSign } from 'lucide-react'
+import { useState, useMemo, useCallback } from 'react'
+import { Search, CheckCircle, AlertOctagon, Printer, BookOpen, AlertTriangle, DollarSign, CreditCard, ShieldCheck } from 'lucide-react'
 import { Button } from '../components/Button'
 import { TextField, SelectField } from '../components/TextField'
 import { Modal } from '../components/Modal'
@@ -27,9 +27,28 @@ export default function Clearance() {
   const [returningCheckout, setReturningCheckout] = useState<Checkout | null>(null)
   const [returnCondition, setReturnCondition] = useState<number>(3)
   const [returnSubmitting, setReturnSubmitting] = useState(false)
-  const handleSearch = async (e: React.FormEvent) => {
+
+  // Fine Payment Modal State
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false)
+  const [paymentAmount, setPaymentAmount] = useState<number>(0)
+  const [paymentMethod, setPaymentMethod] = useState('Cash')
+  const [paymentNotes, setPaymentNotes] = useState('')
+  const [paymentLoading, setPaymentLoading] = useState(false)
+  const [paymentError, setPaymentError] = useState('')
+
+  // Fine Waiver Modal State
+  const [isWaiverModalOpen, setIsWaiverModalOpen] = useState(false)
+  const [waiverReason, setWaiverReason] = useState('')
+  const [approvedBy, setApprovedBy] = useState('LIBRARIAN')
+  const [waiverLoading, setWaiverLoading] = useState(false)
+  const [waiverError, setWaiverError] = useState('')
+
+  const handleSearch = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!studentName.trim()) {
+    const trimmedName = studentName.trim()
+    const trimmedClass = studentClass.trim()
+
+    if (!trimmedName) {
       setError('Please enter a student name to search.')
       return
     }
@@ -38,8 +57,8 @@ export default function Clearance() {
     setLoading(true)
     try {
       const res = await db.getClearanceStatus({
-        studentName: studentName.trim(),
-        studentClass: studentClass.trim() || undefined
+        studentName: trimmedName,
+        studentClass: trimmedClass || undefined
       })
       if (res && res.success && res.data) {
         setClearanceData(res.data as any)
@@ -53,15 +72,15 @@ export default function Clearance() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [studentName, studentClass])
 
-  const handleGenerateSlip = async () => {
+  const handleGenerateSlip = useCallback(async () => {
     if (!clearanceData) return
     setSlipLoading(true)
     try {
       const res = await db.generateClearanceSlip({
-        studentName: clearanceData.studentName,
-        studentClass: clearanceData.studentClass || undefined
+        studentName: clearanceData.studentName.trim(),
+        studentClass: clearanceData.studentClass?.trim() || undefined
       })
       if (res && res.success && res.data) {
         setSlipData(res.data)
@@ -74,14 +93,140 @@ export default function Clearance() {
     } finally {
       setSlipLoading(false)
     }
-  }
+  }, [clearanceData])
+
+  const handleOpenPaymentModal = useCallback(() => {
+    if (!clearanceData) return
+    setPaymentAmount(clearanceData.totalReplacementCharges || 0)
+    setPaymentMethod('Cash')
+    setPaymentNotes('')
+    setPaymentError('')
+    setIsPaymentModalOpen(true)
+  }, [clearanceData])
+
+  const handleRecordPaymentSubmit = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!clearanceData) return
+    setPaymentLoading(true)
+    setPaymentError('')
+    try {
+      const res = await db.recordFinePayment({
+        studentName: clearanceData.studentName,
+        studentClass: clearanceData.studentClass || undefined,
+        amount: Number(paymentAmount),
+        paymentMethod,
+        notes: paymentNotes
+      })
+      if (res && res.success) {
+        setClearanceData(res.data)
+        setIsPaymentModalOpen(false)
+      } else {
+        setPaymentError(res?.error || 'Failed to record payment.')
+      }
+    } catch (err: unknown) {
+      setPaymentError(err instanceof Error ? err.message : 'Error recording payment.')
+    } finally {
+      setPaymentLoading(false)
+    }
+  }, [clearanceData, paymentAmount, paymentMethod, paymentNotes])
+
+  const handleOpenWaiverModal = useCallback(() => {
+    if (!clearanceData) return
+    setWaiverReason('')
+    setApprovedBy('LIBRARIAN')
+    setWaiverError('')
+    setIsWaiverModalOpen(true)
+  }, [clearanceData])
+
+  const handleWaiveSubmit = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!clearanceData) return
+    if (!waiverReason.trim()) {
+      setWaiverError('Please enter a reason for the waiver.')
+      return
+    }
+    setWaiverLoading(true)
+    setWaiverError('')
+    try {
+      const res = await db.waiveFine({
+        studentName: clearanceData.studentName,
+        studentClass: clearanceData.studentClass || undefined,
+        reason: waiverReason.trim(),
+        approvedBy: approvedBy.trim() || 'LIBRARIAN'
+      })
+      if (res && res.success) {
+        setClearanceData(res.data)
+        setIsWaiverModalOpen(false)
+      } else {
+        setWaiverError(res?.error || 'Failed to waive fine.')
+      }
+    } catch (err: unknown) {
+      setWaiverError(err instanceof Error ? err.message : 'Error waiving fine.')
+    } finally {
+      setWaiverLoading(false)
+    }
+  }, [clearanceData, waiverReason, approvedBy])
+
+
+
+  // Memoize incidents table rows and date formatting
+  const incidentsRows = useMemo(() => {
+    if (!clearanceData?.incidents) return null
+
+    const unresolvedSet = new Set((clearanceData.unresolvedIncidents || []).map(u => u.id))
+
+    return clearanceData.incidents.map((incident) => {
+      const isUnresolved = unresolvedSet.has(incident.id)
+      const dateStr = new Date(incident.date).toLocaleDateString()
+
+      return (
+        <tr key={incident.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+          <td className="p-3 font-medium text-slate-800 dark:text-slate-200">
+            {incident.bookTitle}
+          </td>
+          <td className="p-3">
+            <span
+              className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                incident.type === 'LOST'
+                  ? 'bg-rose-100 text-rose-700'
+                  : incident.type === 'DAMAGED'
+                  ? 'bg-amber-100 text-amber-700'
+                  : 'bg-slate-100 text-slate-700'
+              }`}
+            >
+              {incident.type}
+            </span>
+          </td>
+          <td className="p-3 text-slate-600 dark:text-slate-400">
+            {dateStr}
+          </td>
+          <td className="p-3">
+            <span
+              className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                isUnresolved
+                  ? 'bg-rose-100 text-rose-800'
+                  : 'bg-emerald-100 text-emerald-800'
+              }`}
+            >
+              {incident.actionTaken || (isUnresolved ? 'UNRESOLVED' : 'RESOLVED')}
+            </span>
+          </td>
+        </tr>
+      )
+    })
+  }, [clearanceData?.incidents, clearanceData?.unresolvedIncidents])
+
+  // Memoize date formatting for clearance slip
+  const slipTimestampStr = useMemo(() => {
+    return slipData ? new Date(slipData.timestamp).toLocaleString() : ''
+  }, [slipData])
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-12">
       <div>
         <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Student Clearance Slip Generator</h1>
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-          Verify student borrowing status, check outstanding items or incidents, and issue official End-of-Term clearance slips.
+          Verify student borrowing status, check outstanding items or incidents, manage fine payments/waivers, and issue official End-of-Term clearance slips.
         </p>
       </div>
 
@@ -188,14 +333,28 @@ export default function Clearance() {
               </div>
             </div>
 
-            <div className="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-100 dark:border-slate-700 shadow-sm flex items-center space-x-4">
-              <div className="p-3 bg-rose-100 dark:bg-rose-900/30 text-rose-600 rounded-lg">
-                <DollarSign size={24} />
+            <div className="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col justify-between space-y-2">
+              <div className="flex items-center space-x-4">
+                <div className="p-3 bg-rose-100 dark:bg-rose-900/30 text-rose-600 rounded-lg">
+                  <DollarSign size={24} />
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 uppercase font-bold">Replacement / Fine Charges</p>
+                  <p className="text-2xl font-bold text-slate-800 dark:text-white">${clearanceData.totalReplacementCharges.toFixed(2)}</p>
+                  <span className="text-[10px] text-slate-400">Overdue fines capped at max $15.00/book</span>
+                </div>
               </div>
-              <div>
-                <p className="text-xs text-slate-500 dark:text-slate-400 uppercase font-bold">Replacement Charges</p>
-                <p className="text-2xl font-bold text-slate-800 dark:text-white">${clearanceData.totalReplacementCharges.toFixed(2)}</p>
-              </div>
+
+              {(clearanceData.totalReplacementCharges > 0 || clearanceData.unresolvedIncidents.length > 0) && (
+                <div className="flex space-x-2 pt-2 border-t border-slate-100 dark:border-slate-700">
+                  <Button size="sm" variant="primary" icon={<CreditCard size={14} />} onClick={handleOpenPaymentModal} className="flex-1 text-xs py-1">
+                    Accept Payment
+                  </Button>
+                  <Button size="sm" variant="secondary" icon={<ShieldCheck size={14} />} onClick={handleOpenWaiverModal} className="flex-1 text-xs py-1">
+                    Waive Fine
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -282,49 +441,108 @@ export default function Clearance() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
-                  {clearanceData.incidents.map((incident) => {
-                    const isUnresolved = clearanceData.unresolvedIncidents.some(u => u.id === incident.id)
-                    return (
-                      <tr key={incident.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
-                        <td className="p-3 font-medium text-slate-800 dark:text-slate-200">
-                          {incident.bookTitle}
-                        </td>
-                        <td className="p-3">
-                          <span
-                            className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                              incident.type === 'LOST'
-                                ? 'bg-rose-100 text-rose-700'
-                                : incident.type === 'DAMAGED'
-                                ? 'bg-amber-100 text-amber-700'
-                                : 'bg-slate-100 text-slate-700'
-                            }`}
-                          >
-                            {incident.type}
-                          </span>
-                        </td>
-                        <td className="p-3 text-slate-600 dark:text-slate-400">
-                          {new Date(incident.date).toLocaleDateString()}
-                        </td>
-                        <td className="p-3">
-                          <span
-                            className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                              isUnresolved
-                                ? 'bg-rose-100 text-rose-800'
-                                : 'bg-emerald-100 text-emerald-800'
-                            }`}
-                          >
-                            {incident.actionTaken || (isUnresolved ? 'UNRESOLVED' : 'RESOLVED')}
-                          </span>
-                        </td>
-                      </tr>
-                    )
-                  })}
+                  {incidentsRows}
                 </tbody>
               </table>
             )}
           </div>
         </div>
       )}
+
+      {/* Record Fine Payment Modal */}
+      <Modal
+        isOpen={isPaymentModalOpen}
+        onClose={() => setIsPaymentModalOpen(false)}
+        title="Record Fine Payment"
+      >
+        <form onSubmit={handleRecordPaymentSubmit} className="space-y-4">
+          <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-lg border border-slate-200 dark:border-slate-700 text-sm">
+            <p><span className="font-semibold">Student:</span> {clearanceData?.studentName} {clearanceData?.studentClass ? `(${clearanceData.studentClass})` : ''}</p>
+            <p><span className="font-semibold">Total Replacement Charges:</span> ${clearanceData?.totalReplacementCharges.toFixed(2)}</p>
+          </div>
+
+          <TextField
+            label="Payment Amount ($)"
+            type="number"
+            step="0.01"
+            required
+            min={0}
+            value={paymentAmount}
+            onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)}
+          />
+
+          <SelectField
+            label="Payment Method"
+            value={paymentMethod}
+            onChange={(e) => setPaymentMethod(e.target.value)}
+            options={[
+              { value: 'Cash', label: 'Cash' },
+              { value: 'Mobile Money', label: 'Mobile Money' },
+              { value: 'Bank Transfer', label: 'Bank Transfer' },
+              { value: 'Card', label: 'Card' }
+            ]}
+          />
+
+          <TextField
+            label="Notes / Receipt No. (Optional)"
+            placeholder="e.g. Receipt #1042"
+            value={paymentNotes}
+            onChange={(e) => setPaymentNotes(e.target.value)}
+          />
+
+          {paymentError && <p className="text-red-500 text-sm font-medium">{paymentError}</p>}
+
+          <div className="pt-4 flex space-x-3 justify-end">
+            <Button variant="secondary" type="button" onClick={() => setIsPaymentModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" isLoading={paymentLoading} icon={<CreditCard size={16} />}>
+              Record Payment
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Waive Fine Modal */}
+      <Modal
+        isOpen={isWaiverModalOpen}
+        onClose={() => setIsWaiverModalOpen(false)}
+        title="Waive Fine / Replacement Charges"
+      >
+        <form onSubmit={handleWaiveSubmit} className="space-y-4">
+          <div className="bg-amber-50 dark:bg-amber-950/40 p-3 rounded-lg border border-amber-200 dark:border-amber-800 text-sm text-amber-800 dark:text-amber-200">
+            <p><span className="font-semibold">Student:</span> {clearanceData?.studentName} {clearanceData?.studentClass ? `(${clearanceData.studentClass})` : ''}</p>
+            <p><span className="font-semibold">Outstanding Amount to Waive:</span> ${clearanceData?.totalReplacementCharges.toFixed(2)}</p>
+          </div>
+
+          <TextField
+            label="Waiver Reason"
+            required
+            placeholder="e.g. Principal Exemption, Book Replaced, Hardship Waiver"
+            value={waiverReason}
+            onChange={(e) => setWaiverReason(e.target.value)}
+          />
+
+          <TextField
+            label="Approved By"
+            required
+            placeholder="e.g. Head Teacher / Librarian Name"
+            value={approvedBy}
+            onChange={(e) => setApprovedBy(e.target.value)}
+          />
+
+          {waiverError && <p className="text-red-500 text-sm font-medium">{waiverError}</p>}
+
+          <div className="pt-4 flex space-x-3 justify-end">
+            <Button variant="secondary" type="button" onClick={() => setIsWaiverModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" isLoading={waiverLoading} icon={<ShieldCheck size={16} />}>
+              Confirm Fine Waiver
+            </Button>
+          </div>
+        </form>
+      </Modal>
 
       {/* Printable Clearance Slip Modal */}
       <Modal
@@ -346,7 +564,7 @@ export default function Clearance() {
                 <div className="text-xs text-slate-500 dark:text-slate-400 flex justify-center space-x-4 pt-1">
                   <span>Academic Year: {slipData.school.academicYear || '2026'}</span>
                   <span>|</span>
-                  <span>Issued: {new Date(slipData.timestamp).toLocaleString()}</span>
+                  <span>Issued: {slipTimestampStr}</span>
                 </div>
               </div>
 

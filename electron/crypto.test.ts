@@ -22,7 +22,8 @@ describe('crypto', () => {
     it('should handle fs.unlinkSync error gracefully', () => {
       const mockError = new Error('Permission denied')
 
-      vi.spyOn(cryptoModule, 'encryptTempDatabase').mockImplementation(() => {})
+      vi.spyOn(cryptoModule, 'encryptTempDatabase').mockImplementation(async () => {})
+      vi.spyOn(cryptoModule, 'encryptTempDatabaseSync').mockImplementation(() => {})
       vi.spyOn(cryptoModule, 'getTempDbPath').mockReturnValue('/mock/userData/quantlib_temp.db')
 
       vi.spyOn(fs, 'existsSync').mockReturnValue(true)

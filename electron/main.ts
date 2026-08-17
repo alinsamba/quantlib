@@ -9,6 +9,8 @@ import { registerCheckoutHandlers } from './ipc/checkouts'
 import { registerAuditHandlers } from './ipc/audits'
 import { registerAnalyticsHandlers } from './ipc/analytics'
 import { registerBackupAndLanHandlers } from './ipc/backup-lan'
+import { stopAutoBackupScheduler } from './services/backup'
+import { stopLanSyncServer } from './services/lan-sync'
 
 // Re-export domain and utility functions for test compatibility
 export { getRuleForClass, calculateClearance } from './ipc/checkouts'
@@ -58,8 +60,11 @@ if (!gotTheLock) {
 }
 
 function createWindow() {
+  const publicDir = process.env.VITE_PUBLIC || ''
+  const distDir = process.env.DIST || ''
+
   win = new BrowserWindow({
-    icon: path.join(process.env.VITE_PUBLIC, 'icon.png'),
+    icon: path.join(publicDir, 'icon.png'),
     width: 1200,
     height: 800,
     titleBarStyle: 'hidden',
@@ -77,33 +82,50 @@ function createWindow() {
     }
   })
 
-  win.removeMenu()
+  if (typeof win?.removeMenu === 'function') {
+    win.removeMenu()
+  }
 
   // 2. Window Open Handler (Deny new windows, route external)
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith('https:') || url.startsWith('http:')) {
-      import('electron').then(({ shell }) => shell.openExternal(url))
-    }
-    return { action: 'deny' }
-  })
+  if (typeof win?.webContents?.setWindowOpenHandler === 'function') {
+    win.webContents.setWindowOpenHandler(({ url }) => {
+      if (url.startsWith('https:') || url.startsWith('http:')) {
+        import('electron').then(({ shell }) => shell.openExternal(url))
+      }
+      return { action: 'deny' }
+    })
+  }
 
   // 3. Navigation Handler (Block external origins)
-  win.webContents.on('will-navigate', (event, url) => {
-    const parsedUrl = new URL(url)
-    const isLocalFile = parsedUrl.protocol === 'file:'
-    const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL']
-    const isDevServer = VITE_DEV_SERVER_URL && parsedUrl.origin === new URL(VITE_DEV_SERVER_URL).origin
+  if (typeof win?.webContents?.on === 'function') {
+    win.webContents.on('will-navigate', (event, url) => {
+      const parsedUrl = new URL(url)
+      const isLocalFile = parsedUrl.protocol === 'file:'
+      const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL']
+      const isDevServer = VITE_DEV_SERVER_URL && parsedUrl.origin === new URL(VITE_DEV_SERVER_URL).origin
 
-    if (!isLocalFile && !isDevServer) {
-      event.preventDefault()
-    }
-  })
+      if (!isLocalFile && !isDevServer) {
+        event.preventDefault()
+      }
+    })
+  }
 
   const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL']
   if (VITE_DEV_SERVER_URL) {
-    win.loadURL(VITE_DEV_SERVER_URL)
+    if (typeof win?.loadURL === 'function') {
+      win.loadURL(VITE_DEV_SERVER_URL)
+    }
   } else {
-    win.loadFile(path.join(process.env.DIST, 'index.html'))
+    if (typeof win?.loadFile === 'function') {
+      win.loadFile(path.join(distDir, 'index.html'))
+    }
+  }
+
+  if (typeof win?.on === 'function') {
+    win.on('closed', () => {
+      stopAutoBackupScheduler()
+      win = null
+    })
   }
 }
 
@@ -116,6 +138,8 @@ registerAnalyticsHandlers()
 registerBackupAndLanHandlers(() => win)
 
 app.on('window-all-closed', async () => {
+  stopAutoBackupScheduler()
+  stopLanSyncServer()
   await disconnectAndCleanupDatabase()
   if (process.platform !== 'darwin') {
     app.quit()
@@ -124,6 +148,8 @@ app.on('window-all-closed', async () => {
 })
 
 app.on('before-quit', (event) => {
+  stopAutoBackupScheduler()
+  stopLanSyncServer()
   event.preventDefault()
   disconnectAndCleanupDatabase()
     .then(() => app.quit())

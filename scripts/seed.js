@@ -69,9 +69,12 @@ async function main() {
   const englishSubject = createdSubjects.find(s => s.name === 'English Literature')
   const physicsSubject = createdSubjects.find(s => s.name === 'Physics')
   const chemSubject = createdSubjects.find(s => s.name === 'Chemistry')
+<<<<<<< Updated upstream
   if (!mathSubject || !englishSubject || !physicsSubject || !chemSubject) {
     throw new Error('Failed to locate created subjects for checkouts')
   }
+=======
+>>>>>>> Stashed changes
 
   const now = new Date()
   const tenDaysAgo = new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000)

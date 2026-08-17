@@ -251,9 +251,7 @@ export async function disconnectAndCleanupDatabase() {
   // Wait for all in-flight async operations to finish (up to 5 seconds)
   const startTime = Date.now()
   while (activeOperationsCount > 0 && Date.now() - startTime < 5000) {
-    const { promise, resolve } = Promise.withResolvers<void>()
-    setTimeout(resolve, 50)
-    await promise
+    await new Promise<void>((resolve) => setTimeout(resolve, 50))
   }
 
   await disconnectPrisma()

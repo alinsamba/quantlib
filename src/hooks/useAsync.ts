@@ -6,7 +6,7 @@ interface AsyncState<T> {
   error: string | null;
 }
 
-export function useAsync<T = any>() {
+export function useAsync<T = unknown>() {
   const [state, setState] = useState<AsyncState<T>>({
     data: null,
     isLoading: false,

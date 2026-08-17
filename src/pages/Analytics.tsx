@@ -53,8 +53,8 @@ export default function AnalyticsPage() {
       ])
       setCirculation(circData)
       setDepreciation(depData)
-    } catch (err: any) {
-      setError(err.message || 'Failed to load analytics data')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to load analytics data')
     } finally {
       setLoading(false)
     }
@@ -65,7 +65,7 @@ export default function AnalyticsPage() {
     if (!depreciation?.decayProjections) return []
     const points = [0, 10, 25, 50, 100]
     return points.map((chk) => {
-      const row: Record<string, any> = { checkouts: `+${chk} Loans` }
+      const row: Record<string, string | number> = { checkouts: `+${chk} Loans` }
       depreciation.decayProjections.slice(0, 5).forEach((sub) => {
         const proj = sub.projections.find((p) => p.futureCheckouts === chk)
         row[sub.subjectName] = proj ? proj.projectedCondition : sub.averageCondition
@@ -244,7 +244,7 @@ export default function AnalyticsPage() {
                       cx="50%"
                       cy="50%"
                       outerRadius={80}
-                      label={({ name, value }: any) => `${name} (${value})`}
+                      label={({ name, value }: { name?: string | number; value?: string | number }) => `${name} (${value})`}
                     >
                       {(circulation?.popularCategories || []).map((_, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />

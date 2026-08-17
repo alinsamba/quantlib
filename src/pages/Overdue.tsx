@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Printer, Clock, AlertTriangle, CheckCircle } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Printer, Clock, AlertTriangle, RotateCcw } from 'lucide-react'
 import { db } from '../lib/ipc-client'
 import { useAsync } from '../hooks/useAsync'
 import { Button } from '../components/Button'
@@ -11,7 +11,7 @@ export default function Overdue() {
   const { data: overdueCheckouts, isLoading, error, execute } = useAsync<Checkout[]>()
   const [selectedCheckout, setSelectedCheckout] = useState<Checkout | null>(null)
   const [conditionIn, setConditionIn] = useState<number>(3)
-  const [returning, setReturning] = useState(false)
+  const [returnLoading, setReturnLoading] = useState(false)
   const [returnError, setReturnError] = useState('')
 
   useEffect(() => {
@@ -20,26 +20,27 @@ export default function Overdue() {
     })
   }, [execute])
 
-  const openReturnModal = (checkout: Checkout) => {
+  const handleOpenReturnModal = (checkout: Checkout) => {
     setSelectedCheckout(checkout)
     setConditionIn(3)
     setReturnError('')
   }
 
-  const handleReturnBook = async (e: React.FormEvent) => {
+  const handleReturnSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!selectedCheckout) return
 
-    setReturning(true)
+    setReturnLoading(true)
     setReturnError('')
     try {
-      await db.returnCheckout(selectedCheckout.id, conditionIn)
+      await db.returnCheckout(selectedCheckout.id, Number(conditionIn))
       setSelectedCheckout(null)
       execute(async () => db.getOverdueCheckouts())
     } catch (err: unknown) {
-      setReturnError(err instanceof Error ? err.message : String(err))
+      console.error('Error returning checkout', err)
+      setReturnError(err instanceof Error ? err.message : 'Failed to return book.')
     } finally {
-      setReturning(false)
+      setReturnLoading(false)
     }
   }
 
@@ -84,23 +85,13 @@ export default function Overdue() {
               className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 print:border-black print:border-2 print:shadow-none print:break-inside-avoid flex flex-col justify-between"
             >
               <div>
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center space-x-3">
-                    <div className="p-2 bg-rose-50 dark:bg-rose-900/30 text-rose-600 rounded-lg print:bg-transparent print:p-0">
-                      <AlertTriangle size={20} className="print:hidden" />
-                    </div>
-                    <h3 className="font-bold text-lg text-slate-800 dark:text-white print:text-black">
-                      Overdue Notice
-                    </h3>
+                <div className="flex items-center space-x-3 mb-4">
+                  <div className="p-2 bg-rose-50 dark:bg-rose-900/30 text-rose-600 rounded-lg print:bg-transparent print:p-0">
+                    <AlertTriangle size={20} className="print:hidden" />
                   </div>
-                  <Button
-                    variant="secondary"
-                    icon={<CheckCircle size={16} className="text-emerald-500" />}
-                    onClick={() => openReturnModal(checkout)}
-                    className="print:hidden text-xs"
-                  >
-                    Return Book
-                  </Button>
+                  <h3 className="font-bold text-lg text-slate-800 dark:text-white print:text-black">
+                    Overdue Notice
+                  </h3>
                 </div>
 
                 <div className="space-y-3">
@@ -150,50 +141,57 @@ export default function Overdue() {
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-slate-100 dark:border-slate-700 print:border-gray-300 mt-4 text-sm text-slate-600 dark:text-slate-400 print:text-black">
-                Please return this book to the library as soon as possible.
+              <div className="pt-4 border-t border-slate-100 dark:border-slate-700 print:border-gray-300 mt-4 flex items-center justify-between gap-2">
+                <span className="text-sm text-slate-600 dark:text-slate-400 print:text-black">
+                  Please return this book as soon as possible.
+                </span>
+                <Button 
+                  size="sm"
+                  variant="primary"
+                  icon={<RotateCcw size={16} />}
+                  onClick={() => handleOpenReturnModal(checkout)}
+                  className="print:hidden flex-shrink-0"
+                >
+                  Return Book
+                </Button>
               </div>
             </div>
           ))}
         </div>
       )}
 
-      <Modal
-        isOpen={Boolean(selectedCheckout)}
-        onClose={() => setSelectedCheckout(null)}
-        title="Process Returned Book"
+      {/* Return Book Modal */}
+      <Modal 
+        isOpen={!!selectedCheckout} 
+        onClose={() => setSelectedCheckout(null)} 
+        title="Return Overdue Book"
       >
         {selectedCheckout && (
-          <form onSubmit={handleReturnBook} className="space-y-4">
-            {returnError && (
-              <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-sm">
-                {returnError}
-              </div>
-            )}
-
-            <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-lg space-y-1 text-sm">
-              <p className="text-xs text-slate-500 uppercase font-semibold">Student</p>
-              <p className="font-bold text-slate-800 dark:text-white">{selectedCheckout.studentName}</p>
-              <p className="text-xs text-slate-500 uppercase font-semibold pt-2">Book Title / Subject</p>
-              <p className="font-bold text-slate-800 dark:text-white">{selectedCheckout.subject?.name}</p>
+          <form onSubmit={handleReturnSubmit} className="space-y-4">
+            <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-lg border border-slate-200 dark:border-slate-700 space-y-1 text-sm">
+              <p><span className="font-semibold text-slate-600 dark:text-slate-400">Student:</span> {selectedCheckout.studentName} {selectedCheckout.studentClass ? `(${selectedCheckout.studentClass})` : ''}</p>
+              <p><span className="font-semibold text-slate-600 dark:text-slate-400">Subject:</span> {selectedCheckout.subject?.name}</p>
+              <p><span className="font-semibold text-slate-600 dark:text-slate-400">Due Date:</span> {new Date(selectedCheckout.dueDate).toLocaleDateString()}</p>
             </div>
 
             <SelectField
-              label="Book Condition On Return"
+              label="Incoming Book Condition"
               value={String(conditionIn)}
-              onChange={(e) => setConditionIn(Number(e.target.value))}
+              onChange={e => setConditionIn(Number(e.target.value))}
               options={[
-                { label: 'Good (Condition 3.0)', value: '3' },
-                { label: 'Normal Wear (Condition 2.0)', value: '2' },
-                { label: 'Damaged (Condition 1.0)', value: '1' }
+                { value: '3', label: 'Good (3)' },
+                { value: '2', label: 'Fair / Normal (2)' },
+                { value: '1', label: 'Damaged (1)' },
               ]}
             />
 
-            <div className="flex space-x-3 justify-end pt-4">
-              <Button variant="secondary" onClick={() => setSelectedCheckout(null)}>
+            {returnError && <p className="text-red-500 text-sm font-medium">{returnError}</p>}
+
+            <div className="pt-4 flex space-x-3 justify-end">
+              <Button type="button" variant="secondary" onClick={() => setSelectedCheckout(null)}>
                 Cancel
               </Button>
-              <Button type="submit" isLoading={returning}>
+              <Button type="submit" isLoading={returnLoading} icon={<RotateCcw size={16} />}>
                 Confirm Return
               </Button>
             </div>

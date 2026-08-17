@@ -266,6 +266,115 @@ export function registerCheckoutHandlers() {
     }
   })
 
+  ipcMain.handle('get-active-checkouts', async (_, subjectId?: number) => {
+    try {
+      const prisma = ensureDb()
+      const whereClause: { status: string; subjectId?: number } = { status: 'ACTIVE' }
+      if (typeof subjectId === 'number' && subjectId > 0) {
+        whereClause.subjectId = subjectId
+      }
+      const checkouts = await prisma.checkout.findMany({
+        where: whereClause,
+        include: { subject: true },
+        orderBy: { checkoutDate: 'desc' }
+      })
+      return { success: true, data: checkouts }
+    } catch (err: unknown) {
+      return { success: false, error: sanitizeError(err) }
+    }
+  })
+
+  ipcMain.handle('record-fine-payment', async (_, data) => {
+    try {
+      const prisma = ensureDb()
+      const { studentName, studentClass, amount, paymentMethod, notes } = data || {}
+      if (!studentName || typeof studentName !== 'string' || !studentName.trim()) {
+        throw new Error('Invalid student name')
+      }
+      const amt = Number(amount)
+      if (isNaN(amt) || amt < 0) {
+        throw new Error('Invalid payment amount')
+      }
+
+      const sName = studentName.trim()
+      const sClass = studentClass ? studentClass.trim() : null
+      const method = paymentMethod || 'Cash'
+      const dateStr = new Date().toLocaleDateString()
+
+      const allIncidents = await prisma.incident.findMany()
+      const studentIncidents = allIncidents.filter(
+        (i) =>
+          i.responsibleParty &&
+          i.responsibleParty.trim().toLowerCase() === sName.toLowerCase() &&
+          (!sClass || !i.studentClass || i.studentClass.trim().toLowerCase() === sClass.toLowerCase()) &&
+          (!i.actionTaken ||
+            (!i.actionTaken.toUpperCase().includes('PAID') &&
+              !i.actionTaken.toUpperCase().includes('WAIVED') &&
+              !i.actionTaken.toUpperCase().includes('RESOLVED')))
+      )
+
+      for (const inc of studentIncidents) {
+        await prisma.incident.update({
+          where: { id: inc.id },
+          data: {
+            actionTaken: `PAID (${method} - $${amt.toFixed(2)}${notes ? ' - ' + notes : ''}) on ${dateStr}`
+          }
+        })
+      }
+
+      const updatedClearance = await calculateClearance(sName, sClass)
+      await encryptTempDatabase()
+      return { success: true, data: updatedClearance }
+    } catch (err: unknown) {
+      return { success: false, error: sanitizeError(err) }
+    }
+  })
+
+  ipcMain.handle('waive-fine', async (_, data) => {
+    try {
+      const prisma = ensureDb()
+      const { studentName, studentClass, reason, approvedBy } = data || {}
+      if (!studentName || typeof studentName !== 'string' || !studentName.trim()) {
+        throw new Error('Invalid student name')
+      }
+      if (!reason || typeof reason !== 'string' || !reason.trim()) {
+        throw new Error('Waiver reason is required')
+      }
+
+      const sName = studentName.trim()
+      const sClass = studentClass ? studentClass.trim() : null
+      const approver = approvedBy ? approvedBy.trim() : 'LIBRARIAN'
+      const dateStr = new Date().toLocaleDateString()
+
+      const allIncidents = await prisma.incident.findMany()
+      const studentIncidents = allIncidents.filter(
+        (i) =>
+          i.responsibleParty &&
+          i.responsibleParty.trim().toLowerCase() === sName.toLowerCase() &&
+          (!sClass || !i.studentClass || i.studentClass.trim().toLowerCase() === sClass.toLowerCase()) &&
+          (!i.actionTaken ||
+            (!i.actionTaken.toUpperCase().includes('PAID') &&
+              !i.actionTaken.toUpperCase().includes('WAIVED') &&
+              !i.actionTaken.toUpperCase().includes('RESOLVED')))
+      )
+
+      for (const inc of studentIncidents) {
+        await prisma.incident.update({
+          where: { id: inc.id },
+          data: {
+            actionTaken: `WAIVED (Reason: ${reason.trim()} by ${approver}) on ${dateStr}`
+          }
+        })
+      }
+
+      const updatedClearance = await calculateClearance(sName, sClass)
+      await encryptTempDatabase()
+      return { success: true, data: updatedClearance }
+    } catch (err: unknown) {
+      return { success: false, error: sanitizeError(err) }
+    }
+  })
+
   ipcMain.handle('get-overdue-checkouts', async () => {
     try {
       const prisma = ensureDb()
