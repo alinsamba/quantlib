@@ -172,6 +172,16 @@ export function registerBackupAndLanHandlers(getMainWindow: () => BrowserWindow 
 
   ipcMain.handle('set-theme', (_, mode) => {
     if (mode !== 'light' && mode !== 'dark') return { success: false, error: 'Invalid theme mode' }
+    const win = getMainWindow()
+    if (win && typeof win.setTitleBarOverlay === 'function') {
+      try {
+        win.setTitleBarOverlay({
+          color: mode === 'dark' ? '#0f172a' : '#ffffff',
+          symbolColor: mode === 'dark' ? '#ffffff' : '#0f172a',
+          height: 32
+        })
+      } catch {}
+    }
     return { success: true }
   })
 }

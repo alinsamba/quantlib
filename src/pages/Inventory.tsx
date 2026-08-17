@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useLocation } from 'react-router-dom'
 import { Download, Printer, RotateCcw } from 'lucide-react'
 import { exportToExcel, exportToCsv } from '../lib/exportUtils'
 import { db } from '../lib/ipc-client'
@@ -10,9 +11,16 @@ import { useAsync } from '../hooks/useAsync'
 import type { Subject, BorrowingRule, Checkout } from '../lib/types'
 
 export default function Inventory() {
+  const location = useLocation()
   const [searchTerm, setSearchTerm] = useState('')
   const { data: subjects, isLoading: subjectsLoading, execute: fetchSubjects } = useAsync<Subject[]>()
   const [borrowingRules, setBorrowingRules] = useState<BorrowingRule[]>([])
+
+  useEffect(() => {
+    if (location.state?.openAdd) {
+      setIsAddModalOpen(true)
+    }
+  }, [location.state])
 
   useEffect(() => {
     db.getBorrowingRules()

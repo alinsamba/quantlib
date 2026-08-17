@@ -1,9 +1,155 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Outlet, NavLink } from 'react-router-dom'
-import { LayoutDashboard, Book, AlertTriangle, Settings as SettingsIcon, Clock, FileCheck, ClipboardCheck, BarChart3 } from 'lucide-react'
+import { 
+  LayoutDashboard, 
+  BookOpen, 
+  AlertTriangle, 
+  Settings as SettingsIcon, 
+  Clock, 
+  FileCheck, 
+  ClipboardCheck, 
+  BarChart3,
+  ChevronLeft,
+  ChevronRight,
+  Sun,
+  Moon
+} from 'lucide-react'
 
-import { ThemeProvider } from './hooks/ThemeContext'
+import { ThemeProvider, useTheme } from './hooks/ThemeContext'
 import Login from './pages/Login'
+
+function AppLayout() {
+  const { theme, setTheme } = useTheme()
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    return localStorage.getItem('quantlib_sidebar_collapsed') === 'true'
+  })
+
+  useEffect(() => {
+    localStorage.setItem('quantlib_sidebar_collapsed', String(isCollapsed))
+  }, [isCollapsed])
+
+  const navItems = [
+    { to: '/', label: 'Dashboard', icon: LayoutDashboard },
+    { to: '/inventory', label: 'Inventory', icon: BookOpen },
+    { to: '/audit', label: 'Stock Audit', icon: ClipboardCheck },
+    { to: '/analytics', label: 'Analytics', icon: BarChart3 },
+    { to: '/incidents', label: 'Incident Log', icon: AlertTriangle },
+    { to: '/overdue', label: 'Overdue Books', icon: Clock },
+    { to: '/clearance', label: 'Clearance', icon: FileCheck },
+  ]
+
+  return (
+    <div className="flex h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-200">
+      {/* Sidebar */}
+      <aside 
+        className={`${
+          isCollapsed ? 'w-20' : 'w-64'
+        } transition-all duration-300 ease-in-out bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border-r border-slate-200/80 dark:border-slate-800 flex flex-col whitespace-nowrap print:hidden shadow-sm relative z-30 select-none`}
+      >
+        {/* App Branding */}
+        <div className="p-4 pt-6 flex items-center justify-between [webkit-app-region:drag]">
+          <div className="flex items-center space-x-3 overflow-hidden">
+            <div className="w-10 h-10 rounded-xl bg-blue-600/10 dark:bg-blue-500/20 flex items-center justify-center flex-shrink-0 text-blue-600 dark:text-blue-400">
+              <img src="/quantlib.svg" alt="QuantLib Logo" className="w-6 h-6 object-contain" />
+            </div>
+            {!isCollapsed && (
+              <div className="overflow-hidden transition-all duration-200">
+                <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-400 bg-clip-text text-transparent tracking-tight">
+                  QuantLib
+                </h1>
+                <p className="text-xs text-slate-400 dark:text-slate-500 font-medium">Library Management</p>
+              </div>
+            )}
+          </div>
+
+          <button 
+            type="button"
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors [webkit-app-region:no-drag]"
+            title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+          >
+            {isCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+          </button>
+        </div>
+
+        {/* Navigation List */}
+        <nav className="flex-1 px-3 space-y-1.5 mt-4 overflow-y-auto">
+          {navItems.map((item) => {
+            const Icon = item.icon
+            return (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                title={isCollapsed ? item.label : undefined}
+                className={({ isActive }) =>
+                  `flex items-center px-3.5 py-2.5 rounded-xl transition-all duration-150 [webkit-app-region:no-drag] font-medium text-sm group ${
+                    isActive
+                      ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/30'
+                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-white'
+                  }`
+                }
+              >
+                <Icon size={20} className="flex-shrink-0" />
+                {!isCollapsed && (
+                  <span className="ml-3 truncate">{item.label}</span>
+                )}
+              </NavLink>
+            )
+          })}
+        </nav>
+
+        {/* Bottom Actions: Theme Toggle & Settings */}
+        <div className="p-3 border-t border-slate-100 dark:border-slate-800/80 space-y-1.5">
+          {/* Quick Theme Toggle */}
+          <button
+            type="button"
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            title={isCollapsed ? `Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode` : undefined}
+            className="w-full flex items-center px-3.5 py-2.5 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-white transition-colors [webkit-app-region:no-drag] text-sm font-medium"
+          >
+            {theme === 'dark' ? (
+              <Sun size={20} className="flex-shrink-0 text-amber-400" />
+            ) : (
+              <Moon size={20} className="flex-shrink-0 text-slate-500" />
+            )}
+            {!isCollapsed && (
+              <span className="ml-3 truncate">{theme === 'dark' ? 'Light Theme' : 'Dark Theme'}</span>
+            )}
+          </button>
+
+          {/* Settings Nav */}
+          <NavLink
+            to="/settings"
+            title={isCollapsed ? "Settings" : undefined}
+            className={({ isActive }) =>
+              `flex items-center px-3.5 py-2.5 rounded-xl transition-all duration-150 [webkit-app-region:no-drag] font-medium text-sm ${
+                isActive
+                  ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/30'
+                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-white'
+              }`
+            }
+          >
+            <SettingsIcon size={20} className="flex-shrink-0" />
+            {!isCollapsed && <span className="ml-3 truncate">Settings</span>}
+          </NavLink>
+        </div>
+      </aside>
+
+      {/* Main Content Area */}
+      <main className="flex-1 flex flex-col overflow-hidden">
+        {/* Draggable Top Bar for frameless window */}
+        <div className="h-8 bg-white dark:bg-slate-950 border-b border-slate-200/50 dark:border-slate-800/50 [webkit-app-region:drag] w-full flex-shrink-0 transition-colors duration-200 print:hidden flex items-center justify-between px-4">
+          <div className="text-[11px] font-semibold text-slate-400 dark:text-slate-600 uppercase tracking-widest pointer-events-none select-none">
+            QuantLib &bull; School Library Tracker
+          </div>
+        </div>
+        <div className="flex-1 overflow-auto p-8 pt-6">
+          <Outlet />
+        </div>
+      </main>
+    </div>
+  )
+}
 
 function App() {
   const [isUnlocked, setIsUnlocked] = useState(() => {
@@ -26,90 +172,7 @@ function App() {
 
   return (
     <ThemeProvider>
-    <div className="flex h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
-      {/* Sidebar */}
-      <aside className="w-20 hover:w-64 transition-all duration-300 overflow-hidden bg-slate-900 text-white flex flex-col group whitespace-nowrap print:hidden">
-        <div className="p-5 pt-8 flex items-center space-x-3 [webkit-app-region:drag]">
-          <img src="/quantlib.svg" alt="QuantLib Logo" className="w-10 h-10 object-contain flex-shrink-0" />
-          <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-75">
-            <h1 className="text-2xl font-bold text-blue-400">QuantLib</h1>
-            <p className="text-sm text-slate-400 mt-1">Library Tracker</p>
-          </div>
-        </div>
-        
-        <nav className="flex-1 px-3 space-y-2 mt-4">
-          <NavLink 
-            to="/" 
-            className={({ isActive }) => `flex items-center px-4 py-3 rounded-lg transition-colors [webkit-app-region:no-drag] ${isActive ? 'bg-blue-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}
-          >
-            <LayoutDashboard size={20} className="flex-shrink-0" />
-            <span className="font-medium ml-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-75">Dashboard</span>
-          </NavLink>
-          <NavLink 
-            to="/inventory" 
-            className={({ isActive }) => `flex items-center px-4 py-3 rounded-lg transition-colors [webkit-app-region:no-drag] ${isActive ? 'bg-blue-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}
-          >
-            <Book size={20} className="flex-shrink-0" />
-            <span className="font-medium ml-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-75">Inventory</span>
-          </NavLink>
-          <NavLink 
-            to="/audit" 
-            className={({ isActive }) => `flex items-center px-4 py-3 rounded-lg transition-colors [webkit-app-region:no-drag] ${isActive ? 'bg-blue-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}
-          >
-            <ClipboardCheck size={20} className="flex-shrink-0" />
-            <span className="font-medium ml-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-75">Stock Audit</span>
-          </NavLink>
-          <NavLink 
-            to="/analytics" 
-            className={({ isActive }) => `flex items-center px-4 py-3 rounded-lg transition-colors [webkit-app-region:no-drag] ${isActive ? 'bg-blue-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}
-          >
-            <BarChart3 size={20} className="flex-shrink-0" />
-            <span className="font-medium ml-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-75 font-sans">Analytics</span>
-          </NavLink>
-          <NavLink 
-            to="/incidents" 
-            className={({ isActive }) => `flex items-center px-4 py-3 rounded-lg transition-colors [webkit-app-region:no-drag] ${isActive ? 'bg-blue-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}
-          >
-            <AlertTriangle size={20} className="flex-shrink-0" />
-            <span className="font-medium ml-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-75">Incident Log</span>
-          </NavLink>
-          <NavLink 
-            to="/overdue" 
-            className={({ isActive }) => `flex items-center px-4 py-3 rounded-lg transition-colors [webkit-app-region:no-drag] ${isActive ? 'bg-blue-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}
-          >
-            <Clock size={20} className="flex-shrink-0" />
-            <span className="font-medium ml-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-75">Overdue</span>
-          </NavLink>
-          <NavLink 
-            to="/clearance" 
-            className={({ isActive }) => `flex items-center px-4 py-3 rounded-lg transition-colors [webkit-app-region:no-drag] ${isActive ? 'bg-blue-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}
-          >
-            <FileCheck size={20} className="flex-shrink-0" />
-            <span className="font-medium ml-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-75">Clearance</span>
-          </NavLink>
-        </nav>
-
-        
-        <div className="p-3 mb-4">
-          <NavLink 
-            to="/settings" 
-            className={({ isActive }) => `flex items-center px-4 py-3 rounded-lg transition-colors [webkit-app-region:no-drag] ${isActive ? 'bg-blue-600 text-white' : 'hover:bg-slate-800 text-slate-300'}`}
-          >
-            <SettingsIcon size={20} className="flex-shrink-0" />
-            <span className="font-medium ml-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300 delay-75">Settings</span>
-          </NavLink>
-        </div>
-      </aside>
-
-      {/* Main Content */}
-      <main className="flex-1 flex flex-col overflow-hidden">
-        {/* Draggable Top Bar for frameless window */}
-        <div className="h-8 bg-slate-50 dark:bg-slate-900 [webkit-app-region:drag] w-full flex-shrink-0 transition-colors duration-200 print:hidden"></div>
-        <div className="flex-1 overflow-auto p-8 pt-4">
-          <Outlet />
-        </div>
-      </main>
-    </div>
+      <AppLayout />
     </ThemeProvider>
   )
 }
