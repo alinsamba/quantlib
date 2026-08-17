@@ -20,6 +20,9 @@ export default function Inventory() {
     if (location.state?.openAdd) {
       setIsAddModalOpen(true)
     }
+    if (location.state?.filterSubject) {
+      setSearchTerm(location.state.filterSubject)
+    }
   }, [location.state])
 
   useEffect(() => {

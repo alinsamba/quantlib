@@ -40,40 +40,55 @@ function AppLayout() {
 
   return (
     <div className="flex h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-200">
-      {/* Sidebar */}
+      {/* Sidebar (64px collapsed, 240px expanded) */}
       <aside 
         className={`${
-          isCollapsed ? 'w-20' : 'w-64'
-        } transition-all duration-300 ease-in-out bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border-r border-slate-200/80 dark:border-slate-800 flex flex-col whitespace-nowrap print:hidden shadow-sm relative z-30 select-none`}
+          isCollapsed ? 'w-16' : 'w-60'
+        } transition-all duration-300 ease-in-out bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border-r border-slate-200/80 dark:border-slate-800 flex flex-col whitespace-nowrap print:hidden shadow-xs relative z-30 select-none flex-shrink-0`}
       >
         {/* App Branding */}
-        <div className="p-4 pt-6 flex items-center justify-between [webkit-app-region:drag]">
+        <div className={`p-3.5 pt-6 flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'} [webkit-app-region:drag]`}>
           <div className="flex items-center space-x-3 overflow-hidden">
-            <div className="w-10 h-10 rounded-xl bg-blue-600/10 dark:bg-blue-500/20 flex items-center justify-center flex-shrink-0 text-blue-600 dark:text-blue-400">
-              <img src="/quantlib.svg" alt="QuantLib Logo" className="w-6 h-6 object-contain" />
+            <div className="w-9 h-9 rounded-xl bg-blue-600/10 dark:bg-blue-500/20 flex items-center justify-center flex-shrink-0 text-blue-600 dark:text-blue-400">
+              <img src="/quantlib.svg" alt="QuantLib Logo" className="w-5 h-5 object-contain" />
             </div>
             {!isCollapsed && (
               <div className="overflow-hidden transition-all duration-200">
-                <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-400 bg-clip-text text-transparent tracking-tight">
+                <h1 className="text-lg font-bold bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-400 bg-clip-text text-transparent tracking-tight">
                   QuantLib
                 </h1>
-                <p className="text-xs text-slate-400 dark:text-slate-500 font-medium">Library Management</p>
+                <p className="text-[11px] text-slate-400 dark:text-slate-500 font-medium">Library Management</p>
               </div>
             )}
           </div>
 
-          <button 
-            type="button"
-            onClick={() => setIsCollapsed(!isCollapsed)}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors [webkit-app-region:no-drag]"
-            title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
-          >
-            {isCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
-          </button>
+          {!isCollapsed && (
+            <button 
+              type="button"
+              onClick={() => setIsCollapsed(!isCollapsed)}
+              className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors [webkit-app-region:no-drag]"
+              title="Collapse Sidebar (64px)"
+            >
+              <ChevronLeft size={16} />
+            </button>
+          )}
         </div>
 
+        {isCollapsed && (
+          <div className="flex justify-center my-1 [webkit-app-region:no-drag]">
+            <button 
+              type="button"
+              onClick={() => setIsCollapsed(false)}
+              className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              title="Expand Sidebar (240px)"
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        )}
+
         {/* Navigation List */}
-        <nav className="flex-1 px-3 space-y-1.5 mt-4 overflow-y-auto">
+        <nav className="flex-1 px-2 space-y-1.5 mt-3 overflow-y-auto">
           {navItems.map((item) => {
             const Icon = item.icon
             return (
@@ -82,14 +97,16 @@ function AppLayout() {
                 to={item.to}
                 title={isCollapsed ? item.label : undefined}
                 className={({ isActive }) =>
-                  `flex items-center px-3.5 py-2.5 rounded-xl transition-all duration-150 [webkit-app-region:no-drag] font-medium text-sm group ${
+                  `flex items-center ${
+                    isCollapsed ? 'justify-center px-0 py-2.5' : 'px-3 py-2'
+                  } rounded-xl transition-all duration-150 [webkit-app-region:no-drag] font-medium text-sm group ${
                     isActive
                       ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/30'
                       : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-white'
                   }`
                 }
               >
-                <Icon size={20} className="flex-shrink-0" />
+                <Icon size={19} className="flex-shrink-0" />
                 {!isCollapsed && (
                   <span className="ml-3 truncate">{item.label}</span>
                 )}
@@ -99,18 +116,20 @@ function AppLayout() {
         </nav>
 
         {/* Bottom Actions: Theme Toggle & Settings */}
-        <div className="p-3 border-t border-slate-100 dark:border-slate-800/80 space-y-1.5">
+        <div className="p-2 border-t border-slate-100 dark:border-slate-800/80 space-y-1">
           {/* Quick Theme Toggle */}
           <button
             type="button"
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
             title={isCollapsed ? `Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode` : undefined}
-            className="w-full flex items-center px-3.5 py-2.5 rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-white transition-colors [webkit-app-region:no-drag] text-sm font-medium"
+            className={`w-full flex items-center ${
+              isCollapsed ? 'justify-center px-0 py-2.5' : 'px-3 py-2'
+            } rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-white transition-colors [webkit-app-region:no-drag] text-sm font-medium`}
           >
             {theme === 'dark' ? (
-              <Sun size={20} className="flex-shrink-0 text-amber-400" />
+              <Sun size={19} className="flex-shrink-0 text-amber-400" />
             ) : (
-              <Moon size={20} className="flex-shrink-0 text-slate-500" />
+              <Moon size={19} className="flex-shrink-0 text-slate-500" />
             )}
             {!isCollapsed && (
               <span className="ml-3 truncate">{theme === 'dark' ? 'Light Theme' : 'Dark Theme'}</span>
@@ -122,14 +141,16 @@ function AppLayout() {
             to="/settings"
             title={isCollapsed ? "Settings" : undefined}
             className={({ isActive }) =>
-              `flex items-center px-3.5 py-2.5 rounded-xl transition-all duration-150 [webkit-app-region:no-drag] font-medium text-sm ${
+              `flex items-center ${
+                isCollapsed ? 'justify-center px-0 py-2.5' : 'px-3 py-2'
+              } rounded-xl transition-all duration-150 [webkit-app-region:no-drag] font-medium text-sm ${
                 isActive
                   ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/30'
                   : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-white'
               }`
             }
           >
-            <SettingsIcon size={20} className="flex-shrink-0" />
+            <SettingsIcon size={19} className="flex-shrink-0" />
             {!isCollapsed && <span className="ml-3 truncate">Settings</span>}
           </NavLink>
         </div>
