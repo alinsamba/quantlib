@@ -169,11 +169,11 @@ describe('M3 Empirical Stress Test Suite (Challenger M3)', () => {
       expect(formatted).toMatch(/^19700101_\d{6}$/)
     })
 
-    it('should demonstrate flaw when invalid Date is passed to formatBackupTimestamp', () => {
+    it('should safely handle when invalid Date is passed to formatBackupTimestamp', () => {
       const invalidDate = new Date(NaN)
       const formatted = formatBackupTimestamp(invalidDate)
-      // BUG surface: returns "NaNNaNNaN_NaNNaNNaN" instead of throwing or falling back
-      expect(formatted).toBe('NaNNaNNaN_NaNNaNNaN')
+      // Robust fix: falls back to current valid timestamp instead of NaNNaNNaN_NaNNaNNaN
+      expect(formatted).toMatch(/^\d{8}_\d{6}$/)
     })
 
     it('should handle year boundaries (Dec 31 23:59:59)', () => {
@@ -220,12 +220,11 @@ describe('M3 Empirical Stress Test Suite (Challenger M3)', () => {
       expect(isBackupDue(hour1Ago, 0.5, now)).toBe(true)
     })
 
-    it('should demonstrate vulnerability with future lastBackupAt (clock skew)', () => {
+    it('should handle clock skew into the future gracefully without permanently suppressing backups', () => {
       const now = new Date('2026-08-06T12:00:00Z')
       const futureDate = new Date('2026-08-06T15:00:00Z') // 3 hours in future
-      // Elapsed hours = -3. -3 >= 24 is false.
-      // Clock skew into future will suppress backups until real time catches up
-      expect(isBackupDue(futureDate, 24, now)).toBe(false)
+      // Clock skew into future triggers backup safely rather than permanently suppressing backups
+      expect(isBackupDue(futureDate, 24, now)).toBe(true)
     })
 
     it('should demonstrate behavior when intervalHours is NaN or string', () => {
@@ -301,32 +300,28 @@ describe('M3 Empirical Stress Test Suite (Challenger M3)', () => {
       })
     })
 
-    it('should reveal flaw: checkout return state / status updates from peer are ignored when checkout exists locally', async () => {
-      // Peer payload shows checkout is RETURNED on 2026-08-01
+    it('should update local checkout status when peer marks checkout as RETURNED', async () => {
       const peerPayload = {
         checkouts: [
           {
             subjectId: 1,
-            studentName: 'Alice Smith',
-            studentClass: 'S.4',
-            checkoutDate: '2026-07-20T10:00:00Z',
-            dueDate: '2026-08-03T10:00:00Z',
-            returnDate: '2026-08-01T10:00:00Z',
+            studentName: 'Alice',
+            checkoutDate: '2026-08-01T00:00:00Z',
+            dueDate: '2026-08-15T00:00:00Z',
+            returnDate: '2026-08-05T00:00:00Z',
             status: 'RETURNED',
             conditionOut: 3,
-            conditionIn: 3
+            conditionIn: 2
           }
         ]
       }
 
-      // Local machine already has checkout recorded as ACTIVE
       const existingCheckout = {
-        id: 101,
+        id: 10,
         subjectId: 1,
-        studentName: 'Alice Smith',
-        studentClass: 'S.4',
-        checkoutDate: new Date('2026-07-20T10:00:00Z'),
-        dueDate: new Date('2026-08-03T10:00:00Z'),
+        studentName: 'Alice',
+        checkoutDate: new Date('2026-08-01T00:00:00Z'),
+        dueDate: new Date('2026-08-15T00:00:00Z'),
         returnDate: null,
         status: 'ACTIVE',
         conditionOut: 3
@@ -346,11 +341,15 @@ describe('M3 Empirical Stress Test Suite (Challenger M3)', () => {
 
       const res = await mergeLanSyncPayload(mockPrisma, peerPayload)
 
-      // Finding: mergeLanSyncPayload checks `if (!existing)` before create, but NEVER updates `existing`!
-      // Therefore checkoutsMerged is 0, and local status remains ACTIVE!
-      expect(res.mergedCounts.checkouts).toBe(0)
+      // Verified: mergeLanSyncPayload updates local checkout to RETURNED status
+      expect(res.mergedCounts.checkouts).toBe(1)
       expect(txMock.checkout.create).not.toHaveBeenCalled()
-      expect(txMock.checkout.update).not.toHaveBeenCalled()
+      expect(txMock.checkout.update).toHaveBeenCalledWith(expect.objectContaining({
+        where: { id: 10 },
+        data: expect.objectContaining({
+          status: 'RETURNED'
+        })
+      }))
     })
 
     it('should demonstrate transaction crash if peer checkout has invalid Date string', async () => {

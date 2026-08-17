@@ -3,12 +3,13 @@ import path from 'node:path'
 import { app } from 'electron'
 import { getPrisma } from '../database'
 export function formatBackupTimestamp(date: Date = new Date()): string {
-  const yyyy = date.getFullYear()
-  const mm = String(date.getMonth() + 1).padStart(2, '0')
-  const dd = String(date.getDate()).padStart(2, '0')
-  const hh = String(date.getHours()).padStart(2, '0')
-  const min = String(date.getMinutes()).padStart(2, '0')
-  const ss = String(date.getSeconds()).padStart(2, '0')
+  const d = (!(date instanceof Date) || isNaN(date.getTime())) ? new Date() : date
+  const yyyy = d.getFullYear()
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  const hh = String(d.getHours()).padStart(2, '0')
+  const min = String(d.getMinutes()).padStart(2, '0')
+  const ss = String(d.getSeconds()).padStart(2, '0')
   return `${yyyy}${mm}${dd}_${hh}${min}${ss}`
 }
 
@@ -20,6 +21,7 @@ export function isBackupDue(
   if (!lastBackupAt) return true
   const lastDate = lastBackupAt instanceof Date ? lastBackupAt : new Date(lastBackupAt as string)
   if (!(lastDate instanceof Date) || isNaN(lastDate.getTime())) return true
+  if (lastDate.getTime() > now.getTime()) return true
 
   const diffMs = now.getTime() - lastDate.getTime()
   const diffHours = diffMs / (1000 * 60 * 60)

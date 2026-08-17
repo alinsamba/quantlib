@@ -90,6 +90,12 @@ export async function packageLanSyncPayload(client: PrismaClient) {
   }
 }
 
+function safeDate(val: unknown, fallback: Date = new Date()): Date {
+  if (!val) return fallback
+  const d = val instanceof Date ? val : new Date(val as string)
+  return isNaN(d.getTime()) ? fallback : d
+}
+
 export async function mergeLanSyncPayload(client: PrismaClient, payload: unknown) {
   const p = (payload && typeof payload === 'object') ? (payload as Record<string, unknown>) : null
   if (!p) return { mergedCounts: { subjects: 0, checkouts: 0, incidents: 0, rules: 0 } }
@@ -182,6 +188,8 @@ export async function mergeLanSyncPayload(client: PrismaClient, payload: unknown
       }
     }
 
+
+
     // 3. Checkouts with mapped local subject ID (Fixes Finding #2)
     if (Array.isArray(p.checkouts)) {
       for (const c of (p.checkouts as LanSyncCheckout[])) {
@@ -197,11 +205,15 @@ export async function mergeLanSyncPayload(client: PrismaClient, payload: unknown
         }
 
         if (c.studentName && mappedSubjectId !== null) {
+          const parsedCheckoutDate = safeDate(c.checkoutDate)
+          const parsedDueDate = safeDate(c.dueDate)
+          const parsedReturnDate = c.returnDate ? safeDate(c.returnDate) : null
+
           const existing = await tx.checkout.findFirst({
             where: {
               studentName: c.studentName,
               subjectId: mappedSubjectId,
-              checkoutDate: new Date(c.checkoutDate)
+              checkoutDate: parsedCheckoutDate
             }
           })
 
@@ -211,12 +223,22 @@ export async function mergeLanSyncPayload(client: PrismaClient, payload: unknown
                 subjectId: mappedSubjectId,
                 studentName: c.studentName,
                 studentClass: c.studentClass || null,
-                checkoutDate: new Date(c.checkoutDate),
-                dueDate: new Date(c.dueDate),
-                returnDate: c.returnDate ? new Date(c.returnDate) : null,
+                checkoutDate: parsedCheckoutDate,
+                dueDate: parsedDueDate,
+                returnDate: parsedReturnDate,
                 status: c.status || 'ACTIVE',
                 conditionOut: c.conditionOut ?? 3,
                 conditionIn: c.conditionIn ?? null
+              }
+            })
+            checkoutsMerged++
+          } else if (existing.status !== 'RETURNED' && c.status === 'RETURNED') {
+            await tx.checkout.update({
+              where: { id: existing.id },
+              data: {
+                returnDate: parsedReturnDate || new Date(),
+                status: 'RETURNED',
+                conditionIn: c.conditionIn ?? existing.conditionIn ?? 3
               }
             })
             checkoutsMerged++
@@ -238,18 +260,19 @@ export async function mergeLanSyncPayload(client: PrismaClient, payload: unknown
         }
 
         if (inc.bookTitle) {
+          const parsedDate = safeDate(inc.date)
           const existing = await tx.incident.findFirst({
             where: {
               bookTitle: inc.bookTitle,
-              date: new Date(inc.date)
+              date: parsedDate
             }
           })
 
           if (!existing) {
             await tx.incident.create({
               data: {
-                type: inc.type,
-                date: new Date(inc.date),
+                type: inc.type || 'DAMAGED',
+                date: parsedDate,
                 subjectId: mappedSubjectId,
                 bookTitle: inc.bookTitle,
                 condition: inc.condition || null,
