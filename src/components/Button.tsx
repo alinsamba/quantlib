@@ -10,11 +10,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 export function Button({ variant = 'primary', size = 'md', icon, isLoading, children, className = '', disabled, ...props }: ButtonProps) {
   const baseClasses = "flex items-center justify-center space-x-2 rounded-lg transition-colors shadow-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed";
   
-<<<<<<< Updated upstream
-  const sizes = {
-=======
   const sizeClasses = {
->>>>>>> Stashed changes
     sm: "px-3 py-1.5 text-xs",
     md: "px-5 py-2.5 text-sm",
     lg: "px-6 py-3 text-base"
@@ -28,11 +24,7 @@ export function Button({ variant = 'primary', size = 'md', icon, isLoading, chil
 
   return (
     <button 
-<<<<<<< Updated upstream
-      className={`${baseClasses} ${sizes[size]} ${variants[variant]} ${className}`}
-=======
       className={`${baseClasses} ${sizeClasses[size]} ${variants[variant]} ${className}`}
->>>>>>> Stashed changes
       disabled={disabled || isLoading}
       {...props}
     >
