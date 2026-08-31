@@ -91,6 +91,13 @@ export default function Inventory() {
     return map
   }, [subjects])
 
+  /**
+   * Resolves the applicable borrowing rule for a student based on class/grade.
+   * Priority:
+   * 1. Exact class/role match (e.g. "S.4", "TEACHER")
+   * 2. Grade range match using flexible prefix and number extraction (e.g. "S.1-S.4" matching "S.4 North" or "S.2A")
+   * 3. Fallback to "DEFAULT" borrowing rule
+   */
   const activeRule = useMemo(() => {
     if (!borrowingRules || borrowingRules.length === 0) {
       return { roleOrGrade: 'DEFAULT', maxBooksAllowed: 2, borrowDurationDays: 14, finePerDay: 0 }
@@ -103,29 +110,30 @@ export default function Inventory() {
     const exact = borrowingRules.find(r => r.roleOrGrade.toUpperCase() === normalized)
     if (exact) return exact
 
-    for (const rule of borrowingRules) {
-      const key = rule.roleOrGrade.toUpperCase()
-      if (key.includes('-')) {
-        const parts = key.split('-').map(p => p.trim())
-        if (parts.length === 2) {
-          const [start, end] = parts
-          const startMatch = start.match(/^([A-Z.]+)(\d+)$/)
-          const endMatch = end.match(/^([A-Z.]+)(\d+)$/)
-          const classMatch = normalized.match(/^([A-Z.]+)(\d+)$/)
-          if (startMatch && endMatch && classMatch) {
-            const [, startPrefix, startNumStr] = startMatch
-            const [, endPrefix, endNumStr] = endMatch
-            const [, classPrefix, classNumStr] = classMatch
-            if (classPrefix === startPrefix && classPrefix === endPrefix) {
-              const startNum = parseInt(startNumStr, 10)
-              const endNum = parseInt(endNumStr, 10)
-              const classNum = parseInt(classNumStr, 10)
-              if (classNum >= startNum && classNum <= endNum) return rule
+    // Extract prefix and grade number from student class (e.g., "S.4 North" -> prefix "S", grade 4)
+    const classMatch = normalized.match(/^([A-Z]+)[.\s]*(\d+)/i)
+    if (classMatch) {
+      const [, classPrefix, classNumStr] = classMatch
+      const classNum = parseInt(classNumStr, 10)
+
+      for (const rule of borrowingRules) {
+        const key = rule.roleOrGrade.toUpperCase()
+        if (key.includes('-')) {
+          const rangeMatch = key.match(/^([A-Z]+)[.\s]*(\d+)\s*-\s*([A-Z]+)[.\s]*(\d+)$/i)
+          if (rangeMatch) {
+            const [, rPre1, rStart, rPre2, rEnd] = rangeMatch
+            if (classPrefix.toUpperCase() === rPre1.toUpperCase() && rPre1.toUpperCase() === rPre2.toUpperCase()) {
+              const startNum = parseInt(rStart, 10)
+              const endNum = parseInt(rEnd, 10)
+              if (classNum >= startNum && classNum <= endNum) {
+                return rule
+              }
             }
           }
         }
       }
     }
+
     return borrowingRules.find(r => r.roleOrGrade === 'DEFAULT') || borrowingRules[0]
   }, [borrowingRules, issueData.studentClass])
 
@@ -218,7 +226,7 @@ export default function Inventory() {
     setReturnConditionIn(3)
     try {
       const res = await db.getActiveCheckouts(sub.id)
-      const list = Array.isArray(res) ? res : (res?.data || [])
+      const list = Array.isArray(res) ? res : []
       setActiveCheckoutsForReturn(list)
       if (list.length > 0) {
         setSelectedCheckoutIdToReturn(list[0].id)
@@ -244,7 +252,7 @@ export default function Inventory() {
       setIsReturnModalOpen(false)
       fetchSubjects(async () => {
         const d = await db.getSubjects()
-        return d.data
+        return d
       })
     } catch (err: unknown) {
       console.error('Error returning checkout', err)

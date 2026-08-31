@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, memo } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef, memo } from 'react'
 import {
   ClipboardCheck,
   Plus,
@@ -146,6 +146,15 @@ export default function StockAuditPage() {
   const [savingSubjectId, setSavingSubjectId] = useState<number | null>(null)
   const [completing, setCompleting] = useState(false)
   const [viewHistory, setViewHistory] = useState(false)
+  const successTimerRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (successTimerRef.current) {
+        window.clearTimeout(successTimerRef.current)
+      }
+    }
+  }, [])
 
   const initItemEdits = useCallback((audit: StockAudit) => {
     const edits: Record<number, { actualCount: number; notes: string }> = {}
@@ -219,14 +228,26 @@ export default function StockAuditPage() {
   }, [])
 
   const handleNotesChange = useCallback((subjectId: number, notes: string) => {
-    setItemEdits((prev) => ({
-      ...prev,
-      [subjectId]: {
-        actualCount: prev[subjectId]?.actualCount ?? 0,
-        notes
+    setItemEdits((prev) => {
+      const currentActual = prev[subjectId]?.actualCount
+      const fallbackActual = currentActual !== undefined
+        ? currentActual
+        : (() => {
+            const item = activeAudit?.items?.find((i) => i.subjectId === subjectId)
+            if (item) return item.actualCount
+            const sub = subjects.find((s) => s.id === subjectId)
+            return sub ? Math.max(0, sub.openingCount + sub.recovered - sub.damaged - sub.lost - sub.issued) : 0
+          })()
+
+      return {
+        ...prev,
+        [subjectId]: {
+          actualCount: fallbackActual,
+          notes
+        }
       }
-    }))
-  }, [])
+    })
+  }, [activeAudit, subjects])
 
   const handleSaveItem = useCallback(async (subjectId: number) => {
     if (!activeAudit) return
@@ -257,9 +278,9 @@ export default function StockAuditPage() {
         }
         return { ...prev, items: newItems }
       })
-
       setSuccessMsg('Audited count saved.')
-      setTimeout(() => setSuccessMsg(null), 3000)
+      if (successTimerRef.current) window.clearTimeout(successTimerRef.current)
+      successTimerRef.current = window.setTimeout(() => setSuccessMsg(null), 3000)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to save item count')
     } finally {

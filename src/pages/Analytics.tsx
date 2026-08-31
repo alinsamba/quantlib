@@ -139,7 +139,7 @@ export default function AnalyticsPage() {
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Total Checkouts</p>
                 <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-1">
-                  {circulation?.monthlyTrends.reduce((acc, m) => acc + m.checkouts, 0) || 0}
+                  {(circulation?.monthlyTrends ?? []).reduce((acc, m) => acc + (m.checkouts || 0), 0)}
                 </p>
               </div>
               <div className="p-3 bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 rounded-lg">
@@ -151,7 +151,7 @@ export default function AnalyticsPage() {
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Peak Day</p>
                 <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-1">
-                  {circulation?.peakDays.reduce((max, d) => (d.count > max.count ? d : max), { day: 'None', count: 0 }).day || 'N/A'}
+                  {(circulation?.peakDays ?? []).reduce((max, d) => (d.count > max.count ? d : max), { day: 'None', count: 0 }).day || 'N/A'}
                 </p>
               </div>
               <div className="p-3 bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 rounded-lg">
@@ -163,7 +163,7 @@ export default function AnalyticsPage() {
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Popular Category</p>
                 <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-1 truncate max-w-[150px]">
-                  {circulation?.popularCategories[0]?.category || 'General'}
+                  {circulation?.popularCategories?.[0]?.category || 'General'}
                 </p>
               </div>
               <div className="p-3 bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400 rounded-lg">
@@ -175,7 +175,7 @@ export default function AnalyticsPage() {
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Top Reader</p>
                 <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-1 truncate max-w-[150px]">
-                  {circulation?.topReaders[0]?.studentName || 'N/A'}
+                  {circulation?.topReaders?.[0]?.studentName || 'N/A'}
                 </p>
               </div>
               <div className="p-3 bg-purple-50 dark:bg-purple-950 text-purple-600 dark:text-purple-400 rounded-lg">
@@ -183,7 +183,6 @@ export default function AnalyticsPage() {
               </div>
             </div>
           </div>
-
           {/* Charts Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Monthly Trends Chart */}
@@ -309,7 +308,7 @@ export default function AnalyticsPage() {
                   Est. Total Replacement Cost
                 </p>
                 <p className="text-2xl font-bold text-red-600 dark:text-red-400 mt-1">
-                  ${depreciation?.replacementCostAnalysis.totalReplacementCost.toFixed(2) || '0.00'}
+                  ${depreciation?.replacementCostAnalysis?.totalReplacementCost?.toFixed(2) ?? '0.00'}
                 </p>
               </div>
               <div className="p-3 bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400 rounded-lg">
@@ -323,7 +322,7 @@ export default function AnalyticsPage() {
                   Damaged Items
                 </p>
                 <p className="text-2xl font-bold text-amber-600 dark:text-amber-400 mt-1">
-                  {depreciation?.replacementCostAnalysis.totalDamaged || 0}
+                  {depreciation?.replacementCostAnalysis?.totalDamaged ?? 0}
                 </p>
               </div>
               <div className="p-3 bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400 rounded-lg">
@@ -337,7 +336,7 @@ export default function AnalyticsPage() {
                   Near End-of-Life Books
                 </p>
                 <p className="text-2xl font-bold text-purple-600 dark:text-purple-400 mt-1">
-                  {depreciation?.replacementCostAnalysis.totalNearEndLife || 0}
+                  {depreciation?.replacementCostAnalysis?.totalNearEndLife ?? 0}
                 </p>
               </div>
               <div className="p-3 bg-purple-50 dark:bg-purple-950 text-purple-600 dark:text-purple-400 rounded-lg">
@@ -366,7 +365,7 @@ export default function AnalyticsPage() {
                   <YAxis domain={[1, 3]} stroke="#94a3b8" />
                   <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', color: '#fff' }} />
                   <Legend />
-                  {depreciation?.decayProjections.slice(0, 5).map((sub, idx) => (
+                  {(depreciation?.decayProjections ?? []).slice(0, 5).map((sub, idx) => (
                     <Line
                       key={sub.subjectId}
                       type="monotone"
@@ -404,7 +403,7 @@ export default function AnalyticsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 dark:divide-slate-800 text-sm">
-                  {(!depreciation?.replacementCostAnalysis.subjects ||
+                  {(!depreciation?.replacementCostAnalysis?.subjects ||
                     depreciation.replacementCostAnalysis.subjects.length === 0) ? (
                     <tr>
                       <td colSpan={7} className="p-8 text-center text-slate-500">
@@ -412,7 +411,7 @@ export default function AnalyticsPage() {
                       </td>
                     </tr>
                   ) : (
-                    depreciation.replacementCostAnalysis.subjects.map((sub) => (
+                    (depreciation.replacementCostAnalysis.subjects ?? []).map((sub) => (
                       <tr key={sub.subjectId} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
                         <td className="p-4 font-medium text-slate-900 dark:text-slate-100">{sub.name}</td>
                         <td className="p-4 text-slate-500">{sub.category}</td>

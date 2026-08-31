@@ -66,11 +66,11 @@ export default function Dashboard() {
     if (!summaryData?.subjects) return []
     const mapped = summaryData.subjects.map((s: SubjectSummary) => {
       const available = calculateAvailable(s)
-      const total = s.openingCount + s.recovered
+      const total = Math.max(s.openingCount, available + (s.issued || 0) + (s.damaged || 0) + (s.lost || 0), 1)
       const percentOfTotal = summaryData.totalBooks > 0 
-        ? Math.round((total / summaryData.totalBooks) * 100) 
+        ? Math.min(100, Math.max(0, Math.round((total / summaryData.totalBooks) * 100))) 
         : 0
-      const availPercent = total > 0 ? Math.round((available / total) * 100) : 0
+      const availPercent = total > 0 ? Math.min(100, Math.max(0, Math.round((available / total) * 100))) : 0
       return {
         id: s.id,
         name: s.name,
@@ -291,10 +291,9 @@ export default function Dashboard() {
             {/* Horizontal Bar Breakdown Rows */}
             <div className="space-y-4 overflow-y-auto max-h-[420px] pr-1">
               {subjectData.map((sub, idx) => {
-                const totalBarWidthPercent = Math.max(8, Math.round((sub.total / maxSubjectTotal) * 100))
-                const availableRatio = sub.total > 0 ? (sub.available / sub.total) : 0
-                const issuedRatio = sub.total > 0 ? (sub.issued / sub.total) : 0
-
+                const totalBarWidthPercent = Math.min(100, Math.max(8, Math.round((sub.total / maxSubjectTotal) * 100)))
+                const availableRatio = sub.total > 0 ? Math.min(1, Math.max(0, sub.available / sub.total)) : 0
+                const issuedRatio = sub.total > 0 ? Math.min(1, Math.max(0, sub.issued / sub.total)) : 0
                 return (
                   <div
                     key={sub.id || sub.name}

@@ -81,7 +81,7 @@ export default function Overdue() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 print:grid-cols-2 print:gap-4 print:text-black">
           {overdueCheckouts?.map((checkout, index) => (
             <div
-              key={index}
+              key={checkout.id ?? `checkout-${index}`}
               className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 print:border-black print:border-2 print:shadow-none print:break-inside-avoid flex flex-col justify-between"
             >
               <div>

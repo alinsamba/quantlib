@@ -10,25 +10,60 @@ interface ModalProps {
 
 export function Modal({ isOpen, onClose, title, children }: ModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const previousActiveElementRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
+    if (!isOpen) return;
+
+    previousActiveElementRef.current = document.activeElement as HTMLElement | null;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        onClose();
+        onCloseRef.current();
+        return;
+      }
+
+      // Focus trap for Tab and Shift+Tab
+      if (e.key === 'Tab' && modalRef.current) {
+        const focusableElements = modalRef.current.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        if (focusableElements.length === 0) return;
+
+        const firstElement = focusableElements[0];
+        const lastElement = focusableElements[focusableElements.length - 1];
+
+        if (e.shiftKey) {
+          if (document.activeElement === firstElement || document.activeElement === modalRef.current) {
+            e.preventDefault();
+            lastElement.focus();
+          }
+        } else {
+          if (document.activeElement === lastElement) {
+            e.preventDefault();
+            firstElement.focus();
+          }
+        }
       }
     };
 
-    if (isOpen) {
-      document.addEventListener('keydown', handleEscape);
-      // Optional: focus management can be added here
+    document.addEventListener('keydown', handleKeyDown);
+    document.body.style.overflow = 'hidden';
+
+    // Focus modal container on initial open without interfering with subsequent input typing
+    const timer = setTimeout(() => {
       modalRef.current?.focus();
-    }
+    }, 0);
 
     return () => {
-      document.removeEventListener('keydown', handleEscape);
+      clearTimeout(timer);
+      document.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = '';
+      previousActiveElementRef.current?.focus();
     };
-  }, [isOpen, onClose]);
-
+  }, [isOpen]);
   if (!isOpen) return null;
 
   return (

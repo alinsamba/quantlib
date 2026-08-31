@@ -51,6 +51,8 @@ model StockAudit {
   updatedAt DateTime         @updatedAt
 
   items     StockAuditItem[]
+
+  @@index([status])
 }
 
 model StockAuditItem {
@@ -58,7 +60,7 @@ model StockAuditItem {
   auditId       Int
   audit         StockAudit @relation(fields: [auditId], references: [id], onDelete: Cascade)
   subjectId     Int
-  subject       Subject    @relation(fields: [subjectId], references: [id])
+  subject       Subject    @relation(fields: [subjectId], references: [id], onDelete: Cascade)
   expectedCount Int
   actualCount   Int
   discrepancy   Int
@@ -69,13 +71,12 @@ model StockAuditItem {
   @@index([subjectId])
 }
 
-
 model Incident {
   id               Int      @id @default(autoincrement())
   type             String   // DAMAGED, LOST, NEW, RECOVERED, DONATION
   date             DateTime
   subjectId        Int?
-  subject          Subject? @relation(fields: [subjectId], references: [id])
+  subject          Subject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
   bookTitle        String
   condition        String?
   comment          String?
@@ -84,17 +85,23 @@ model Incident {
   studentClass     String?
   actionTaken      String?
   createdAt        DateTime @default(now())
+
+  @@index([subjectId])
+  @@index([responsibleParty])
+  @@index([type, date])
 }
 
 model AuditLog {
   id         Int      @id @default(autoincrement())
   subjectId  Int
-  subject    Subject  @relation(fields: [subjectId], references: [id])
+  subject    Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
   field      String
   oldValue   String
   newValue   String
   changedBy  String?
   changedAt  DateTime @default(now())
+
+  @@index([subjectId])
 }
 
 model User {
@@ -108,7 +115,7 @@ model User {
 model Checkout {
   id               Int       @id @default(autoincrement())
   subjectId        Int
-  subject          Subject   @relation(fields: [subjectId], references: [id])
+  subject          Subject   @relation(fields: [subjectId], references: [id], onDelete: Restrict)
   studentName      String
   studentClass     String?
   checkoutDate     DateTime  @default(now())
@@ -121,6 +128,9 @@ model Checkout {
   updatedAt        DateTime  @updatedAt
 
   @@index([subjectId])
+  @@index([studentName, status])
+  @@index([status, dueDate])
+  @@index([checkoutDate])
 }
 
 model BorrowingRule {

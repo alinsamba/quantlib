@@ -19,15 +19,15 @@
 
 ## 🛠️ Tech Stack
 
-- **Desktop Framework**: [Electron](https://www.electronjs.org/) (Main + Preload + Renderer architecture)
+- **Desktop Framework**: [Tauri v2](https://tauri.app/) (Rust Core + IPC Command System)
 - **UI Framework**: [React 19](https://react.dev/) + [TypeScript](https://www.typescriptlang.org/) + [Vite 8](https://vitejs.dev/)
 - **Styling**: [Tailwind CSS v4](https://tailwindcss.com/) + [Lucide React Icons](https://lucide.dev/)
 - **Charts**: [Recharts](https://recharts.org/)
-- **Database & ORM**: [SQLite](https://www.sqlite.org/) + [Prisma ORM](https://www.prisma.io/)
-- **Security & Crypto**: Node.js `crypto` (AES-256-GCM, PBKDF2 with 600,000 iterations)
-- **Testing**: [Vitest](https://vitest.dev/)
-- **Packaging**: [Electron Builder](https://www.electron.build/)
-
+- **Database**: [SQLite](https://www.sqlite.org/) via [rusqlite](https://github.com/rusqlite/rusqlite) with WAL mode & automated integrity tracking
+- **Security & Crypto**: Pure Rust Cryptography (`aes-gcm`, `pbkdf2` with 600,000 iterations, `sha2`, `rand`)
+- **Networking & Sync**: Pure Rust HTTP Sync (`tiny_http`, `reqwest` with `rustls`)
+- **Testing**: [Vitest](https://vitest.dev/) (frontend) + Cargo Test (Rust backend)
+- **Packaging**: [Tauri CLI](https://tauri.app/reference/cli/)
 ---
 
 ## 🔐 Security & Encryption Architecture
@@ -45,21 +45,25 @@ QuantLib operates on an offline vault security model:
 
 ```text
 quantlib/
-├── electron/              # Electron main process & IPC handlers
-│   ├── main.ts            # Application window, lifecycle & IPC endpoints
-│   ├── preload.ts         # ContextBridge security IPC layer
-│   └── crypto.ts          # AES-256-GCM encryption & vault manager
-├── prisma/
-│   └── schema.prisma      # Database schema definition
+├── src-tauri/             # Tauri v2 Rust Core
+│   ├── src/
+│   │   ├── main.rs        # Application binary entry point
+│   │   ├── lib.rs         # Tauri builder, state setup & command registration
+│   │   ├── commands.rs    # Tauri command IPC handlers
+│   │   ├── db.rs          # SQLite database schema, queries & CRUD logic
+│   │   ├── crypto.rs      # AES-256-GCM vault encryption & PBKDF2 manager
+│   │   ├── models.rs      # Rust domain structs & Serde models
+│   │   └── services/      # Analytics, backup scheduler & LAN sync services
+│   ├── Cargo.toml         # Rust crate manifest & dependencies
+│   └── tauri.conf.json    # Tauri application configuration
 ├── src/
 │   ├── components/        # Reusable UI components (Modals, Forms, Drawers)
 │   ├── hooks/             # Custom React hooks & context providers
-│   ├── lib/               # Utility functions & IPC bridge client (`db.ts`)
-│   ├── pages/             # Main view pages (Dashboard, Inventory, Incidents, Overdue, Settings, Login)
+│   ├── lib/               # Utility functions & Tauri IPC client (`ipc-client.ts`)
+│   ├── pages/             # Main view pages (Dashboard, Inventory, Incidents, Overdue, Settings, Login, StockAudit, Clearance, Analytics)
 │   ├── App.tsx            # Main layout router
 │   └── index.css          # Tailwind CSS entry file
-├── scripts/               # Utility & seed scripts
-└── vite.config.ts         # Vite & Electron plugin configuration
+└── vite.config.ts         # Vite frontend configuration
 ```
 
 ---
@@ -102,7 +106,12 @@ quantlib/
 
 ### Running the App Locally
 
-To start the Vite dev server and launch the Electron application window:
+To start the Vite frontend and launch the Tauri desktop application:
+```bash
+npm run tauri:dev
+```
+
+To run the Vite web dev server independently:
 ```bash
 npm run dev
 ```
@@ -121,11 +130,11 @@ npm run lint
 
 ### Packaging for Production
 
-Build the production desktop binary (`.exe` for Windows):
+Build the production desktop binary and installers:
 ```bash
-npm run build
+npm run tauri:build
 ```
-The packaged app installers and standalone executables will be output to the `release/` directory.
+The packaged app installers and standalone executables will be output to the `src-tauri/target/release/` directory.
 
 ---
 
@@ -133,15 +142,13 @@ The packaged app installers and standalone executables will be output to the `re
 
 | Command | Description |
 | :--- | :--- |
-| `npm run dev` | Starts Vite development server and launches Electron desktop app |
-| `npm run build` | Compiles TypeScript, builds Vite renderer, and packages app with Electron Builder |
-| `npm run test` | Runs test suite using Vitest |
+| `npm run dev` | Starts Vite development server |
+| `npm run tauri:dev` | Runs Tauri in development mode with hot-reloading |
+| `npm run build` | Compiles TypeScript and builds Vite frontend distribution |
+| `npm run tauri:build` | Compiles and packages production Tauri desktop app |
+| `npm run test` | Runs frontend unit tests using Vitest |
 | `npm run lint` | Runs Oxlint to check code quality |
-| `npm run prisma:generate` | Generates TypeScript client files from `prisma/schema.prisma` |
-| `npm run prisma:push` | Syncs schema changes directly with the SQLite database |
-| `npm run seed` | Seeds database with initial subjects and sample incident data |
 | `npm run generate-icon` | Generates application PNG icon |
-
 ---
 
 ## 📄 License & Credits

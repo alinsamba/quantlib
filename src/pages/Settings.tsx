@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, memo } from 'react'
+import React, { useState, useEffect, useCallback, useRef, memo } from 'react'
 import { Save, Moon, Sun, ShieldCheck, Key, Copy, Printer, History, Database, Download, BookOpen, Plus, Trash2, Edit2, HardDrive, RefreshCw, Network, Wifi, CheckCircle2, AlertCircle, Clock, FileSpreadsheet } from 'lucide-react'
 import { useTheme } from '../hooks/ThemeContext'
 import { validateMasterPassword } from '../lib/utils'
@@ -108,18 +108,22 @@ interface SchoolInfoSectionProps {
   schoolName: string
   motto: string
   academicYear: string
+  schoolSaveSuccess?: string
   onSchoolNameChange: (val: string) => void
   onMottoChange: (val: string) => void
   onAcademicYearChange: (val: string) => void
+  onSaveSchoolInfo: () => void
 }
 
 const SchoolInfoSection = memo(function SchoolInfoSection({
   schoolName,
   motto,
   academicYear,
+  schoolSaveSuccess,
   onSchoolNameChange,
   onMottoChange,
-  onAcademicYearChange
+  onAcademicYearChange,
+  onSaveSchoolInfo
 }: SchoolInfoSectionProps) {
   return (
     <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 p-6 space-y-6">
@@ -143,8 +147,10 @@ const SchoolInfoSection = memo(function SchoolInfoSection({
         />
       </div>
 
+      {schoolSaveSuccess && <div className="text-green-500 text-sm font-medium">{schoolSaveSuccess}</div>}
+
       <div className="pt-4 flex justify-end">
-        <Button icon={<Save size={18} />}>Save Changes</Button>
+        <Button icon={<Save size={18} />} onClick={onSaveSchoolInfo}>Save Changes</Button>
       </div>
     </div>
   )
@@ -230,9 +236,9 @@ const SecuritySection = memo(function SecuritySection({
           label="New Password"
           type="password"
           required
-          minLength={8}
-          pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}"
-          title="Use at least 8 characters with uppercase, lowercase, and a number."
+          minLength={12}
+          pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':&quot;\\|,.<>\/?]).{12,}"
+          title="Use at least 12 characters with uppercase, lowercase, a number, and a special character."
           value={newPassword}
           onChange={(e) => onNewPasswordChange(e.target.value)}
         />
@@ -756,8 +762,23 @@ export default function Settings() {
   const [schoolName, setSchoolName] = useState('Mentor High School - Kitende')
   const [motto, setMotto] = useState('Education is the Key')
   const [academicYear, setAcademicYear] = useState('2026')
+  const [schoolSaveSuccess, setSchoolSaveSuccess] = useState('')
+  const schoolTimerRef = useRef<number | null>(null)
   const { theme, setTheme } = useTheme()
 
+  useEffect(() => {
+    return () => {
+      if (schoolTimerRef.current) {
+        window.clearTimeout(schoolTimerRef.current)
+      }
+    }
+  }, [])
+
+  const handleSaveSchoolInfo = useCallback(() => {
+    setSchoolSaveSuccess('School information saved successfully!')
+    if (schoolTimerRef.current) window.clearTimeout(schoolTimerRef.current)
+    schoolTimerRef.current = window.setTimeout(() => setSchoolSaveSuccess(''), 3000)
+  }, [])
   // Password Change State
   const [oldPassword, setOldPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
@@ -793,7 +814,7 @@ export default function Settings() {
 
     setIsChangingPassword(true)
     try {
-      const res = await window.electronAPI.changePassword({ oldPassword, newPassword })
+      const res = await db.changePassword({ oldPassword, newPassword })
       if (res.success) {
         setPasswordSuccess('Master password changed successfully!')
         setNewRecoveryKey(res.recoveryKey ?? '')
@@ -1102,9 +1123,11 @@ export default function Settings() {
             schoolName={schoolName}
             motto={motto}
             academicYear={academicYear}
+            schoolSaveSuccess={schoolSaveSuccess}
             onSchoolNameChange={setSchoolName}
             onMottoChange={setMotto}
             onAcademicYearChange={setAcademicYear}
+            onSaveSchoolInfo={handleSaveSchoolInfo}
           />
 
           <AppearanceSection

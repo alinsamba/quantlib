@@ -20,8 +20,8 @@ export default function Login({ onUnlock }: { onUnlock: () => void }) {
       .catch((err: unknown) => {
         if (!mounted) return
         console.error(err)
-        setError(err instanceof Error ? err.message : 'Failed to connect to backend')
-        setStatus('SETUP') // or render an error state
+        setError(err instanceof Error ? err.message : 'Failed to connect to database backend')
+        setStatus('LOCKED')
       })
     return () => { mounted = false }
   }, [])
@@ -114,10 +114,9 @@ export default function Login({ onUnlock }: { onUnlock: () => void }) {
               <input
                 type={isRecoveryMode ? 'text' : 'password'}
                 required
-                minLength={status === 'SETUP' && !isRecoveryMode ? 8 : undefined}
-                pattern={status === 'SETUP' && !isRecoveryMode ? '(?=.*[a-z])(?=.*[A-Z])(?=.*\\d).{8,}' : undefined}
-                title={status === 'SETUP' && !isRecoveryMode ? 'Use at least 8 characters with uppercase, lowercase, and a number.' : undefined}
-                placeholder={isRecoveryMode ? 'XXXX-XXXX-XXXX-XXXX' : '••••••••'}
+                minLength={status === 'SETUP' && !isRecoveryMode ? 12 : undefined}
+                pattern={status === 'SETUP' && !isRecoveryMode ? '(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[!@#$%^&*()_+\\-=\\[\\]{};\':"\\\\|,.<>\\/?]).{12,}' : undefined}
+                title={status === 'SETUP' && !isRecoveryMode ? 'Use at least 12 characters with uppercase, lowercase, a number, and a special character.' : undefined}
                 className="w-full pl-11 pr-4 py-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 dark:text-white transition-all text-lg tracking-wider"
                 value={password}
                 onChange={e => setPassword(e.target.value)}

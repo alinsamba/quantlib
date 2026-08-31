@@ -1,3 +1,19 @@
+import type { IncidentType } from './utils'
+
+/**
+ * Physical condition score scale for circulating inventory:
+ * - 3: Good / Mint (clean binding, no tears, pristine condition)
+ * - 2: Normal / Fair (moderate wear, minor markings, fully functional)
+ * - 1: Damaged / Poor (torn pages, broken spine, quarantined from loan)
+ */
+export type BookConditionScore = 1 | 2 | 3;
+
+/** Lifecycle state of a student borrowing checkout */
+export type CheckoutStatus = 'ACTIVE' | 'RETURNED' | 'OVERDUE' | 'LOST';
+
+/** Status of a physical inventory reconciliation audit */
+export type StockAuditStatus = 'IN_PROGRESS' | 'COMPLETED';
+
 export interface Subject {
   id: number;
   name: string;
@@ -8,7 +24,9 @@ export interface Subject {
   damaged: number;
   lost: number;
   notes: string | null;
+  /** Physical condition score averaged across all copies (1.0 = Damaged to 3.0 = Good) */
   averageCondition: number;
+  /** Estimated condition points decayed per checkout loan cycle (e.g. 0.05 points/loan) */
   degradationRate: number;
   createdAt: Date;
   updatedAt: Date;
@@ -16,7 +34,7 @@ export interface Subject {
 
 export interface Incident {
   id: number;
-  type: string;
+  type: IncidentType | string;
   date: Date;
   subjectId: number | null;
   subject?: Subject | null;
@@ -50,13 +68,12 @@ export interface Checkout {
   checkoutDate: Date;
   dueDate: Date;
   returnDate: Date | null;
-  status: string;
+  status: CheckoutStatus | string;
   conditionOut: number;
   conditionIn: number | null;
   createdAt: Date;
   updatedAt: Date;
 }
-
 export interface BorrowingRule {
   id: number;
   roleOrGrade: string;
@@ -81,12 +98,19 @@ export interface ClearanceRecord {
     studentName: string;
     studentClass?: string | null;
   };
+  studentName: string;
+  studentClass?: string | null;
   status: 'CLEARED' | 'HOLD';
   activeCheckouts: Checkout[];
   incidents: Incident[];
   unresolvedIncidents: Incident[];
   totalReplacementCharges: number;
+  totalOverdueFines?: number;
+  totalIncidentCharges?: number;
+  totalAmountDue?: number;
+  isCleared?: boolean;
   clearanceDecision: string;
+  slipGeneratedAt?: string;
 }
 
 export interface StockAuditItem {
@@ -243,12 +267,16 @@ export interface LanSyncResult {
 }
 
 export interface SubjectSummary {
+  id?: number;
   name: string;
+  category?: string | null;
   openingCount: number;
   recovered: number;
   issued: number;
   damaged: number;
   lost: number;
+  available?: number;
+  totalCopies?: number;
 }
 
 export interface DashboardSummary {

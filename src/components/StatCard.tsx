@@ -53,8 +53,22 @@ export function StatCard({
   return (
     <div
       onClick={onClick}
+      role={isClickable ? 'button' : undefined}
+      tabIndex={isClickable ? 0 : undefined}
+      onKeyDown={
+        isClickable
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                onClick?.()
+              }
+            }
+          : undefined
+      }
       className={`bg-white dark:bg-slate-800/90 rounded-2xl p-5 border border-slate-200/80 dark:border-slate-700/80 shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between ${
-        isClickable ? 'cursor-pointer hover:border-blue-300 dark:hover:border-blue-700 group' : ''
+        isClickable
+          ? 'cursor-pointer hover:border-blue-300 dark:hover:border-blue-700 group focus:outline-none focus:ring-2 focus:ring-blue-500'
+          : ''
       } ${className}`}
     >
       {/* Top Row: 40x40 Icon Backdrop & Badge */}

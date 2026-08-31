@@ -4,22 +4,15 @@ import { Button } from '../components/Button'
 import { TextField, SelectField } from '../components/TextField'
 import { Modal } from '../components/Modal'
 import { db } from '../lib/ipc-client'
-import type { ClearanceRecord, Checkout, Incident } from '../lib/types'
+import { roundCurrency } from '../lib/utils'
+import type { ClearanceRecord, Checkout } from '../lib/types'
 
 export default function Clearance() {
   const [studentName, setStudentName] = useState('')
   const [studentClass, setStudentClass] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [clearanceData, setClearanceData] = useState<{
-    studentName: string
-    studentClass: string | null
-    status: 'CLEARED' | 'HOLD'
-    activeCheckouts: Checkout[]
-    incidents: Incident[]
-    unresolvedIncidents: Incident[]
-    totalReplacementCharges: number
-  } | null>(null)
+  const [clearanceData, setClearanceData] = useState<ClearanceRecord | null>(null)
 
   const [isSlipModalOpen, setIsSlipModalOpen] = useState(false)
   const [slipData, setSlipData] = useState<ClearanceRecord | null>(null)
@@ -61,7 +54,7 @@ export default function Clearance() {
         studentClass: trimmedClass || undefined
       })
       if (res && res.success && res.data) {
-        setClearanceData(res.data as any)
+        setClearanceData(res.data)
       } else {
         setError(res?.error || 'Failed to retrieve student clearance status.')
         setClearanceData(null)
@@ -97,7 +90,10 @@ export default function Clearance() {
 
   const handleOpenPaymentModal = useCallback(() => {
     if (!clearanceData) return
-    setPaymentAmount(clearanceData.totalReplacementCharges || 0)
+    const rawTotalDue = clearanceData.totalAmountDue 
+      ?? ((clearanceData.totalReplacementCharges || 0) + (clearanceData.totalOverdueFines || 0))
+    const totalDue = roundCurrency(rawTotalDue)
+    setPaymentAmount(totalDue)
     setPaymentMethod('Cash')
     setPaymentNotes('')
     setPaymentError('')
@@ -117,7 +113,7 @@ export default function Clearance() {
         paymentMethod,
         notes: paymentNotes
       })
-      if (res && res.success) {
+      if (res && res.success && res.data) {
         setClearanceData(res.data)
         setIsPaymentModalOpen(false)
       } else {
@@ -154,7 +150,7 @@ export default function Clearance() {
         reason: waiverReason.trim(),
         approvedBy: approvedBy.trim() || 'LIBRARIAN'
       })
-      if (res && res.success) {
+      if (res && res.success && res.data) {
         setClearanceData(res.data)
         setIsWaiverModalOpen(false)
       } else {
@@ -683,13 +679,15 @@ export default function Clearance() {
                   try {
                     await db.returnCheckout(returningCheckout.id, returnCondition)
                     setReturningCheckout(null)
-                    // Refresh clearance
+                    // Refresh clearance using active record student identifier
+                    const targetStudent = returningCheckout.studentName?.trim() || clearanceData?.studentName?.trim() || studentName.trim()
+                    const targetClass = returningCheckout.studentClass?.trim() || clearanceData?.studentClass?.trim() || studentClass.trim() || undefined
                     const res = await db.getClearanceStatus({
-                      studentName: studentName.trim(),
-                      studentClass: studentClass.trim() || undefined
+                      studentName: targetStudent,
+                      studentClass: targetClass
                     })
                     if (res && res.success && res.data) {
-                      setClearanceData(res.data as any)
+                      setClearanceData(res.data)
                     }
                   } catch (err: unknown) {
                     alert('Failed to return book: ' + (err instanceof Error ? err.message : String(err)))

@@ -1,7 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
-import electron from 'vite-plugin-electron/simple'
 import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
 
@@ -12,35 +11,31 @@ export default defineConfig({
   plugins: [
     tailwindcss(),
     react(),
-    electron({
-      main: {
-        entry: 'electron/main.ts',
-        vite: {
-          build: {
-            rolldownOptions: {
-              external: ['@prisma/client']
-            },
-            rollupOptions: {
-              external: ['@prisma/client']
-            }
-          }
-        }
-      },
-      preload: {
-        input: 'electron/preload.ts',
-        onstart(options) {
-          options.reload()
-        },
-      },
-      renderer: {},
-    }),
   ],
+  clearScreen: false,
+  server: {
+    port: 5173,
+    strictPort: true,
+  },
+  envPrefix: ['VITE_', 'TAURI_ENV_*'],
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),
     },
   },
   build: {
-    chunkSizeWarningLimit: 1000,
+    chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        manualChunks(id: string) {
+          if (id.includes('node_modules')) {
+            if (id.includes('xlsx')) return 'excel'
+            if (id.includes('recharts')) return 'charts'
+            if (id.includes('lucide-react')) return 'icons'
+            if (id.includes('react') || id.includes('react-dom') || id.includes('react-router-dom')) return 'vendor'
+          }
+        }
+      }
+    }
   }
 })
