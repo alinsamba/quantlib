@@ -84,17 +84,19 @@ export interface BorrowingRule {
   updatedAt?: Date;
 }
 
+export interface SchoolInfo {
+  name: string;
+  motto?: string | null;
+  logoPath?: string | null;
+  address?: string | null;
+  contactPhone?: string | null;
+  academicYear?: string | null;
+}
+
 export interface ClearanceRecord {
-  timestamp: string;
-  school: {
-    name: string;
-    motto?: string | null;
-    logoPath?: string | null;
-    address?: string | null;
-    contactPhone?: string | null;
-    academicYear?: string | null;
-  };
-  student: {
+  timestamp?: string;
+  school?: SchoolInfo;
+  student?: {
     studentName: string;
     studentClass?: string | null;
   };
@@ -256,7 +258,12 @@ export interface LanStatusResponse {
 
 export interface LanSyncResult {
   success: boolean;
-  syncedAt: string;
+  subjectsSynced?: number;
+  checkoutsSynced?: number;
+  incidentsSynced?: number;
+  rulesSynced?: number;
+  message?: string;
+  syncedAt?: string;
   mergedCounts?: {
     subjects?: number;
     checkouts?: number;

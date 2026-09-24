@@ -252,7 +252,13 @@ export default function StockAuditPage() {
   const handleSaveItem = useCallback(async (subjectId: number) => {
     if (!activeAudit) return
     const edit = itemEdits[subjectId]
-    if (!edit) return
+    const sub = subjects.find((s) => s.id === subjectId)
+    const existingItem = activeAudit?.items?.find((i) => i.subjectId === subjectId)
+    const fallbackCount = existingItem
+      ? existingItem.actualCount
+      : (sub ? Math.max(0, sub.openingCount + sub.recovered - sub.damaged - sub.lost - sub.issued) : 0)
+    const actualCount = edit?.actualCount !== undefined ? edit.actualCount : fallbackCount
+    const notes = edit?.notes !== undefined ? edit.notes : (existingItem?.notes || '')
 
     try {
       setSavingSubjectId(subjectId)
@@ -260,8 +266,8 @@ export default function StockAuditPage() {
       const updatedItem = await db.saveStockAuditItem({
         auditId: activeAudit.id,
         subjectId,
-        actualCount: edit.actualCount,
-        notes: edit.notes
+        actualCount,
+        notes
       })
 
       // Update active audit in state locally
@@ -286,7 +292,7 @@ export default function StockAuditPage() {
     } finally {
       setSavingSubjectId(null)
     }
-  }, [activeAudit, itemEdits])
+  }, [activeAudit, itemEdits, subjects])
 
   const handleCompleteAudit = useCallback(async () => {
     if (!activeAudit) return

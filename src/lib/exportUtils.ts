@@ -5,7 +5,7 @@ import * as XLSX from 'xlsx';
  * If a string begins with =, +, -, @, \t, \r, or |, it prefixes the value with an apostrophe (').
  */
 export function sanitizeCellValue(val: unknown): unknown {
-  if (typeof val === 'string' && /^[\=\+\-\@\t\r\|]/.test(val)) {
+  if (typeof val === 'string' && /^[=+\-@\t\r|]/.test(val)) {
     return "'" + val
   }
   return val

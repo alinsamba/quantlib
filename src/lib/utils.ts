@@ -70,7 +70,7 @@ export function validateMasterPassword(password: string): string {
     return 'Password must include at least one number'
   }
 
-  if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
+  if (!/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(password)) {
     return 'Password must include at least one special character'
   }
 

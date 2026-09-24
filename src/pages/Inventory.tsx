@@ -13,8 +13,9 @@ import type { Subject, BorrowingRule, Checkout } from '../lib/types'
 export default function Inventory() {
   const location = useLocation()
   const [searchTerm, setSearchTerm] = useState('')
-  const { data: subjects, isLoading: subjectsLoading, execute: fetchSubjects } = useAsync<Subject[]>()
+  const { data: subjects, isLoading: subjectsLoading, error: subjectsError, execute: fetchSubjects } = useAsync<Subject[]>()
   const [borrowingRules, setBorrowingRules] = useState<BorrowingRule[]>([])
+  const [isIssuing, setIsIssuing] = useState(false)
 
   useEffect(() => {
     if (location.state?.openAdd) {
@@ -150,6 +151,8 @@ export default function Inventory() {
 
   const handleIssueSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
+    if (isIssuing) return
+    setIsIssuing(true)
     try {
       const subject = subjectsMap.get(issueData.subjectId)
 
@@ -169,12 +172,13 @@ export default function Inventory() {
           studentName: issueData.studentName.trim(),
           studentClass: issueData.studentClass.trim() || undefined
         })
-
+        if (clearanceRes && !clearanceRes.success) {
+          throw new Error(clearanceRes.error || 'Failed to check student clearance status')
+        }
         if (clearanceRes && clearanceRes.success && clearanceRes.data) {
-          const { activeCheckouts } = clearanceRes.data
+          const activeCheckouts = clearanceRes.data.activeCheckouts || []
           const maxAllowed = activeRule?.maxBooksAllowed ?? 2
           const roleLabel = activeRule?.roleOrGrade ?? 'DEFAULT'
-
           if (activeCheckouts.length >= maxAllowed) {
             alert(`Borrowing limit reached: ${issueData.studentName.trim()} already has ${activeCheckouts.length} active book(s) checked out (max allowed for ${roleLabel}: ${maxAllowed}).`)
             return
@@ -208,8 +212,10 @@ export default function Inventory() {
     } catch (err: unknown) {
       console.error('Error issuing book', err)
       alert('Failed to issue book: ' + (err instanceof Error ? err.message : String(err)))
+    } finally {
+      setIsIssuing(false)
     }
-  }, [subjectsMap, issueData, activeRule, fetchSubjects])
+  }, [subjectsMap, issueData, activeRule, fetchSubjects, isIssuing])
 
   const openIssueModal = useCallback((sub: Subject) => {
     setIssueData({ subjectId: sub.id, studentName: '', studentClass: '', conditionOut: 3 })
@@ -400,6 +406,16 @@ export default function Inventory() {
         <div className="overflow-x-auto">
           {subjectsLoading && !subjects ? (
             <div className="p-8 text-center text-slate-500">Loading inventory...</div>
+          ) : subjectsError ? (
+            <div className="p-8 text-center text-red-500 space-y-2">
+              <p>Failed to load inventory: {subjectsError}</p>
+              <button
+                onClick={() => fetchSubjects(() => db.getSubjects())}
+                className="px-3 py-1 bg-red-100 hover:bg-red-200 text-red-700 text-xs font-medium rounded-lg"
+              >
+                Retry
+              </button>
+            </div>
           ) : (
             <table className="w-full text-left border-collapse">
               <thead>
@@ -502,7 +518,7 @@ export default function Inventory() {
 
           <div className="pt-4 flex space-x-3">
             <Button type="button" variant="secondary" onClick={() => setIsIssueModalOpen(false)} className="flex-1">Cancel</Button>
-            <Button type="submit" className="flex-1">Confirm Issue</Button>
+            <Button type="submit" disabled={isIssuing} className="flex-1">{isIssuing ? 'Issuing...' : 'Confirm Issue'}</Button>
           </div>
         </form>
       </Modal>

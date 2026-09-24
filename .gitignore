@@ -10,7 +10,7 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
-dist-electron
+src-tauri/target
 *.local
 *.db
 prisma/*.db

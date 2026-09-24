@@ -130,8 +130,12 @@ export default function AnalyticsPage() {
           <span>{error}</span>
         </div>
       )}
-
-      {activeTab === 'CIRCULATION' ? (
+      {loading && !circulation && !depreciation ? (
+        <div className="p-12 text-center text-slate-500">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p>Loading circulation & depreciation analytics...</p>
+        </div>
+      ) : activeTab === 'CIRCULATION' ? (
         <div className="space-y-6">
           {/* Top KPI Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -425,7 +429,7 @@ export default function AnalyticsPage() {
                                 : 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300'
                             }`}
                           >
-                            {sub.averageCondition.toFixed(2)} / 3.0
+                            {(sub.averageCondition ?? 0).toFixed(2)} / 3.0
                           </span>
                         </td>
                         <td className="p-4 text-center text-slate-700 dark:text-slate-300">{sub.totalBooks}</td>
@@ -434,7 +438,7 @@ export default function AnalyticsPage() {
                           {sub.nearEndLifeCount}
                         </td>
                         <td className="p-4 text-right font-bold text-slate-900 dark:text-slate-100">
-                          ${sub.estimatedCost.toFixed(2)}
+                          ${(sub.estimatedCost ?? 0).toFixed(2)}
                         </td>
                       </tr>
                     ))

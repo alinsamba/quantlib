@@ -16,7 +16,8 @@ import type {
   LanStatusResponse,
   LanSyncResult,
   DashboardSummary,
-  DatabaseExportResult
+  DatabaseExportResult,
+  SchoolInfo
 } from './types'
 
 export interface ApiResponse<T> {
@@ -33,7 +34,15 @@ async function invoke<T>(command: string, args?: Record<string, unknown>): Promi
   if (res && res.success === false) {
     throw new Error(res.error || 'Operation failed')
   }
-  return (res && typeof res === 'object' && 'data' in res ? res.data : res) as T
+  if (res && typeof res === 'object') {
+    if ('data' in res) {
+      return res.data as T
+    }
+    if ('success' in res) {
+      return undefined as T
+    }
+  }
+  return res as T
 }
 
 async function direct<T>(command: string, args?: Record<string, unknown>): Promise<T> {
@@ -125,5 +134,9 @@ export const db = {
   getLanStatus: () =>
     direct<{ success: boolean; data?: LanStatusResponse; error?: string }>('get_lan_status'),
   exportEntireDbCsv: () =>
-    direct<{ success: boolean; data?: DatabaseExportResult; error?: string }>('export_entire_db_csv')
+    direct<{ success: boolean; data?: DatabaseExportResult; error?: string }>('export_entire_db_csv'),
+  getSchoolInfo: () =>
+    invoke<SchoolInfo>('get_school_info'),
+  saveSchoolInfo: (data: SchoolInfo) =>
+    invoke<SchoolInfo>('save_school_info', { data })
 }

@@ -17,7 +17,7 @@ import {
 
 import { ThemeProvider, useTheme } from './hooks/ThemeContext'
 import Login from './pages/Login'
-
+import { db } from './lib/ipc-client'
 function AppLayout() {
   const { theme, setTheme } = useTheme()
   const [isCollapsed, setIsCollapsed] = useState(() => {
@@ -173,13 +173,47 @@ function AppLayout() {
 }
 
 function App() {
-  const [isUnlocked, setIsUnlocked] = useState(() => {
-    return sessionStorage.getItem('quantlib_unlocked') === 'true'
-  })
+  const [isUnlocked, setIsUnlocked] = useState(false)
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true)
+
+  useEffect(() => {
+    let mounted = true
+    async function verifyAuth() {
+      try {
+        if (sessionStorage.getItem('quantlib_unlocked') === 'true') {
+          try {
+            await db.getSubjects()
+            if (mounted) setIsUnlocked(true)
+          } catch {
+            sessionStorage.removeItem('quantlib_unlocked')
+            if (mounted) setIsUnlocked(false)
+          }
+        } else {
+          if (mounted) setIsUnlocked(false)
+        }
+      } catch {
+        if (mounted) setIsUnlocked(false)
+      } finally {
+        if (mounted) setIsCheckingAuth(false)
+      }
+    }
+    verifyAuth()
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   const handleUnlock = () => {
     sessionStorage.setItem('quantlib_unlocked', 'true')
     setIsUnlocked(true)
+  }
+
+  if (isCheckingAuth) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-slate-950 text-slate-400">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+      </div>
+    )
   }
 
   if (!isUnlocked) {
@@ -190,7 +224,6 @@ function App() {
       </ThemeProvider>
     )
   }
-
   return (
     <ThemeProvider>
       <AppLayout />

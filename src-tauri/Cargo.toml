@@ -1,0 +1,30 @@
+[package]
+name = "quantlib"
+version = "1.0.0"
+description = "QuantLib - School Library Inventory & Analytics"
+authors = ["Mentor High School"]
+edition = "2021"
+
+[lib]
+name = "quantlib_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+parking_lot = "0.12"
+log = "0.4"
+tauri = { version = "2", features = [] }
+tauri-plugin-log = "2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+rusqlite = { version = "0.32", features = ["bundled"] }
+chrono = { version = "0.4", features = ["serde"] }
+aes-gcm = "0.10"
+pbkdf2 = { version = "0.12", features = ["simple"] }
+hmac = "0.12"
+sha2 = "0.10"
+rand = "0.8"
+hex = "0.4"
+dirs = "6.0"

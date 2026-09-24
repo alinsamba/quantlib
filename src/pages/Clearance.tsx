@@ -214,7 +214,7 @@ export default function Clearance() {
 
   // Memoize date formatting for clearance slip
   const slipTimestampStr = useMemo(() => {
-    return slipData ? new Date(slipData.timestamp).toLocaleString() : ''
+    return (slipData && slipData.timestamp) ? new Date(slipData.timestamp).toLocaleString() : ''
   }, [slipData])
 
   return (
@@ -552,13 +552,13 @@ export default function Clearance() {
               {/* Header / Branding */}
               <div className="text-center border-b pb-4 space-y-1">
                 <h2 className="text-2xl font-extrabold tracking-wide uppercase text-blue-700 dark:text-blue-400">
-                  {slipData.school.name}
+                  {slipData.school?.name || 'Mentor High School'}
                 </h2>
-                {slipData.school.motto && (
+                {slipData.school?.motto && (
                   <p className="text-xs italic text-slate-500 dark:text-slate-400">"{slipData.school.motto}"</p>
                 )}
                 <div className="text-xs text-slate-500 dark:text-slate-400 flex justify-center space-x-4 pt-1">
-                  <span>Academic Year: {slipData.school.academicYear || '2026'}</span>
+                  <span>Academic Year: {slipData.school?.academicYear || '2026'}</span>
                   <span>|</span>
                   <span>Issued: {slipTimestampStr}</span>
                 </div>
@@ -574,11 +574,11 @@ export default function Clearance() {
               <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-lg border border-slate-200 dark:border-slate-700 grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <p className="text-xs text-slate-500 uppercase font-semibold">Student Name</p>
-                  <p className="font-bold text-slate-900 dark:text-white text-base">{slipData.student.studentName}</p>
+                  <p className="font-bold text-slate-900 dark:text-white text-base">{slipData.student?.studentName || slipData.studentName}</p>
                 </div>
                 <div>
                   <p className="text-xs text-slate-500 uppercase font-semibold">Class / Grade</p>
-                  <p className="font-bold text-slate-900 dark:text-white text-base">{slipData.student.studentClass || 'N/A'}</p>
+                  <p className="font-bold text-slate-900 dark:text-white text-base">{slipData.student?.studentClass || slipData.studentClass || 'N/A'}</p>
                 </div>
               </div>
 

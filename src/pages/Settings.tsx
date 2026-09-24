@@ -767,6 +767,16 @@ export default function Settings() {
   const { theme, setTheme } = useTheme()
 
   useEffect(() => {
+    db.getSchoolInfo()
+      .then((info) => {
+        if (info) {
+          if (info.name) setSchoolName(info.name)
+          if (info.motto) setMotto(info.motto)
+          if (info.academicYear) setAcademicYear(info.academicYear)
+        }
+      })
+      .catch((err) => console.error('Failed to load school info:', err))
+
     return () => {
       if (schoolTimerRef.current) {
         window.clearTimeout(schoolTimerRef.current)
@@ -774,11 +784,20 @@ export default function Settings() {
     }
   }, [])
 
-  const handleSaveSchoolInfo = useCallback(() => {
-    setSchoolSaveSuccess('School information saved successfully!')
+  const handleSaveSchoolInfo = useCallback(async () => {
+    try {
+      await db.saveSchoolInfo({
+        name: schoolName,
+        motto,
+        academicYear
+      })
+      setSchoolSaveSuccess('School information saved successfully!')
+    } catch (err: unknown) {
+      alert('Failed to save school info: ' + (err instanceof Error ? err.message : String(err)))
+    }
     if (schoolTimerRef.current) window.clearTimeout(schoolTimerRef.current)
     schoolTimerRef.current = window.setTimeout(() => setSchoolSaveSuccess(''), 3000)
-  }, [])
+  }, [schoolName, motto, academicYear])
   // Password Change State
   const [oldPassword, setOldPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
@@ -927,14 +946,19 @@ export default function Settings() {
 
   const fetchLanConfig = useCallback(async () => {
     try {
-      const res = await db.getLanSyncConfig()
+      const [res, statusRes] = await Promise.all([
+        db.getLanSyncConfig(),
+        db.getLanStatus()
+      ])
       if (res && res.success && res.data) {
         setLanSyncEnabled(res.data.lanSyncEnabled ?? false)
         setLanPort(res.data.lanPort ?? 8085)
         setLanPasscode(res.data.lanPasscode ?? 'quantlib-sync')
-        setLocalIp(res.data.localIp ?? '127.0.0.1')
-        setIsServerRunning(res.data.isServerRunning ?? false)
         setLastLanSyncAt(res.data.lastLanSyncAt ? String(res.data.lastLanSyncAt) : null)
+      }
+      if (statusRes && statusRes.success && statusRes.data) {
+        setLocalIp(statusRes.data.localIp ?? '127.0.0.1')
+        setIsServerRunning(statusRes.data.isServerRunning ?? false)
       }
     } catch (err) {
       console.error('Failed to load LAN sync config:', err)
@@ -1014,7 +1038,9 @@ export default function Settings() {
       })
       if (res && res.success) {
         const counts = res.data?.mergedCounts || {}
-        const summary = `Synced successfully! (Merged: ${counts.subjects || 0} subjects, ${counts.checkouts || 0} checkouts)`
+        const subjects = res.data?.subjectsSynced ?? counts.subjects ?? 0
+        const checkouts = res.data?.checkoutsSynced ?? counts.checkouts ?? 0
+        const summary = res.data?.message || `Synced successfully! (Merged: ${subjects} subjects, ${checkouts} checkouts)`
         setSyncStatusMsg(summary)
         fetchLanConfig()
       }
