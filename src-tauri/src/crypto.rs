@@ -1,11 +1,33 @@
 use aes_gcm::aead::{Aead, KeyInit};
 use aes_gcm::{Aes256Gcm, Key, Nonce};
+use parking_lot::Mutex;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use parking_lot::Mutex;
+
+pub fn validate_master_password(password: &str) -> Option<String> {
+    if password.len() < 12 {
+        return Some("Master password must be at least 12 characters long.".into());
+    }
+    if !password.chars().any(|c| c.is_ascii_uppercase()) {
+        return Some("Master password must include at least one uppercase letter.".into());
+    }
+    if !password.chars().any(|c| c.is_ascii_lowercase()) {
+        return Some("Master password must include at least one lowercase letter.".into());
+    }
+    if !password.chars().any(|c| c.is_ascii_digit()) {
+        return Some("Master password must include at least one number.".into());
+    }
+    if !password
+        .chars()
+        .any(|c| !c.is_ascii_alphanumeric() && !c.is_ascii_whitespace())
+    {
+        return Some("Master password must include at least one special character.".into());
+    }
+    None
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MetaPayload {
@@ -134,8 +156,8 @@ impl VaultManager {
     }
 
     pub fn setup_database(&self, password: &str) -> Result<String, String> {
-        if password.trim().len() < 4 {
-            return Err("Password must be at least 4 characters long".into());
+        if let Some(err) = validate_master_password(password) {
+            return Err(err);
         }
         if self.check_db_status() != "SETUP" {
             return Err("Database is already set up".into());
@@ -164,7 +186,7 @@ impl VaultManager {
         let rec_payload_bytes = Self::encrypt_aes_gcm(&rec_user_key, &master_key)?;
 
         let meta = MetaPayload {
-            salt: hex::encode(salt), // We can store hex or base64
+            salt: hex::encode(salt),
             iterations: 600_000,
             password_payload: hex::encode(pass_payload_bytes),
             recovery_payload: hex::encode(rec_payload_bytes),
@@ -172,7 +194,9 @@ impl VaultManager {
 
         let meta_json = serde_json::to_string_pretty(&meta)
             .map_err(|e| format!("Failed to serialize meta: {}", e))?;
-        let temp_meta = self.data_dir.join(format!("quantlib.meta.tmp.{}", rand::random::<u32>()));
+        let temp_meta = self
+            .data_dir
+            .join(format!("quantlib.meta.tmp.{}", rand::random::<u32>()));
         {
             let mut file = OpenOptions::new()
                 .write(true)
@@ -216,7 +240,11 @@ impl VaultManager {
             return Err("Failed to decode salt".into());
         };
 
-        let iterations = if meta.iterations > 0 { meta.iterations } else { 600_000 };
+        let iterations = if meta.iterations > 0 {
+            meta.iterations
+        } else {
+            600_000
+        };
         let user_key = Self::derive_key(password, &salt, iterations);
 
         let payload_str = if is_recovery {
@@ -225,8 +253,8 @@ impl VaultManager {
             &meta.password_payload
         };
 
-        let payload_bytes = hex::decode(payload_str)
-            .map_err(|_| "Failed to decode payload".to_string())?;
+        let payload_bytes =
+            hex::decode(payload_str).map_err(|_| "Failed to decode payload".to_string())?;
 
         let master_key_bytes = Self::decrypt_aes_gcm(&user_key, &payload_bytes)
             .map_err(|_| "Invalid password or recovery key".to_string())?;
@@ -271,11 +299,13 @@ impl VaultManager {
             return Ok(());
         }
 
-        let db_data = fs::read(&temp_db)
-            .map_err(|e| format!("Failed to read temp DB: {}", e))?;
+        let db_data =
+            fs::read(&temp_db).map_err(|e| format!("Failed to read temp DB: {}", e))?;
 
         let encrypted = Self::encrypt_aes_gcm(&master_key, &db_data)?;
-        let enc_temp = self.data_dir.join(format!("quantlib.enc.tmp.{}", rand::random::<u32>()));
+        let enc_temp = self
+            .data_dir
+            .join(format!("quantlib.enc.tmp.{}", rand::random::<u32>()));
         let enc_file = self.enc_file();
         let enc_backup = self.enc_backup_file();
 
@@ -301,11 +331,18 @@ impl VaultManager {
         Ok(())
     }
 
-    pub fn change_password(&self, old_password: &str, new_password: &str) -> Result<String, String> {
+    pub fn change_password(
+        &self,
+        old_password: &str,
+        new_password: &str,
+    ) -> Result<String, String> {
+        if let Some(err) = validate_master_password(new_password) {
+            return Err(err);
+        }
         let meta_str = fs::read_to_string(self.meta_file())
             .map_err(|_| "Metadata not found".to_string())?;
-        let meta: MetaPayload = serde_json::from_str(&meta_str)
-            .map_err(|e| format!("Corrupt meta: {}", e))?;
+        let meta: MetaPayload =
+            serde_json::from_str(&meta_str).map_err(|e| format!("Corrupt meta: {}", e))?;
 
         let old_salt = hex::decode(&meta.salt).map_err(|_| "Corrupt salt".to_string())?;
         let old_user_key = Self::derive_key(old_password, &old_salt, meta.iterations);
@@ -348,7 +385,9 @@ impl VaultManager {
 
         let meta_json = serde_json::to_string_pretty(&new_meta)
             .map_err(|e| format!("Failed to serialize new meta: {}", e))?;
-        let temp_meta = self.data_dir.join(format!("quantlib.meta.tmp.{}", rand::random::<u32>()));
+        let temp_meta = self
+            .data_dir
+            .join(format!("quantlib.meta.tmp.{}", rand::random::<u32>()));
         {
             let mut file = OpenOptions::new()
                 .write(true)

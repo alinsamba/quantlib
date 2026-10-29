@@ -1,11 +1,20 @@
+use crate::crypto::validate_master_password;
 use crate::db::Database;
 use crate::models::*;
 use crate::services;
 use crate::VaultManager;
 use chrono::Utc;
-use std::path::PathBuf;
-use std::sync::Arc;
+use parking_lot::Mutex;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, OnceLock};
+use std::time::{Duration, Instant};
 use tauri::State;
+
+static UNLOCK_RATE_LIMIT: OnceLock<Mutex<(u32, Option<Instant>)>> = OnceLock::new();
+
+fn rate_limiter() -> &'static Mutex<(u32, Option<Instant>)> {
+    UNLOCK_RATE_LIMIT.get_or_init(|| Mutex::new((0, None)))
+}
 
 pub struct AppState {
     pub vault: Arc<VaultManager>,
@@ -26,14 +35,15 @@ pub fn check_db_status(state: State<'_, AppState>) -> &'static str {
 
 #[tauri::command]
 pub fn setup_db(state: State<'_, AppState>, password: String) -> ApiResponse<()> {
-    if password.trim().len() < 4 {
-        return ApiResponse::err("Password must be at least 4 characters long");
+    if let Some(err) = validate_master_password(&password) {
+        return ApiResponse::err(err);
     }
     match state.vault.setup_database(&password) {
         Ok(recovery_key) => {
             if let Err(e) = state.db.open(&state.vault.temp_db_path()) {
                 return ApiResponse::err(e);
             }
+            let _ = state.sync_vault();
             ApiResponse {
                 success: true,
                 data: None,
@@ -56,16 +66,65 @@ pub fn unlock_db(
     if state.db.is_open() {
         return ApiResponse::ok(());
     }
+
+    {
+        let limiter = rate_limiter().lock();
+        if let Some(until) = limiter.1 {
+            let now = Instant::now();
+            if until > now {
+                let wait_secs = (until - now).as_secs().max(1);
+                return ApiResponse::err(format!(
+                    "Too many failed unlock attempts. Please wait {}s before trying again.",
+                    wait_secs
+                ));
+            }
+        }
+    }
+
     let pwd = password.unwrap_or_default();
     match state.vault.unlock_database(&pwd, is_recovery.unwrap_or(false)) {
         Ok(()) => {
+            {
+                let mut limiter = rate_limiter().lock();
+                *limiter = (0, None);
+            }
             if let Err(e) = state.db.open(&state.vault.temp_db_path()) {
                 return ApiResponse::err(e);
             }
+            if let Ok(cfg) = state.db.get_lan_sync_config() {
+                if cfg.lan_sync_enabled {
+                    let pass = cfg
+                        .lan_passcode
+                        .unwrap_or_else(|| "quantlib-sync".to_string());
+                    let _ = services::start_lan_sync_server(
+                        cfg.lan_port,
+                        pass,
+                        Arc::clone(&state.db),
+                    );
+                }
+            }
             ApiResponse::ok(())
         }
-        Err(e) => ApiResponse::err(e),
+        Err(e) => {
+            let mut limiter = rate_limiter().lock();
+            limiter.0 = limiter.0.saturating_add(1);
+            if limiter.0 >= 5 {
+                let shift = (limiter.0 - 5).min(8);
+                let backoff_secs = (1u64 << shift).min(300);
+                limiter.1 = Some(Instant::now() + Duration::from_secs(backoff_secs));
+            }
+            ApiResponse::err(e)
+        }
     }
+}
+
+#[tauri::command]
+pub fn lock_db(state: State<'_, AppState>) -> ApiResponse<()> {
+    services::stop_lan_sync_server();
+    state.db.checkpoint();
+    state.db.close();
+    state.vault.cleanup();
+    ApiResponse::ok(())
 }
 
 #[tauri::command]
@@ -76,8 +135,8 @@ pub fn change_password(
 ) -> ApiResponse<()> {
     let old_pwd = old_password.unwrap_or_default();
     let new_pwd = new_password.unwrap_or_default();
-    if new_pwd.trim().len() < 4 {
-        return ApiResponse::err("New password must be at least 4 characters long");
+    if let Some(err) = validate_master_password(&new_pwd) {
+        return ApiResponse::err(err);
     }
     match state.vault.change_password(&old_pwd, &new_pwd) {
         Ok(recovery_key) => ApiResponse {
@@ -120,6 +179,28 @@ pub fn backup_database(state: State<'_, AppState>) -> ApiResponse<()> {
 }
 
 #[tauri::command]
+pub fn restore_backup(state: State<'_, AppState>, backup_path: String) -> ApiResponse<()> {
+    let trimmed = backup_path.trim();
+    if trimmed.is_empty() {
+        return ApiResponse::err("Backup file path is required");
+    }
+
+    services::stop_lan_sync_server();
+    if state.db.is_open() {
+        state.db.checkpoint();
+        state.db.close();
+    }
+    state.vault.cleanup();
+
+    let enc_dest = state.vault.enc_file();
+    let meta_dest = state.vault.meta_file();
+    match services::restore_vault_backup(Path::new(trimmed), &enc_dest, &meta_dest) {
+        Ok(()) => ApiResponse::ok(()),
+        Err(e) => ApiResponse::err(e),
+    }
+}
+
+#[tauri::command]
 pub fn get_subjects(state: State<'_, AppState>) -> ApiResponse<Vec<Subject>> {
     match state.db.get_subjects() {
         Ok(data) => ApiResponse::ok(data),
@@ -155,7 +236,11 @@ pub fn add_subject(state: State<'_, AppState>, data: SubjectInput) -> ApiRespons
 }
 
 #[tauri::command]
-pub fn update_subject(state: State<'_, AppState>, id: i64, data: SubjectInput) -> ApiResponse<Subject> {
+pub fn update_subject(
+    state: State<'_, AppState>,
+    id: i64,
+    data: SubjectInput,
+) -> ApiResponse<Subject> {
     match state.db.update_subject(id, data) {
         Ok(s) => {
             let _ = state.sync_vault();
@@ -166,8 +251,34 @@ pub fn update_subject(state: State<'_, AppState>, id: i64, data: SubjectInput) -
 }
 
 #[tauri::command]
+pub fn delete_subject(state: State<'_, AppState>, id: i64) -> ApiResponse<()> {
+    match state.db.delete_subject(id) {
+        Ok(()) => {
+            let _ = state.sync_vault();
+            ApiResponse::ok(())
+        }
+        Err(e) => ApiResponse::err(e),
+    }
+}
+
+#[tauri::command]
 pub fn add_incident(state: State<'_, AppState>, data: IncidentInput) -> ApiResponse<Incident> {
     match state.db.add_incident(data) {
+        Ok(i) => {
+            let _ = state.sync_vault();
+            ApiResponse::ok(i)
+        }
+        Err(e) => ApiResponse::err(e),
+    }
+}
+
+#[tauri::command]
+pub fn resolve_incident(
+    state: State<'_, AppState>,
+    id: i64,
+    resolution_notes: Option<String>,
+) -> ApiResponse<Incident> {
+    match state.db.resolve_incident(id, resolution_notes) {
         Ok(i) => {
             let _ = state.sync_vault();
             ApiResponse::ok(i)
@@ -212,6 +323,22 @@ pub fn return_checkout(
     condition_in: Option<i64>,
 ) -> ApiResponse<Checkout> {
     match state.db.return_checkout(id, condition_in) {
+        Ok(c) => {
+            let _ = state.sync_vault();
+            ApiResponse::ok(c)
+        }
+        Err(e) => ApiResponse::err(e),
+    }
+}
+
+#[tauri::command]
+pub fn renew_checkout(
+    state: State<'_, AppState>,
+    id: i64,
+    extra_days: Option<i64>,
+    new_due_date: Option<String>,
+) -> ApiResponse<Checkout> {
+    match state.db.renew_checkout(id, extra_days, new_due_date) {
         Ok(c) => {
             let _ = state.sync_vault();
             ApiResponse::ok(c)
@@ -449,7 +576,10 @@ pub fn save_backup_config(
     data: BackupConfigInput,
 ) -> ApiResponse<BackupConfig> {
     match state.db.save_backup_config(data) {
-        Ok(cfg) => ApiResponse::ok(cfg),
+        Ok(cfg) => {
+            let _ = state.sync_vault();
+            ApiResponse::ok(cfg)
+        }
         Err(e) => ApiResponse::err(e),
     }
 }
@@ -480,6 +610,7 @@ pub fn trigger_auto_backup(
     match services::perform_vault_backup(&target_dir, &enc_file, &meta_file) {
         Ok((backup_path, filename)) => {
             let _ = state.db.set_last_auto_backup_at(&Utc::now().to_rfc3339());
+            let _ = state.sync_vault();
             ApiResponse {
                 success: true,
                 data: None,
@@ -530,35 +661,59 @@ pub fn save_lan_sync_config(
     data: LanSyncConfigInput,
 ) -> ApiResponse<LanSyncConfig> {
     match state.db.save_lan_sync_config(data) {
-        Ok(cfg) => ApiResponse::ok(cfg),
+        Ok(cfg) => {
+            if cfg.lan_sync_enabled {
+                let pass = cfg
+                    .lan_passcode
+                    .clone()
+                    .unwrap_or_else(|| "quantlib-sync".to_string());
+                if let Err(e) =
+                    services::start_lan_sync_server(cfg.lan_port, pass, Arc::clone(&state.db))
+                {
+                    return ApiResponse::err(e);
+                }
+            } else {
+                services::stop_lan_sync_server();
+            }
+            let _ = state.sync_vault();
+            ApiResponse::ok(cfg)
+        }
         Err(e) => ApiResponse::err(e),
     }
 }
 
 #[tauri::command]
 pub fn sync_with_lan_peer_cmd(
-    _state: State<'_, AppState>,
+    state: State<'_, AppState>,
     peer_ip: String,
     peer_port: Option<u16>,
-    _passcode: Option<String>,
+    passcode: Option<String>,
 ) -> ApiResponse<LanSyncResult> {
-    let port = peer_port.unwrap_or(8085);
-    ApiResponse::ok(LanSyncResult {
-        success: true,
-        subjects_synced: Some(0),
-        checkouts_synced: Some(0),
-        incidents_synced: Some(0),
-        rules_synced: Some(0),
-        message: Some(format!("Synced successfully with peer {}:{}", peer_ip, port)),
-    })
+    if !state.db.is_open() {
+        return ApiResponse::err("Database is locked. Please unlock first.");
+    }
+    let cfg = state.db.get_lan_sync_config().ok();
+    let port = peer_port
+        .or_else(|| cfg.as_ref().map(|c| c.lan_port))
+        .unwrap_or(8085);
+    let pass = passcode
+        .or_else(|| cfg.and_then(|c| c.lan_passcode))
+        .unwrap_or_else(|| "quantlib-sync".to_string());
+
+    match services::sync_with_lan_peer(&state.db, &peer_ip, port, &pass) {
+        Ok(result) => {
+            let _ = state.sync_vault();
+            ApiResponse::ok(result)
+        }
+        Err(e) => ApiResponse::err(e),
+    }
 }
 
 #[tauri::command]
-pub fn get_lan_status(state: State<'_, AppState>) -> ApiResponse<LanStatusResponse> {
-    let is_running = state.db.get_lan_sync_config().map(|c| c.lan_sync_enabled).unwrap_or(false);
+pub fn get_lan_status(_state: State<'_, AppState>) -> ApiResponse<LanStatusResponse> {
     ApiResponse::ok(LanStatusResponse {
         local_ip: services::get_local_ip(),
-        is_server_running: is_running,
+        is_server_running: services::is_lan_server_running(),
     })
 }
 
@@ -590,7 +745,10 @@ pub fn export_entire_db_csv(state: State<'_, AppState>) -> ApiResponse<DatabaseE
     let default_export_dir = dirs::download_dir()
         .or_else(dirs::document_dir)
         .unwrap_or_else(|| PathBuf::from("."))
-        .join(format!("quantlib_export_{}", Utc::now().format("%Y%m%d_%H%M%S")));
+        .join(format!(
+            "quantlib_export_{}",
+            Utc::now().format("%Y%m%d_%H%M%S")
+        ));
 
     match services::export_entire_db_csv(&state.db, &default_export_dir) {
         Ok(result) => ApiResponse::ok(result),

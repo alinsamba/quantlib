@@ -386,14 +386,19 @@ impl Database {
         if opening < 0 {
             return Err("Opening count cannot be negative".into());
         }
+        let notes = data
+            .notes
+            .as_ref()
+            .map(|n| n.trim().to_string())
+            .filter(|n| !n.is_empty());
         let now = Utc::now().to_rfc3339();
 
         let lock = self.conn.lock();
         let conn = lock.as_ref().ok_or("Database is locked.")?;
 
         conn.execute(
-            "INSERT INTO Subject (name, category, openingCount, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?)",
-            params![name, category, opening, now, now],
+            "INSERT INTO Subject (name, category, openingCount, notes, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?)",
+            params![name, category, opening, notes, now, now],
         )
         .map_err(|e| e.to_string())?;
 
@@ -408,7 +413,7 @@ impl Database {
             issued: 0,
             damaged: 0,
             lost: 0,
-            notes: None,
+            notes,
             average_condition: 3.0,
             degradation_rate: 0.0,
             created_at: Some(now.clone()),
@@ -426,6 +431,26 @@ impl Database {
         if let Some(cnt) = data.opening_count {
             if cnt < 0 {
                 return Err("Opening count cannot be negative".into());
+            }
+        }
+        if let Some(rec) = data.recovered {
+            if rec < 0 {
+                return Err("Recovered count cannot be negative".into());
+            }
+        }
+        if let Some(iss) = data.issued {
+            if iss < 0 {
+                return Err("Issued count cannot be negative".into());
+            }
+        }
+        if let Some(dmg) = data.damaged {
+            if dmg < 0 {
+                return Err("Damaged count cannot be negative".into());
+            }
+        }
+        if let Some(lst) = data.lost {
+            if lst < 0 {
+                return Err("Lost count cannot be negative".into());
             }
         }
 
@@ -462,14 +487,25 @@ impl Database {
             )
             .map_err(|_| "Referenced subject does not exist".to_string())?;
 
-        let new_name = data.name.unwrap_or(existing.name.clone());
-        let new_cat = data.category.or(existing.category.clone());
+        let new_name = data.name.unwrap_or_else(|| existing.name.clone());
+        let new_cat = data.category.or_else(|| existing.category.clone());
         let new_opening = data.opening_count.unwrap_or(existing.opening_count);
+        let new_recovered = data.recovered.unwrap_or(existing.recovered);
+        let new_issued = data.issued.unwrap_or(existing.issued);
+        let new_damaged = data.damaged.unwrap_or(existing.damaged);
+        let new_lost = data.lost.unwrap_or(existing.lost);
+        let new_notes = if data.notes.is_some() {
+            data.notes
+                .map(|n| n.trim().to_string())
+                .filter(|n| !n.is_empty())
+        } else {
+            existing.notes.clone()
+        };
         let now = Utc::now().to_rfc3339();
 
         conn.execute(
-            "UPDATE Subject SET name = ?, category = ?, openingCount = ?, updatedAt = ? WHERE id = ?",
-            params![new_name, new_cat, new_opening, now, id],
+            "UPDATE Subject SET name = ?, category = ?, openingCount = ?, recovered = ?, issued = ?, damaged = ?, lost = ?, notes = ?, updatedAt = ? WHERE id = ?",
+            params![new_name, new_cat, new_opening, new_recovered, new_issued, new_damaged, new_lost, new_notes, now, id],
         )
         .map_err(|e| e.to_string())?;
 
@@ -492,13 +528,43 @@ impl Database {
                 params![id, existing.opening_count.to_string(), new_opening.to_string(), now],
             );
         }
+        if new_recovered != existing.recovered {
+            let _ = conn.execute(
+                "INSERT INTO AuditLog (subjectId, field, oldValue, newValue, changedBy, changedAt) VALUES (?, 'recovered', ?, ?, 'LIBRARIAN', ?)",
+                params![id, existing.recovered.to_string(), new_recovered.to_string(), now],
+            );
+        }
+        if new_issued != existing.issued {
+            let _ = conn.execute(
+                "INSERT INTO AuditLog (subjectId, field, oldValue, newValue, changedBy, changedAt) VALUES (?, 'issued', ?, ?, 'LIBRARIAN', ?)",
+                params![id, existing.issued.to_string(), new_issued.to_string(), now],
+            );
+        }
+        if new_damaged != existing.damaged {
+            let _ = conn.execute(
+                "INSERT INTO AuditLog (subjectId, field, oldValue, newValue, changedBy, changedAt) VALUES (?, 'damaged', ?, ?, 'LIBRARIAN', ?)",
+                params![id, existing.damaged.to_string(), new_damaged.to_string(), now],
+            );
+        }
+        if new_lost != existing.lost {
+            let _ = conn.execute(
+                "INSERT INTO AuditLog (subjectId, field, oldValue, newValue, changedBy, changedAt) VALUES (?, 'lost', ?, ?, 'LIBRARIAN', ?)",
+                params![id, existing.lost.to_string(), new_lost.to_string(), now],
+            );
+        }
+        if new_notes != existing.notes {
+            let _ = conn.execute(
+                "INSERT INTO AuditLog (subjectId, field, oldValue, newValue, changedBy, changedAt) VALUES (?, 'notes', ?, ?, 'LIBRARIAN', ?)",
+                params![id, existing.notes.unwrap_or_default(), new_notes.clone().unwrap_or_default(), now],
+            );
+        }
 
         let available = Self::calculate_available(
             new_opening,
-            existing.recovered,
-            existing.issued,
-            existing.damaged,
-            existing.lost,
+            new_recovered,
+            new_issued,
+            new_damaged,
+            new_lost,
         );
 
         Ok(Subject {
@@ -506,17 +572,57 @@ impl Database {
             name: new_name,
             category: new_cat,
             opening_count: new_opening,
-            recovered: existing.recovered,
-            issued: existing.issued,
-            damaged: existing.damaged,
-            lost: existing.lost,
-            notes: existing.notes,
+            recovered: new_recovered,
+            issued: new_issued,
+            damaged: new_damaged,
+            lost: new_lost,
+            notes: new_notes,
             average_condition: existing.average_condition,
             degradation_rate: existing.degradation_rate,
             created_at: existing.created_at,
             updated_at: Some(now),
             available: Some(available),
         })
+    }
+
+    pub fn delete_subject(&self, id: i64) -> Result<(), String> {
+        let lock = self.conn.lock();
+        let conn = lock.as_ref().ok_or("Database is locked.")?;
+
+        let exists: Option<i64> = conn
+            .query_row("SELECT id FROM Subject WHERE id = ?", params![id], |r| r.get(0))
+            .optional()
+            .map_err(|e| e.to_string())?;
+        if exists.is_none() {
+            return Err("Subject not found".into());
+        }
+
+        let active_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM Checkout WHERE subjectId = ? AND status = 'ACTIVE'",
+                params![id],
+                |r| r.get(0),
+            )
+            .unwrap_or(0);
+        if active_count > 0 {
+            return Err(format!(
+                "Cannot delete subject with {} active checkout(s). Please return or resolve active loans first.",
+                active_count
+            ));
+        }
+
+        conn.execute("DELETE FROM StockAuditItem WHERE subjectId = ?", params![id])
+            .map_err(|e| e.to_string())?;
+        conn.execute("DELETE FROM Incident WHERE subjectId = ?", params![id])
+            .map_err(|e| e.to_string())?;
+        conn.execute("DELETE FROM AuditLog WHERE subjectId = ?", params![id])
+            .map_err(|e| e.to_string())?;
+        conn.execute("DELETE FROM Checkout WHERE subjectId = ?", params![id])
+            .map_err(|e| e.to_string())?;
+        conn.execute("DELETE FROM Subject WHERE id = ?", params![id])
+            .map_err(|e| e.to_string())?;
+
+        Ok(())
     }
 
     pub fn add_incident(&self, data: IncidentInput) -> Result<Incident, String> {
@@ -611,6 +717,13 @@ impl Database {
                         params![sid, s.recovered.to_string(), (s.recovered + 1).to_string(), now],
                     );
                 }
+                "NEW" | "DONATION" => {
+                    let _ = conn.execute("UPDATE Subject SET openingCount = openingCount + 1 WHERE id = ?", params![sid]);
+                    let _ = conn.execute(
+                        "INSERT INTO AuditLog (subjectId, field, oldValue, newValue, changedBy, changedAt) VALUES (?, 'openingCount', ?, ?, 'LIBRARIAN', ?)",
+                        params![sid, s.opening_count.to_string(), (s.opening_count + 1).to_string(), now],
+                    );
+                }
                 _ => {}
             }
             sub = Some(s);
@@ -651,6 +764,123 @@ impl Database {
             action_taken: data.action_taken,
             created_at: Some(now),
             subject: sub,
+        })
+    }
+
+    pub fn resolve_incident(&self, id: i64, resolution_notes: Option<String>) -> Result<Incident, String> {
+        let lock = self.conn.lock();
+        let conn = lock.as_ref().ok_or("Database is locked.")?;
+
+        let existing: Incident = conn
+            .query_row(
+                "SELECT id, type, date, subjectId, bookTitle, condition, comment, reportedBy, responsibleParty, studentClass, actionTaken, createdAt FROM Incident WHERE id = ?",
+                params![id],
+                |r| {
+                    Ok(Incident {
+                        id: r.get(0)?,
+                        incident_type: r.get(1)?,
+                        date: r.get(2)?,
+                        subject_id: r.get(3)?,
+                        book_title: r.get(4)?,
+                        condition: r.get(5)?,
+                        comment: r.get(6)?,
+                        reported_by: r.get(7)?,
+                        responsible_party: r.get(8)?,
+                        student_class: r.get(9)?,
+                        action_taken: r.get(10)?,
+                        created_at: r.get(11)?,
+                        subject: None,
+                    })
+                },
+            )
+            .map_err(|_| "Incident not found".to_string())?;
+
+        let current_action = existing.action_taken.as_deref().unwrap_or("").to_uppercase();
+        if current_action.contains("RESOLVED") || current_action.contains("PAID") || current_action.contains("WAIVED") {
+            return Err("Incident is already resolved".into());
+        }
+
+        let now = Utc::now().to_rfc3339();
+        let updated_comment = match resolution_notes.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty()) {
+            Some(notes) => match existing.comment.as_ref().filter(|c| !c.trim().is_empty()) {
+                Some(prev) => Some(format!("{} [Resolved: {}]", prev, notes)),
+                None => Some(format!("[Resolved: {}]", notes)),
+            },
+            None => existing.comment.clone(),
+        };
+
+        conn.execute(
+            "UPDATE Incident SET actionTaken = 'RESOLVED', comment = ? WHERE id = ?",
+            params![updated_comment, id],
+        )
+        .map_err(|e| e.to_string())?;
+
+        let mut subject: Option<Subject> = None;
+        if let Some(sid) = existing.subject_id {
+            if let Ok(s) = conn.query_row(
+                "SELECT id, name, category, openingCount, recovered, issued, damaged, lost, notes, averageCondition, degradationRate, createdAt, updatedAt FROM Subject WHERE id = ?",
+                params![sid],
+                |row| {
+                    let opening: i64 = row.get(3)?;
+                    let recovered: i64 = row.get(4)?;
+                    let issued: i64 = row.get(5)?;
+                    let damaged: i64 = row.get(6)?;
+                    let lost: i64 = row.get(7)?;
+                    Ok(Subject {
+                        id: row.get(0)?,
+                        name: row.get(1)?,
+                        category: row.get(2)?,
+                        opening_count: opening,
+                        recovered,
+                        issued,
+                        damaged,
+                        lost,
+                        notes: row.get(8)?,
+                        average_condition: row.get(9)?,
+                        degradation_rate: row.get(10)?,
+                        created_at: row.get(11)?,
+                        updated_at: row.get(12)?,
+                        available: Some(Self::calculate_available(opening, recovered, issued, damaged, lost)),
+                    })
+                },
+            ) {
+                match existing.incident_type.to_uppercase().as_str() {
+                    "DAMAGED" => {
+                        let new_dmg = (s.damaged - 1).max(0);
+                        let _ = conn.execute("UPDATE Subject SET damaged = ?, updatedAt = ? WHERE id = ?", params![new_dmg, now, sid]);
+                        let _ = conn.execute(
+                            "INSERT INTO AuditLog (subjectId, field, oldValue, newValue, changedBy, changedAt) VALUES (?, 'damaged', ?, ?, 'LIBRARIAN', ?)",
+                            params![sid, s.damaged.to_string(), new_dmg.to_string(), now],
+                        );
+                    }
+                    "LOST" => {
+                        let new_rec = s.recovered + 1;
+                        let _ = conn.execute("UPDATE Subject SET recovered = ?, updatedAt = ? WHERE id = ?", params![new_rec, now, sid]);
+                        let _ = conn.execute(
+                            "INSERT INTO AuditLog (subjectId, field, oldValue, newValue, changedBy, changedAt) VALUES (?, 'recovered', ?, ?, 'LIBRARIAN', ?)",
+                            params![sid, s.recovered.to_string(), new_rec.to_string(), now],
+                        );
+                    }
+                    _ => {}
+                }
+                subject = Some(s);
+            }
+        }
+
+        Ok(Incident {
+            id: existing.id,
+            incident_type: existing.incident_type,
+            date: existing.date,
+            subject_id: existing.subject_id,
+            book_title: existing.book_title,
+            condition: existing.condition,
+            comment: updated_comment,
+            reported_by: existing.reported_by,
+            responsible_party: existing.responsible_party,
+            student_class: existing.student_class,
+            action_taken: Some("RESOLVED".into()),
+            created_at: existing.created_at,
+            subject,
         })
     }
 
@@ -1023,6 +1253,70 @@ impl Database {
         })
     }
 
+    pub fn renew_checkout(
+        &self,
+        id: i64,
+        extra_days: Option<i64>,
+        new_due_date: Option<String>,
+    ) -> Result<Checkout, String> {
+        let lock = self.conn.lock();
+        let conn = lock.as_ref().ok_or("Database is locked.")?;
+
+        let existing: Checkout = conn
+            .query_row(
+                "SELECT id, subjectId, studentName, studentClass, checkoutDate, dueDate, returnDate, status, conditionOut, conditionIn, createdAt, updatedAt FROM Checkout WHERE id = ?",
+                params![id],
+                |r| {
+                    Ok(Checkout {
+                        id: r.get(0)?,
+                        subject_id: r.get(1)?,
+                        student_name: r.get(2)?,
+                        student_class: r.get(3)?,
+                        checkout_date: r.get(4)?,
+                        due_date: r.get(5)?,
+                        return_date: r.get(6)?,
+                        status: r.get(7)?,
+                        condition_out: r.get(8)?,
+                        condition_in: r.get(9)?,
+                        created_at: r.get(10)?,
+                        updated_at: r.get(11)?,
+                        subject: None,
+                    })
+                },
+            )
+            .map_err(|_| "Checkout record not found".to_string())?;
+
+        if existing.status != "ACTIVE" {
+            return Err("Only active checkouts can be renewed".into());
+        }
+
+        let now = Utc::now();
+        let now_str = now.to_rfc3339();
+        let target_due = match new_due_date.as_ref().map(|d| d.trim()).filter(|d| !d.is_empty()) {
+            Some(d) => d.to_string(),
+            None => {
+                let days = extra_days.unwrap_or(7).max(1);
+                let base_time = chrono::DateTime::parse_from_rfc3339(&existing.due_date)
+                    .map(|dt| dt.with_timezone(&Utc))
+                    .unwrap_or(now);
+                let effective_base = if base_time > now { base_time } else { now };
+                (effective_base + chrono::Duration::days(days)).to_rfc3339()
+            }
+        };
+
+        conn.execute(
+            "UPDATE Checkout SET dueDate = ?, updatedAt = ? WHERE id = ?",
+            params![target_due, now_str, id],
+        )
+        .map_err(|e| e.to_string())?;
+
+        Ok(Checkout {
+            due_date: target_due,
+            updated_at: Some(now_str),
+            ..existing
+        })
+    }
+
     pub fn get_active_checkouts(&self, subject_id: Option<i64>) -> Result<Vec<Checkout>, String> {
         let lock = self.conn.lock();
         let conn = lock.as_ref().ok_or("Database is locked.")?;
@@ -1226,7 +1520,8 @@ impl Database {
             if let Ok(due) = chrono::DateTime::parse_from_rfc3339(&c.due_date) {
                 if due < now {
                     let diff_days = (now - due.with_timezone(&Utc)).num_days() + 1;
-                    overdue_fines += (diff_days as f64) * rule.fine_per_day;
+                    let book_fine = ((diff_days as f64) * rule.fine_per_day).min(15.0);
+                    overdue_fines += book_fine;
                 }
             }
         }
@@ -1472,6 +1767,34 @@ impl Database {
         Ok(())
     }
 
+    fn compute_audit_summary(items: &[StockAuditItem]) -> StockAuditSummary {
+        let mut total_expected = 0;
+        let mut total_actual = 0;
+        let mut total_discrepancy = 0;
+        let mut missing_items = 0;
+        let mut misplaced_items = 0;
+
+        for item in items {
+            total_expected += item.expected_count;
+            total_actual += item.actual_count;
+            total_discrepancy += item.discrepancy;
+            if item.discrepancy < 0 {
+                missing_items += item.discrepancy.abs();
+            } else if item.discrepancy > 0 {
+                misplaced_items += item.discrepancy;
+            }
+        }
+
+        StockAuditSummary {
+            total_subjects: items.len() as i64,
+            total_expected,
+            total_actual,
+            total_discrepancy,
+            missing_items,
+            misplaced_items,
+        }
+    }
+
     pub fn create_stock_audit(&self, audited_by: Option<String>, notes: Option<String>) -> Result<StockAudit, String> {
         let subjects = self.get_subjects()?;
         let now = Utc::now().to_rfc3339();
@@ -1510,6 +1833,8 @@ impl Database {
             });
         }
 
+        let summary = Self::compute_audit_summary(&items);
+
         Ok(StockAudit {
             id: audit_id,
             audit_date: now.clone(),
@@ -1519,7 +1844,7 @@ impl Database {
             created_at: Some(now.clone()),
             updated_at: Some(now),
             items: Some(items),
-            summary: None,
+            summary: Some(summary),
         })
     }
 
@@ -1600,32 +1925,7 @@ impl Database {
         })
     }
 
-    pub fn complete_stock_audit(&self, audit_id: i64, notes: Option<String>) -> Result<StockAudit, String> {
-        let lock = self.conn.lock();
-        let conn = lock.as_ref().ok_or("Database is locked.")?;
-
-        let (current_status, existing_notes): (String, Option<String>) = conn
-            .query_row(
-                "SELECT status, notes FROM StockAudit WHERE id = ?",
-                params![audit_id],
-                |r| Ok((r.get(0)?, r.get(1)?)),
-            )
-            .map_err(|_| "Stock audit not found".to_string())?;
-
-        if current_status == "COMPLETED" {
-            return Err("Stock audit is already completed".into());
-        }
-
-        let now = Utc::now().to_rfc3339();
-        let final_notes = notes.or(existing_notes);
-
-        conn.execute(
-            "UPDATE StockAudit SET status = 'COMPLETED', notes = ?, updatedAt = ? WHERE id = ?",
-            params![final_notes, now, audit_id],
-        )
-        .map_err(|e| e.to_string())?;
-
-        // Retrieve items to update subject lost count for missing items
+    fn fetch_audit_items(conn: &rusqlite::Connection, audit_id: i64) -> Result<Vec<StockAuditItem>, String> {
         let mut stmt = conn
             .prepare(
                 r#"SELECT i.id, i.auditId, i.subjectId, i.expectedCount, i.actualCount, i.discrepancy, i.notes,
@@ -1678,48 +1978,89 @@ impl Database {
             .map_err(|e| e.to_string())?;
 
         let mut items = Vec::new();
-        let mut total_expected = 0;
-        let mut total_actual = 0;
-        let mut total_discrepancy = 0;
-        let mut missing_items = 0;
-        let mut misplaced_items = 0;
-
         for r in rows {
-            let item = r.map_err(|e| e.to_string())?;
-            total_expected += item.expected_count;
-            total_actual += item.actual_count;
-            total_discrepancy += item.discrepancy;
+            items.push(r.map_err(|e| e.to_string())?);
+        }
+        Ok(items)
+    }
 
+    pub fn complete_stock_audit(&self, audit_id: i64, notes: Option<String>) -> Result<StockAudit, String> {
+        let lock = self.conn.lock();
+        let conn = lock.as_ref().ok_or("Database is locked.")?;
+
+        let (current_status, existing_notes, audited_by): (String, Option<String>, Option<String>) = conn
+            .query_row(
+                "SELECT status, notes, auditedBy FROM StockAudit WHERE id = ?",
+                params![audit_id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .map_err(|_| "Stock audit not found".to_string())?;
+
+        if current_status == "COMPLETED" {
+            return Err("Stock audit is already completed".into());
+        }
+
+        let now = Utc::now().to_rfc3339();
+        let final_notes = notes.or(existing_notes);
+
+        conn.execute(
+            "UPDATE StockAudit SET status = 'COMPLETED', notes = ?, updatedAt = ? WHERE id = ?",
+            params![final_notes, now, audit_id],
+        )
+        .map_err(|e| e.to_string())?;
+
+        let items = Self::fetch_audit_items(conn, audit_id)?;
+
+        for item in &items {
             if item.discrepancy < 0 {
                 let lost_qty = item.discrepancy.abs();
-                missing_items += lost_qty;
                 if let Some(ref sub) = item.subject {
                     let _ = conn.execute("UPDATE Subject SET lost = lost + ? WHERE id = ?", params![lost_qty, sub.id]);
+                    let _ = conn.execute(
+                        r#"INSERT INTO Incident (type, date, subjectId, bookTitle, condition, comment, reportedBy, actionTaken, createdAt)
+                           VALUES ('LOST', ?, ?, ?, 'Missing during stock audit', ?, 'SYSTEM_AUDIT', 'STOCK_ADJUSTED', ?)"#,
+                        params![
+                            now,
+                            sub.id,
+                            sub.name,
+                            format!("Auto-logged {} missing item(s) during Stock Audit #{}", lost_qty, audit_id),
+                            now
+                        ],
+                    );
                     let _ = conn.execute(
                         "INSERT INTO AuditLog (subjectId, field, oldValue, newValue, changedBy, changedAt) VALUES (?, 'lost', ?, ?, 'AUDIT_AUTO', ?)",
                         params![sub.id, sub.lost.to_string(), (sub.lost + lost_qty).to_string(), now],
                     );
                 }
             } else if item.discrepancy > 0 {
-                misplaced_items += item.discrepancy;
+                let found_qty = item.discrepancy;
+                if let Some(ref sub) = item.subject {
+                    let _ = conn.execute("UPDATE Subject SET recovered = recovered + ? WHERE id = ?", params![found_qty, sub.id]);
+                    let _ = conn.execute(
+                        r#"INSERT INTO Incident (type, date, subjectId, bookTitle, condition, comment, reportedBy, actionTaken, createdAt)
+                           VALUES ('RECOVERED', ?, ?, ?, 'Surplus during stock audit', ?, 'SYSTEM_AUDIT', 'STOCK_ADJUSTED', ?)"#,
+                        params![
+                            now,
+                            sub.id,
+                            sub.name,
+                            format!("Auto-logged {} surplus item(s) found during Stock Audit #{}", found_qty, audit_id),
+                            now
+                        ],
+                    );
+                    let _ = conn.execute(
+                        "INSERT INTO AuditLog (subjectId, field, oldValue, newValue, changedBy, changedAt) VALUES (?, 'recovered', ?, ?, 'AUDIT_AUTO', ?)",
+                        params![sub.id, sub.recovered.to_string(), (sub.recovered + found_qty).to_string(), now],
+                    );
+                }
             }
-
-            items.push(item);
         }
 
-        let summary = StockAuditSummary {
-            total_subjects: items.len() as i64,
-            total_expected,
-            total_actual,
-            total_discrepancy,
-            missing_items,
-            misplaced_items,
-        };
+        let summary = Self::compute_audit_summary(&items);
 
         Ok(StockAudit {
             id: audit_id,
             audit_date: now.clone(),
-            audited_by: None,
+            audited_by,
             notes: final_notes,
             status: "COMPLETED".into(),
             created_at: Some(now.clone()),
@@ -1754,65 +2095,12 @@ impl Database {
                 )
                 .map_err(|_| "Audit not found".to_string())?;
 
-            // Retrieve items
-            let mut stmt = conn
-                .prepare(
-                    r#"SELECT i.id, i.auditId, i.subjectId, i.expectedCount, i.actualCount, i.discrepancy, i.notes,
-                              s.name, s.category, s.openingCount, s.recovered, s.issued, s.damaged, s.lost, s.notes, s.averageCondition, s.degradationRate, s.createdAt, s.updatedAt
-                       FROM StockAuditItem i
-                       LEFT JOIN Subject s ON i.subjectId = s.id
-                       WHERE i.auditId = ?"#,
-                )
-                .map_err(|e| e.to_string())?;
-
-            let rows = stmt
-                .query_map(params![target_id], |row| {
-                    let sid: i64 = row.get(2)?;
-                    let sub_name: Option<String> = row.get(7)?;
-                    let subject = sub_name.map(|name| {
-                        let opening: i64 = row.get(9).unwrap_or(0);
-                        let recovered: i64 = row.get(10).unwrap_or(0);
-                        let issued: i64 = row.get(11).unwrap_or(0);
-                        let damaged: i64 = row.get(12).unwrap_or(0);
-                        let lost: i64 = row.get(13).unwrap_or(0);
-                        Subject {
-                            id: sid,
-                            name,
-                            category: row.get(8).unwrap_or(None),
-                            opening_count: opening,
-                            recovered,
-                            issued,
-                            damaged,
-                            lost,
-                            notes: row.get(14).unwrap_or(None),
-                            average_condition: row.get(15).unwrap_or(3.0),
-                            degradation_rate: row.get(16).unwrap_or(0.0),
-                            created_at: row.get(17).unwrap_or(None),
-                            updated_at: row.get(18).unwrap_or(None),
-                            available: Some(Self::calculate_available(opening, recovered, issued, damaged, lost)),
-                        }
-                    });
-
-                    Ok(StockAuditItem {
-                        id: row.get(0)?,
-                        audit_id: row.get(1)?,
-                        subject_id: sid,
-                        expected_count: row.get(3)?,
-                        actual_count: row.get(4)?,
-                        discrepancy: row.get(5)?,
-                        notes: row.get(6)?,
-                        subject,
-                    })
-                })
-                .map_err(|e| e.to_string())?;
-
-            let mut items = Vec::new();
-            for r in rows {
-                items.push(r.map_err(|e| e.to_string())?);
-            }
+            let items = Self::fetch_audit_items(conn, target_id)?;
+            let summary = Self::compute_audit_summary(&items);
 
             return Ok(vec![StockAudit {
                 items: Some(items),
+                summary: Some(summary),
                 ..audit
             }]);
         }
@@ -1839,7 +2127,12 @@ impl Database {
 
         let mut list = Vec::new();
         for r in rows {
-            list.push(r.map_err(|e| e.to_string())?);
+            let mut audit = r.map_err(|e| e.to_string())?;
+            let items = Self::fetch_audit_items(conn, audit.id).unwrap_or_default();
+            let summary = Self::compute_audit_summary(&items);
+            audit.items = Some(items);
+            audit.summary = Some(summary);
+            list.push(audit);
         }
         Ok(list)
     }
@@ -2114,5 +2407,238 @@ impl Database {
         }
 
         Ok(data)
+    }
+
+    pub fn set_last_lan_sync_at(&self, timestamp: &str) -> Result<(), String> {
+        let lock = self.conn.lock();
+        let conn = lock.as_ref().ok_or("Database is locked.")?;
+        conn.execute(
+            "UPDATE AppConfig SET lastLanSyncAt = ?, updatedAt = ? WHERE id = 1",
+            params![timestamp, timestamp],
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub fn package_lan_sync_payload(&self) -> Result<LanSyncPayload, String> {
+        let subjects = self.get_subjects()?;
+        let checkouts = self.get_all_checkouts_raw()?;
+        let incidents = self.get_incidents()?;
+        let borrowing_rules = self.get_borrowing_rules()?;
+        let school = self.get_school_info().ok();
+
+        Ok(LanSyncPayload {
+            subjects,
+            checkouts,
+            incidents,
+            borrowing_rules,
+            school,
+        })
+    }
+
+    pub fn merge_lan_sync_payload(&self, payload: &LanSyncPayload) -> Result<(i64, i64, i64, i64), String> {
+        let now = Utc::now().to_rfc3339();
+        let mut subjects_synced = 0i64;
+        let mut checkouts_synced = 0i64;
+        let mut incidents_synced = 0i64;
+        let mut rules_synced = 0i64;
+
+        {
+            let lock = self.conn.lock();
+            let conn = lock.as_ref().ok_or("Database is locked.")?;
+
+            // 1. Sync Subjects by name
+            for sub in &payload.subjects {
+                let existing: Option<(i64, Option<String>)> = conn
+                    .query_row(
+                        "SELECT id, updatedAt FROM Subject WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) LIMIT 1",
+                        params![sub.name],
+                        |r| Ok((r.get(0)?, r.get(1)?)),
+                    )
+                    .optional()
+                    .map_err(|e| e.to_string())?;
+
+                if let Some((local_id, local_updated)) = existing {
+                    let incoming_updated = sub.updated_at.as_deref().unwrap_or("");
+                    let existing_updated = local_updated.as_deref().unwrap_or("");
+                    if incoming_updated > existing_updated {
+                        conn.execute(
+                            r#"UPDATE Subject SET
+                                category = ?, openingCount = ?, recovered = ?, issued = ?,
+                                damaged = ?, lost = ?, notes = ?, averageCondition = ?,
+                                degradationRate = ?, updatedAt = ?
+                               WHERE id = ?"#,
+                            params![
+                                sub.category,
+                                sub.opening_count,
+                                sub.recovered,
+                                sub.issued,
+                                sub.damaged,
+                                sub.lost,
+                                sub.notes,
+                                sub.average_condition,
+                                sub.degradation_rate,
+                                sub.updated_at.as_deref().unwrap_or(&now),
+                                local_id,
+                            ],
+                        )
+                        .map_err(|e| e.to_string())?;
+                        subjects_synced += 1;
+                    }
+                } else {
+                    conn.execute(
+                        r#"INSERT INTO Subject (name, category, openingCount, recovered, issued, damaged, lost, notes, averageCondition, degradationRate, createdAt, updatedAt)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+                        params![
+                            sub.name,
+                            sub.category,
+                            sub.opening_count,
+                            sub.recovered,
+                            sub.issued,
+                            sub.damaged,
+                            sub.lost,
+                            sub.notes,
+                            sub.average_condition,
+                            sub.degradation_rate,
+                            sub.created_at.as_deref().unwrap_or(&now),
+                            sub.updated_at.as_deref().unwrap_or(&now),
+                        ],
+                    )
+                    .map_err(|e| e.to_string())?;
+                    subjects_synced += 1;
+                }
+            }
+
+            // 2. Sync BorrowingRules
+            for rule in &payload.borrowing_rules {
+                conn.execute(
+                    r#"INSERT INTO BorrowingRule (roleOrGrade, maxBooksAllowed, borrowDurationDays, finePerDay, createdAt, updatedAt)
+                       VALUES (?1, ?2, ?3, ?4, ?5, ?5)
+                       ON CONFLICT(roleOrGrade) DO UPDATE SET
+                           maxBooksAllowed = ?2,
+                           borrowDurationDays = ?3,
+                           finePerDay = ?4,
+                           updatedAt = ?5"#,
+                    params![
+                        rule.role_or_grade,
+                        rule.max_books_allowed,
+                        rule.borrow_duration_days,
+                        rule.fine_per_day,
+                        rule.updated_at.as_deref().unwrap_or(&now),
+                    ],
+                )
+                .map_err(|e| e.to_string())?;
+                rules_synced += 1;
+            }
+
+            // 3. Sync Checkouts
+            for c in &payload.checkouts {
+                let target_subject_id: Option<i64> = if let Some(ref s) = c.subject {
+                    conn.query_row(
+                        "SELECT id FROM Subject WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) LIMIT 1",
+                        params![s.name],
+                        |r| r.get(0),
+                    )
+                    .optional()
+                    .unwrap_or(None)
+                } else {
+                    conn.query_row(
+                        "SELECT id FROM Subject WHERE id = ? LIMIT 1",
+                        params![c.subject_id],
+                        |r| r.get(0),
+                    )
+                    .optional()
+                    .unwrap_or(None)
+                };
+
+                if let Some(sid) = target_subject_id {
+                    let existing: Option<(i64, String)> = conn
+                        .query_row(
+                            "SELECT id, status FROM Checkout WHERE subjectId = ? AND studentName = ? AND checkoutDate = ? LIMIT 1",
+                            params![sid, c.student_name, c.checkout_date],
+                            |r| Ok((r.get(0)?, r.get(1)?)),
+                        )
+                        .optional()
+                        .unwrap_or(None);
+
+                    if let Some((local_cid, local_status)) = existing {
+                        if local_status == "ACTIVE" && c.status != "ACTIVE" {
+                            let _ = conn.execute(
+                                "UPDATE Checkout SET status = ?, returnDate = ?, conditionIn = ?, updatedAt = ? WHERE id = ?",
+                                params![c.status, c.return_date, c.condition_in, c.updated_at.as_deref().unwrap_or(&now), local_cid],
+                            );
+                            checkouts_synced += 1;
+                        }
+                    } else {
+                        let _ = conn.execute(
+                            r#"INSERT INTO Checkout (subjectId, studentName, studentClass, checkoutDate, dueDate, returnDate, status, conditionOut, conditionIn, createdAt, updatedAt)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+                            params![
+                                sid,
+                                c.student_name,
+                                c.student_class,
+                                c.checkout_date,
+                                c.due_date,
+                                c.return_date,
+                                c.status,
+                                c.condition_out,
+                                c.condition_in,
+                                c.created_at.as_deref().unwrap_or(&now),
+                                c.updated_at.as_deref().unwrap_or(&now),
+                            ],
+                        );
+                        checkouts_synced += 1;
+                    }
+                }
+            }
+
+            // 4. Sync Incidents
+            for inc in &payload.incidents {
+                let target_subject_id: Option<i64> = if let Some(ref s) = inc.subject {
+                    conn.query_row(
+                        "SELECT id FROM Subject WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) LIMIT 1",
+                        params![s.name],
+                        |r| r.get(0),
+                    )
+                    .optional()
+                    .unwrap_or(None)
+                } else {
+                    inc.subject_id
+                };
+
+                let existing_id: Option<i64> = conn
+                    .query_row(
+                        "SELECT id FROM Incident WHERE type = ? AND bookTitle = ? AND date = ? LIMIT 1",
+                        params![inc.incident_type, inc.book_title, inc.date],
+                        |r| r.get(0),
+                    )
+                    .optional()
+                    .unwrap_or(None);
+
+                if existing_id.is_none() {
+                    let _ = conn.execute(
+                        r#"INSERT INTO Incident (type, date, subjectId, bookTitle, condition, comment, reportedBy, responsibleParty, studentClass, actionTaken, createdAt)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+                        params![
+                            inc.incident_type,
+                            inc.date,
+                            target_subject_id,
+                            inc.book_title,
+                            inc.condition,
+                            inc.comment,
+                            inc.reported_by,
+                            inc.responsible_party,
+                            inc.student_class,
+                            inc.action_taken,
+                            inc.created_at.as_deref().unwrap_or(&now),
+                        ],
+                    );
+                    incidents_synced += 1;
+                }
+            }
+        }
+
+        let _ = self.set_last_lan_sync_at(&now);
+        Ok((subjects_synced, checkouts_synced, incidents_synced, rules_synced))
     }
 }

@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron'
-import { checkDbStatus, setupDatabase, unlockDatabase, changePassword } from '../crypto'
+import { checkDbStatus, setupDatabase, unlockDatabase, changePassword, cleanupTempDatabase } from '../crypto'
 import { openPrismaDatabase, disconnectPrisma, sanitizeError } from '../database'
 import { validateMasterPassword } from '../../src/lib/utils'
 
@@ -55,6 +55,16 @@ export function registerAuthHandlers() {
       }
     }
     return result
+  })
+
+  ipcMain.handle('lock-db', async () => {
+    try {
+      cleanupTempDatabase()
+      await disconnectPrisma()
+      return { success: true }
+    } catch (err: unknown) {
+      return { success: false, error: sanitizeError(err) }
+    }
   })
 
   ipcMain.handle('change-password', (_, { oldPassword, newPassword }) => {

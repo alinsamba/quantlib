@@ -88,8 +88,12 @@ export const db = {
     isElectron() ? invokeElectron<Subject>('addSubject', data) : invoke<Subject>('add_subject', { data }),
   addIncident: (data: Partial<Incident>) =>
     isElectron() ? invokeElectron<Incident>('addIncident', data) : invoke<Incident>('add_incident', { data }),
+  resolveIncident: (data: { id: number; resolutionNotes?: string }) =>
+    isElectron() ? invokeElectron<Incident>('resolveIncident', data) : invoke<Incident>('resolve_incident', data),
   updateSubject: (id: number, data: Partial<Subject>) =>
     isElectron() ? invokeElectron<Subject>('updateSubject', { id, data }) : invoke<Subject>('update_subject', { id, data }),
+  deleteSubject: (id: number) =>
+    isElectron() ? invokeElectron<void>('deleteSubject', id) : invoke<void>('delete_subject', { id }),
   setTheme: (mode: 'light' | 'dark') =>
     isElectron() ? invokeElectron<void>('setTheme', mode) : invoke<void>('set_theme', { mode }),
   addCheckout: (data: {
@@ -112,6 +116,14 @@ export const db = {
     isElectron()
       ? invokeElectron<Checkout>('returnCheckout', { id, conditionIn })
       : invoke<Checkout>('return_checkout', { id, conditionIn }),
+  renewCheckout: (data: { id: number; extraDays?: number; newDueDate?: string }) =>
+    isElectron()
+      ? invokeElectron<Checkout>('renewCheckout', data)
+      : invoke<Checkout>('renew_checkout', {
+          id: data.id,
+          extraDays: data.extraDays,
+          newDueDate: data.newDueDate
+        }),
   getActiveCheckouts: (subjectId?: number) =>
     isElectron() ? invokeElectron<Checkout[]>('getActiveCheckouts', subjectId) : invoke<Checkout[]>('get_active_checkouts', { subjectId }),
   recordFinePayment: (data: { studentName: string; studentClass?: string; amount: number; paymentMethod: string; notes?: string }) =>
@@ -137,6 +149,10 @@ export const db = {
     isElectron()
       ? directElectron<{ success: boolean; error?: string }>('unlockDb', args)
       : direct<{ success: boolean; error?: string }>('unlock_db', args),
+  lockDb: () =>
+    isElectron()
+      ? directElectron<{ success: boolean; error?: string }>('lockDb')
+      : direct<{ success: boolean; error?: string }>('lock_db'),
   changePassword: (args: { oldPassword?: string; newPassword?: string }) =>
     isElectron()
       ? directElectron<{ success: boolean; recoveryKey?: string; error?: string }>('changePassword', args)
@@ -187,6 +203,10 @@ export const db = {
     isElectron()
       ? directElectron<{ success: boolean; data?: BackupFileRecord[]; error?: string }>('listBackups')
       : direct<{ success: boolean; data?: BackupFileRecord[]; error?: string }>('list_backups'),
+  restoreBackup: (backupPath: string) =>
+    isElectron()
+      ? directElectron<{ success: boolean; error?: string }>('restoreBackup', backupPath)
+      : direct<{ success: boolean; error?: string }>('restore_backup', { backupPath }),
   getLanSyncConfig: () =>
     isElectron()
       ? directElectron<{ success: boolean; data?: LanSyncConfig; error?: string }>('getLanSyncConfig')

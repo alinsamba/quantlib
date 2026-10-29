@@ -45,7 +45,6 @@ export function getRuleForClass(
   return defaultRule
 }
 
-// FIXES Finding #12: Pushes filtering down to SQLite using Prisma queries instead of loading full tables!
 export async function calculateClearance(studentName: string, studentClass?: string | null) {
   if (!studentName || typeof studentName !== 'string' || !studentName.trim()) {
     throw new Error('Invalid student name')
@@ -55,7 +54,6 @@ export async function calculateClearance(studentName: string, studentClass?: str
   const sName = studentName.trim()
   const sClass = studentClass ? studentClass.trim() : null
 
-  // Fetch only active checkouts for matching student
   const activeCheckoutsRaw = await prisma.checkout.findMany({
     where: {
       status: 'ACTIVE'
@@ -68,7 +66,6 @@ export async function calculateClearance(studentName: string, studentClass?: str
       (!sClass || (c.studentClass || '').trim().toLowerCase() === sClass.toLowerCase())
   )
 
-  // Fetch only incidents for matching responsible party
   const studentIncidentsRaw = await prisma.incident.findMany({
     include: { subject: true }
   })
@@ -79,13 +76,15 @@ export async function calculateClearance(studentName: string, studentClass?: str
       (!sClass || !i.studentClass || i.studentClass.trim().toLowerCase() === sClass.toLowerCase())
   )
 
-  // Unresolved incidents: DAMAGED, LOST, or actionTaken not RESOLVED/PAID
   const unresolvedIncidents = studentIncidents.filter((i) => {
-    if (i.actionTaken === 'RESOLVED' || i.actionTaken === 'PAID') return false
+    if (i.actionTaken && (
+      i.actionTaken.toUpperCase().includes('RESOLVED') ||
+      i.actionTaken.toUpperCase().includes('PAID') ||
+      i.actionTaken.toUpperCase().includes('WAIVED')
+    )) return false
     return true
   })
 
-  // Get borrowing rules to calculate overdue fines
   const rules = await prisma.borrowingRule.findMany()
   const rule = getRuleForClass(sClass, rules)
 
@@ -95,7 +94,7 @@ export async function calculateClearance(studentName: string, studentClass?: str
     if (checkout.dueDate < now) {
       const diffMs = now.getTime() - new Date(checkout.dueDate).getTime()
       const daysOverdue = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
-      overdueFines += daysOverdue * rule.finePerDay
+      overdueFines += Math.min(15.0, daysOverdue * rule.finePerDay)
     }
   }
 
@@ -110,7 +109,7 @@ export async function calculateClearance(studentName: string, studentClass?: str
     }
   }
 
-  const totalReplacementCharges = overdueFines + incidentCharges
+  const totalReplacementCharges = Math.round((overdueFines + incidentCharges) * 100) / 100
   const isCleared = activeCheckouts.length === 0 && unresolvedIncidents.length === 0
   const status: 'CLEARED' | 'HOLD' = isCleared ? 'CLEARED' : 'HOLD'
 
@@ -121,7 +120,11 @@ export async function calculateClearance(studentName: string, studentClass?: str
     activeCheckouts,
     incidents: studentIncidents,
     unresolvedIncidents,
-    totalReplacementCharges
+    totalReplacementCharges,
+    totalOverdueFines: Math.round(overdueFines * 100) / 100,
+    totalIncidentCharges: Math.round(incidentCharges * 100) / 100,
+    totalAmountDue: totalReplacementCharges,
+    isCleared
   }
 }
 
@@ -258,6 +261,38 @@ export function registerCheckoutHandlers() {
           })
         }
         return checkout
+      })
+      await encryptTempDatabase()
+      return { success: true, data: res }
+    } catch (err: unknown) {
+      return { success: false, error: sanitizeError(err) }
+    }
+  })
+
+  ipcMain.handle('renew-checkout', async (_, data: { id: number; extraDays?: number; newDueDate?: string }) => {
+    try {
+      const prisma = ensureDb()
+      const { id, extraDays = 7, newDueDate } = data || {}
+      if (!id || typeof id !== 'number') throw new Error('Invalid checkout ID')
+
+      const res = await prisma.$transaction(async (tx) => {
+        const existing = await tx.checkout.findUnique({ where: { id } })
+        if (!existing) throw new Error('Checkout record not found')
+        if (existing.status !== 'ACTIVE') throw new Error('Only active checkouts can be renewed')
+
+        let updatedDue: Date
+        if (newDueDate) {
+          updatedDue = new Date(newDueDate)
+        } else {
+          const baseMs = Math.max(Date.now(), new Date(existing.dueDate).getTime())
+          updatedDue = new Date(baseMs + Math.max(1, extraDays) * 24 * 60 * 60 * 1000)
+        }
+
+        return tx.checkout.update({
+          where: { id },
+          data: { dueDate: updatedDue },
+          include: { subject: true }
+        })
       })
       await encryptTempDatabase()
       return { success: true, data: res }

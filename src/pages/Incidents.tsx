@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
-import { Download, Printer, Plus } from 'lucide-react'
-import { exportToExcel, exportToCsv } from '../lib/exportUtils'
+import { useEffect, useRef, useState } from 'react'
+import { Download, Upload, Printer, Plus, CheckCircle2 } from 'lucide-react'
+import { exportToExcel, exportToCsv, parseSpreadsheetFile } from '../lib/exportUtils'
 import { db } from '../lib/ipc-client'
 import { useAsync } from '../hooks/useAsync'
 import { Button } from '../components/Button'
@@ -13,7 +13,10 @@ export default function Incidents() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [submitting, setSubmitting] = useState(false)
+  const [resolvingId, setResolvingId] = useState<number | null>(null)
   const [modalError, setModalError] = useState('')
+  const [importNotice, setImportNotice] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [formData, setFormData] = useState({
     type: 'DAMAGED',
@@ -40,6 +43,55 @@ export default function Incidents() {
       setSubjects(list || [])
     } catch {
       // ignore error loading subjects
+    }
+  }
+
+  const handleResolve = async (inc: Incident) => {
+    setResolvingId(inc.id)
+    try {
+      await db.resolveIncident({ id: inc.id, resolutionNotes: 'Resolved by Librarian' })
+      execute(async () => db.getIncidents())
+    } catch (err: unknown) {
+      console.error('Failed to resolve incident:', err)
+    } finally {
+      setResolvingId(null)
+    }
+  }
+
+  const handleImportSpreadsheet = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImportNotice(null)
+    try {
+      const rows = await parseSpreadsheetFile(file)
+      const subjectList = await db.getSubjects()
+      let imported = 0
+      for (const row of rows) {
+        const rawTitle = String(row['Book Title'] || row.bookTitle || row.Title || row.title || '').trim()
+        if (!rawTitle) continue
+        const rawType = String(row.Type || row.type || 'DAMAGED').trim().toUpperCase()
+        const validType = ['DAMAGED', 'LOST', 'RECOVERED', 'DONATION', 'NEW'].includes(rawType) ? rawType : 'DAMAGED'
+        const rawSubjectName = String(row.Subject || row.subject || '').trim()
+        const matchedSub = subjectList?.find((s) => s.name.toLowerCase() === rawSubjectName.toLowerCase())
+
+        await db.addIncident({
+          type: validType,
+          subjectId: matchedSub ? matchedSub.id : null,
+          bookTitle: rawTitle,
+          responsibleParty: String(row.Responsible || row.responsibleParty || '').trim() || undefined,
+          studentClass: String(row.Class || row.studentClass || '').trim() || undefined,
+          condition: String(row.Condition || row.condition || '').trim() || undefined,
+          actionTaken: String(row['Action Taken'] || row.actionTaken || 'PENDING').trim() || undefined,
+          comment: String(row.Comment || row.comment || '').trim() || undefined
+        })
+        imported++
+      }
+      setImportNotice(`Successfully imported ${imported} incident record(s) from ${file.name}.`)
+      execute(async () => db.getIncidents())
+    } catch (err: unknown) {
+      setImportNotice(`Import error: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }
 
@@ -118,6 +170,21 @@ export default function Incidents() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Incident Log</h1>
         <div className="flex flex-wrap gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls,.csv"
+            onChange={handleImportSpreadsheet}
+            className="hidden"
+          />
+          <Button
+            variant="secondary"
+            icon={<Upload size={18} />}
+            onClick={() => fileInputRef.current?.click()}
+            className="print:hidden"
+          >
+            Import Excel/CSV
+          </Button>
           <Button variant="secondary" icon={<Download size={18} />} onClick={handleExportExcel} className="print:hidden">
             Excel
           </Button>
@@ -132,6 +199,15 @@ export default function Incidents() {
           </Button>
         </div>
       </div>
+
+      {importNotice && (
+        <div className="p-3 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 text-blue-800 dark:text-blue-200 rounded-xl text-sm flex items-center justify-between">
+          <span>{importNotice}</span>
+          <button onClick={() => setImportNotice(null)} className="text-xs font-semibold underline ml-4">
+            Dismiss
+          </button>
+        </div>
+      )}
 
       <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden transition-colors duration-200">
         <div className="overflow-x-auto">
@@ -150,35 +226,81 @@ export default function Incidents() {
                   <th className="p-4 font-medium">Responsible</th>
                   <th className="p-4 font-medium">Class</th>
                   <th className="p-4 font-medium">Condition</th>
+                  <th className="p-4 font-medium">Action / Status</th>
+                  <th className="p-4 font-medium">Notes</th>
+                  <th className="p-4 font-medium text-right print:hidden">Resolve</th>
                 </tr>
               </thead>
               <tbody className="text-slate-700 dark:text-slate-300 text-sm">
-                {(incidents || []).map((inc) => (
-                  <tr key={inc.id} className="border-b border-slate-50 dark:border-slate-700/50 hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
-                    <td className="p-4">{new Date(inc.date).toLocaleDateString()}</td>
-                    <td className="p-4">
-                      <span
-                        className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                          inc.type === 'DAMAGED'
-                            ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
-                            : inc.type === 'LOST'
-                            ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                            : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                        }`}
-                      >
-                        {inc.type}
-                      </span>
-                    </td>
-                    <td className="p-4">{inc.subject?.name || '-'}</td>
-                    <td className="p-4 font-medium dark:text-white">{inc.bookTitle}</td>
-                    <td className="p-4">{inc.responsibleParty || '-'}</td>
-                    <td className="p-4">{inc.studentClass || '-'}</td>
-                    <td className="p-4 text-slate-500 dark:text-slate-400">{inc.condition || '-'}</td>
-                  </tr>
-                ))}
+                {(incidents || []).map((inc) => {
+                  const statusUpper = (inc.actionTaken || 'PENDING').toUpperCase()
+                  const isResolved =
+                    statusUpper.includes('RESOLVED') ||
+                    statusUpper.includes('PAID') ||
+                    statusUpper.includes('WAIVED') ||
+                    statusUpper.includes('ADJUSTED')
+                  const canResolve =
+                    !isResolved && (inc.type === 'DAMAGED' || inc.type === 'LOST')
+
+                  return (
+                    <tr key={inc.id} className="border-b border-slate-50 dark:border-slate-700/50 hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
+                      <td className="p-4 whitespace-nowrap">{new Date(inc.date).toLocaleDateString()}</td>
+                      <td className="p-4 whitespace-nowrap">
+                        <span
+                          className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                            inc.type === 'DAMAGED'
+                              ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                              : inc.type === 'LOST'
+                              ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                              : inc.type === 'NEW' || inc.type === 'DONATION'
+                              ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                              : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                          }`}
+                        >
+                          {inc.type}
+                        </span>
+                      </td>
+                      <td className="p-4">{inc.subject?.name || '-'}</td>
+                      <td className="p-4 font-medium dark:text-white">{inc.bookTitle}</td>
+                      <td className="p-4">{inc.responsibleParty || '-'}</td>
+                      <td className="p-4">{inc.studentClass || '-'}</td>
+                      <td className="p-4 text-slate-500 dark:text-slate-400">{inc.condition || '-'}</td>
+                      <td className="p-4">
+                        <span
+                          className={`px-2 py-0.5 rounded-md text-xs font-medium ${
+                            isResolved
+                              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
+                              : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300'
+                          }`}
+                        >
+                          {inc.actionTaken || 'PENDING'}
+                        </span>
+                      </td>
+                      <td className="p-4 text-xs text-slate-500 dark:text-slate-400 max-w-xs truncate" title={inc.comment || ''}>
+                        {inc.comment || '-'}
+                      </td>
+                      <td className="p-4 text-right print:hidden">
+                        {canResolve ? (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            icon={<CheckCircle2 size={14} />}
+                            isLoading={resolvingId === inc.id}
+                            onClick={() => handleResolve(inc)}
+                            title={inc.type === 'DAMAGED' ? 'Mark repaired & restore to stock' : 'Mark found/resolved & restore to stock'}
+                          >
+                            Resolve
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-slate-400">&mdash;</span>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
                 {(incidents || []).length === 0 && (
                   <tr>
-                    <td colSpan={7} className="p-8 text-center text-slate-500 dark:text-slate-400">
+                    <td colSpan={10} className="p-8 text-center text-slate-500 dark:text-slate-400">
                       No incidents logged yet
                     </td>
                   </tr>
@@ -205,7 +327,8 @@ export default function Incidents() {
               { label: 'Damaged Book', value: 'DAMAGED' },
               { label: 'Lost Book', value: 'LOST' },
               { label: 'Recovered Book', value: 'RECOVERED' },
-              { label: 'Donation', value: 'DONATION' }
+              { label: 'Donation (+Stock)', value: 'DONATION' },
+              { label: 'New Stock Addition (+Stock)', value: 'NEW' }
             ]}
           />
 

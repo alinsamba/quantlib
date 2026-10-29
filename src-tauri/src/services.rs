@@ -1,10 +1,246 @@
 use crate::db::Database;
 use crate::models::*;
 use chrono::{DateTime, Datelike, NaiveDate, Utc};
+use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::fs::{self, File};
-use std::io::Write;
+use std::io::{Read, Write};
+use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, OnceLock};
+use std::time::Duration;
+
+static LAN_SERVER_RUNNING: AtomicBool = AtomicBool::new(false);
+static LAN_SERVER_STOP_SIGNAL: OnceLock<Mutex<Option<Arc<AtomicBool>>>> = OnceLock::new();
+
+fn server_stop_slot() -> &'static Mutex<Option<Arc<AtomicBool>>> {
+    LAN_SERVER_STOP_SIGNAL.get_or_init(|| Mutex::new(None))
+}
+
+pub fn is_lan_server_running() -> bool {
+    LAN_SERVER_RUNNING.load(Ordering::SeqCst)
+}
+
+pub fn stop_lan_sync_server() {
+    if let Some(flag) = server_stop_slot().lock().take() {
+        flag.store(true, Ordering::SeqCst);
+    }
+    LAN_SERVER_RUNNING.store(false, Ordering::SeqCst);
+}
+
+pub fn start_lan_sync_server(
+    port: u16,
+    passcode: String,
+    db: Arc<Database>,
+) -> Result<(), String> {
+    stop_lan_sync_server();
+
+    let addr = format!("0.0.0.0:{}", port);
+    let listener = TcpListener::bind(&addr)
+        .map_err(|e| format!("Failed to bind LAN sync server on {}: {}", addr, e))?;
+    listener
+        .set_nonblocking(true)
+        .map_err(|e| format!("Failed to set non-blocking listener: {}", e))?;
+
+    let stop_flag = Arc::new(AtomicBool::new(false));
+    *server_stop_slot().lock() = Some(Arc::clone(&stop_flag));
+    LAN_SERVER_RUNNING.store(true, Ordering::SeqCst);
+
+    std::thread::spawn(move || {
+        while !stop_flag.load(Ordering::SeqCst) {
+            match listener.accept() {
+                Ok((mut stream, _peer)) => {
+                    let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
+                    let _ = stream.set_write_timeout(Some(Duration::from_secs(5)));
+                    let mut buf = [0u8; 8192];
+                    if let Ok(n) = stream.read(&mut buf) {
+                        if n > 0 {
+                            let req = String::from_utf8_lossy(&buf[..n]);
+                            handle_lan_http_request(&mut stream, &req, &passcode, &db);
+                        }
+                    }
+                }
+                Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    std::thread::sleep(Duration::from_millis(50));
+                }
+                Err(_) => {
+                    std::thread::sleep(Duration::from_millis(100));
+                }
+            }
+        }
+        LAN_SERVER_RUNNING.store(false, Ordering::SeqCst);
+    });
+
+    Ok(())
+}
+
+fn handle_lan_http_request(
+    stream: &mut TcpStream,
+    req: &str,
+    expected_passcode: &str,
+    db: &Database,
+) {
+    let mut lines = req.lines();
+    let request_line = lines.next().unwrap_or("");
+    let parts: Vec<&str> = request_line.split_whitespace().collect();
+    if parts.len() < 2 {
+        let _ = write_http_json(stream, 400, r#"{"error":"Bad Request"}"#);
+        return;
+    }
+    let method = parts[0];
+    let path = parts[1];
+
+    if method == "OPTIONS" {
+        let resp = "HTTP/1.1 200 OK\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type, X-QuantLib-Passcode\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+        let _ = stream.write_all(resp.as_bytes());
+        return;
+    }
+
+    let mut provided_passcode = "";
+    for line in lines {
+        if line.is_empty() {
+            break;
+        }
+        if let Some((k, v)) = line.split_once(':') {
+            if k.trim().eq_ignore_ascii_case("x-quantlib-passcode") {
+                provided_passcode = v.trim();
+                break;
+            }
+        }
+    }
+
+    if provided_passcode != expected_passcode {
+        let _ = write_http_json(
+            stream,
+            401,
+            r#"{"error":"Unauthorized: Invalid LAN Sync passcode"}"#,
+        );
+        return;
+    }
+
+    if method == "GET" && path == "/api/sync/status" {
+        let body = serde_json::json!({
+            "status": "ONLINE",
+            "app": "QuantLib",
+            "timestamp": Utc::now().to_rfc3339()
+        })
+        .to_string();
+        let _ = write_http_json(stream, 200, &body);
+        return;
+    }
+
+    if method == "GET" && path == "/api/sync/pull" {
+        match db.package_lan_sync_payload() {
+            Ok(payload) => {
+                let body = serde_json::json!({
+                    "success": true,
+                    "payload": payload
+                })
+                .to_string();
+                let _ = write_http_json(stream, 200, &body);
+            }
+            Err(e) => {
+                let body = serde_json::json!({ "error": e }).to_string();
+                let _ = write_http_json(stream, 500, &body);
+            }
+        }
+        return;
+    }
+
+    let _ = write_http_json(stream, 404, r#"{"error":"Not Found"}"#);
+}
+
+fn write_http_json(stream: &mut TcpStream, status: u16, body: &str) -> std::io::Result<()> {
+    let reason = match status {
+        200 => "OK",
+        400 => "Bad Request",
+        401 => "Unauthorized",
+        404 => "Not Found",
+        _ => "Internal Server Error",
+    };
+    let header = format!(
+        "HTTP/1.1 {} {}\r\nContent-Type: application/json\r\nAccess-Control-Allow-Origin: *\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        status,
+        reason,
+        body.len()
+    );
+    stream.write_all(header.as_bytes())?;
+    stream.write_all(body.as_bytes())?;
+    stream.flush()
+}
+
+pub fn sync_with_lan_peer(
+    db: &Database,
+    peer_ip: &str,
+    peer_port: u16,
+    passcode: &str,
+) -> Result<LanSyncResult, String> {
+    let clean_ip = peer_ip.trim();
+    if clean_ip.is_empty() {
+        return Err("Peer IP address is required".into());
+    }
+
+    let addr_str = format!("{}:{}", clean_ip, peer_port);
+    let sock_addr: SocketAddr = addr_str
+        .parse()
+        .map_err(|_| format!("Invalid peer address: {}", addr_str))?;
+
+    let mut stream = TcpStream::connect_timeout(&sock_addr, Duration::from_secs(5))
+        .map_err(|e| format!("Failed to connect to peer {}: {}", addr_str, e))?;
+    let _ = stream.set_read_timeout(Some(Duration::from_secs(10)));
+    let _ = stream.set_write_timeout(Some(Duration::from_secs(5)));
+
+    let req = format!(
+        "GET /api/sync/pull HTTP/1.1\r\nHost: {}\r\nX-QuantLib-Passcode: {}\r\nAccept: application/json\r\nConnection: close\r\n\r\n",
+        addr_str, passcode
+    );
+    stream
+        .write_all(req.as_bytes())
+        .map_err(|e| format!("Failed to send sync request: {}", e))?;
+
+    let mut response_bytes = Vec::new();
+    stream
+        .read_to_end(&mut response_bytes)
+        .map_err(|e| format!("Failed to read response from peer: {}", e))?;
+
+    let response_str = String::from_utf8_lossy(&response_bytes);
+    let (headers, body) = response_str
+        .split_once("\r\n\r\n")
+        .or_else(|| response_str.split_once("\n\n"))
+        .ok_or_else(|| "Malformed HTTP response from peer".to_string())?;
+
+    let status_line = headers.lines().next().unwrap_or("");
+    if status_line.contains(" 401 ") {
+        return Err("Invalid passcode rejected by peer.".into());
+    }
+    if !status_line.contains(" 200 ") {
+        return Err(format!("Peer returned error: {}", status_line));
+    }
+
+    #[derive(serde::Deserialize)]
+    struct PullResponse {
+        payload: LanSyncPayload,
+    }
+
+    let parsed: PullResponse = serde_json::from_str(body.trim())
+        .map_err(|e| format!("Invalid sync payload from peer: {}", e))?;
+
+    let (subjects_synced, checkouts_synced, incidents_synced, rules_synced) =
+        db.merge_lan_sync_payload(&parsed.payload)?;
+
+    Ok(LanSyncResult {
+        success: true,
+        subjects_synced: Some(subjects_synced),
+        checkouts_synced: Some(checkouts_synced),
+        incidents_synced: Some(incidents_synced),
+        rules_synced: Some(rules_synced),
+        message: Some(format!(
+            "Synced {} subjects, {} checkouts, {} incidents, and {} rules from {}:{}",
+            subjects_synced, checkouts_synced, incidents_synced, rules_synced, clean_ip, peer_port
+        )),
+    })
+}
 
 pub fn calculate_condition_decay(
     average_condition: f64,
@@ -31,15 +267,21 @@ pub fn get_depreciation_analytics(subjects: &[Subject]) -> DepreciationAnalytics
     let mut decay_projections = Vec::new();
 
     for s in subjects {
-        let (rate, remaining, _) = calculate_condition_decay(s.average_condition, s.degradation_rate, 0);
+        let (rate, remaining, _) =
+            calculate_condition_decay(s.average_condition, s.degradation_rate, 0);
+        let current_cond = s.average_condition.clamp(1.0, 3.0);
         let projections = [0, 10, 25, 50, 100]
             .iter()
             .map(|&checkouts| {
-                let (_, _, projected) =
+                let (pt_rate, pt_rem, projected) =
                     calculate_condition_decay(s.average_condition, s.degradation_rate, checkouts);
                 ConditionDecayPoint {
                     checkouts,
+                    future_checkouts: checkouts,
+                    current_condition: current_cond,
                     projected_condition: projected,
+                    degradation_rate: pt_rate,
+                    remaining_checkouts: pt_rem,
                 }
             })
             .collect();
@@ -125,7 +367,15 @@ pub fn get_depreciation_analytics(subjects: &[Subject]) -> DepreciationAnalytics
 pub fn get_circulation_insights(checkouts: &[Checkout]) -> CirculationInsights {
     let mut months_map: HashMap<String, (String, i64, i64, i64)> = HashMap::new(); // key -> (month_label, checkouts, returns, timestamp)
     let mut day_counts: [i64; 7] = [0; 7]; // Sunday=0 .. Saturday=6
-    let day_names = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    let day_names = [
+        "Sunday",
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+    ];
     let mut category_map: HashMap<String, i64> = HashMap::new();
     let mut reader_map: HashMap<(String, Option<String>), i64> = HashMap::new();
 
@@ -181,10 +431,20 @@ pub fn get_circulation_insights(checkouts: &[Checkout]) -> CirculationInsights {
 
     let mut monthly_trends: Vec<_> = months_map
         .into_values()
-        .map(|(month, checkouts, returns, timestamp)| (timestamp, MonthlyCirculationTrend { month, checkouts, returns }))
+        .map(|(month, checkouts, returns, timestamp)| {
+            (
+                timestamp,
+                MonthlyCirculationTrend {
+                    month,
+                    checkouts,
+                    returns,
+                },
+            )
+        })
         .collect();
     monthly_trends.sort_by_key(|(t, _)| *t);
-    let trends: Vec<MonthlyCirculationTrend> = monthly_trends.into_iter().map(|(_, m)| m).collect();
+    let trends: Vec<MonthlyCirculationTrend> =
+        monthly_trends.into_iter().map(|(_, m)| m).collect();
 
     let mut peak_days = Vec::new();
     for (i, name) in day_names.iter().enumerate() {
@@ -232,7 +492,11 @@ pub fn list_vault_backups(dir: &Path) -> Result<Vec<BackupFileRecord>, String> {
         if path.is_file() {
             if let Some(ext) = path.extension() {
                 if ext == "enc" || ext == "db" || ext == "bak" {
-                    let filename = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                    let filename = path
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_string();
                     let metadata = entry.metadata().map_err(|e| e.to_string())?;
                     let size_bytes = metadata.len() as i64;
                     let created_at = metadata
@@ -257,7 +521,11 @@ pub fn list_vault_backups(dir: &Path) -> Result<Vec<BackupFileRecord>, String> {
     Ok(records)
 }
 
-pub fn perform_vault_backup(target_dir: &Path, source_file: &Path, source_meta: &Path) -> Result<(String, String), String> {
+pub fn perform_vault_backup(
+    target_dir: &Path,
+    source_file: &Path,
+    source_meta: &Path,
+) -> Result<(String, String), String> {
     if !target_dir.exists() {
         fs::create_dir_all(target_dir)
             .map_err(|e| format!("Failed to create backup target dir: {}", e))?;
@@ -283,6 +551,61 @@ pub fn perform_vault_backup(target_dir: &Path, source_file: &Path, source_meta: 
     Ok((dest_path.to_string_lossy().to_string(), filename))
 }
 
+pub fn restore_vault_backup(
+    backup_path: &Path,
+    enc_dest: &Path,
+    meta_dest: &Path,
+) -> Result<(), String> {
+    if !backup_path.exists() {
+        return Err("Selected backup file does not exist".into());
+    }
+
+    let ext = backup_path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("");
+    if ext != "enc" && ext != "bak" && ext != "db" {
+        return Err("Invalid backup file format. Expected a .enc backup file.".into());
+    }
+
+    let candidate_meta_1 = backup_path.with_extension("meta");
+    let candidate_meta_2 = std::path::PathBuf::from(format!("{}.meta", backup_path.display()));
+    let backup_meta_path = if candidate_meta_1.exists() {
+        candidate_meta_1
+    } else if candidate_meta_2.exists() {
+        candidate_meta_2
+    } else {
+        return Err(
+            "Companion metadata file (.meta) not found for this backup. Both files are required to restore the vault."
+                .into(),
+        );
+    };
+
+    let meta_raw = fs::read_to_string(&backup_meta_path)
+        .map_err(|e| format!("Failed to read backup metadata: {}", e))?;
+    let meta_val: serde_json::Value = serde_json::from_str(&meta_raw)
+        .map_err(|_| "Backup metadata file (.meta) is corrupted or invalid.".to_string())?;
+    if meta_val.get("salt").is_none() {
+        return Err("Backup metadata file (.meta) is missing required fields.".into());
+    }
+
+    if enc_dest.exists() {
+        let bak = enc_dest.with_extension("enc.pre_restore.bak");
+        let _ = fs::copy(enc_dest, bak);
+    }
+    if meta_dest.exists() {
+        let bak = meta_dest.with_extension("meta.pre_restore.bak");
+        let _ = fs::copy(meta_dest, bak);
+    }
+
+    fs::copy(backup_path, enc_dest)
+        .map_err(|e| format!("Failed to restore encrypted vault file: {}", e))?;
+    fs::copy(&backup_meta_path, meta_dest)
+        .map_err(|e| format!("Failed to restore vault metadata file: {}", e))?;
+
+    Ok(())
+}
+
 fn escape_csv(val: &str) -> String {
     let sanitized = if val.starts_with('=')
         || val.starts_with('+')
@@ -299,9 +622,13 @@ fn escape_csv(val: &str) -> String {
     format!("\"{}\"", sanitized.replace('"', "\"\""))
 }
 
-pub fn export_entire_db_csv(db: &Database, target_dir: &Path) -> Result<DatabaseExportResult, String> {
+pub fn export_entire_db_csv(
+    db: &Database,
+    target_dir: &Path,
+) -> Result<DatabaseExportResult, String> {
     if !target_dir.exists() {
-        fs::create_dir_all(target_dir).map_err(|e| format!("Failed to create target dir: {}", e))?;
+        fs::create_dir_all(target_dir)
+            .map_err(|e| format!("Failed to create target dir: {}", e))?;
     }
 
     let subjects = db.get_subjects()?;
@@ -335,7 +662,8 @@ pub fn export_entire_db_csv(db: &Database, target_dir: &Path) -> Result<Database
                 escape_csv(s.notes.as_deref().unwrap_or("")),
                 s.average_condition,
                 s.degradation_rate
-            ).map_err(|e| e.to_string())?;
+            )
+            .map_err(|e| e.to_string())?;
         }
         filenames.push(fname.to_string());
     }
@@ -359,7 +687,8 @@ pub fn export_entire_db_csv(db: &Database, target_dir: &Path) -> Result<Database
                 escape_csv(&c.status),
                 c.condition_out,
                 c.condition_in.map(|n| n.to_string()).unwrap_or_default()
-            ).map_err(|e| e.to_string())?;
+            )
+            .map_err(|e| e.to_string())?;
         }
         filenames.push(fname.to_string());
     }
@@ -384,7 +713,8 @@ pub fn export_entire_db_csv(db: &Database, target_dir: &Path) -> Result<Database
                 escape_csv(i.responsible_party.as_deref().unwrap_or("")),
                 escape_csv(i.student_class.as_deref().unwrap_or("")),
                 escape_csv(i.action_taken.as_deref().unwrap_or(""))
-            ).map_err(|e| e.to_string())?;
+            )
+            .map_err(|e| e.to_string())?;
         }
         filenames.push(fname.to_string());
     }
@@ -393,7 +723,11 @@ pub fn export_entire_db_csv(db: &Database, target_dir: &Path) -> Result<Database
     {
         let fname = "quantlib_borrowing_rules.csv";
         let mut f = File::create(target_dir.join(fname)).map_err(|e| e.to_string())?;
-        writeln!(f, "\"id\",\"roleOrGrade\",\"maxBooksAllowed\",\"borrowDurationDays\",\"finePerDay\"").map_err(|e| e.to_string())?;
+        writeln!(
+            f,
+            "\"id\",\"roleOrGrade\",\"maxBooksAllowed\",\"borrowDurationDays\",\"finePerDay\""
+        )
+        .map_err(|e| e.to_string())?;
         for r in &rules {
             writeln!(
                 f,
@@ -403,7 +737,8 @@ pub fn export_entire_db_csv(db: &Database, target_dir: &Path) -> Result<Database
                 r.max_books_allowed,
                 r.borrow_duration_days,
                 r.fine_per_day
-            ).map_err(|e| e.to_string())?;
+            )
+            .map_err(|e| e.to_string())?;
         }
         filenames.push(fname.to_string());
     }
@@ -412,7 +747,8 @@ pub fn export_entire_db_csv(db: &Database, target_dir: &Path) -> Result<Database
     {
         let fname = "quantlib_stock_audits.csv";
         let mut f = File::create(target_dir.join(fname)).map_err(|e| e.to_string())?;
-        writeln!(f, "\"id\",\"auditDate\",\"auditedBy\",\"notes\",\"status\"").map_err(|e| e.to_string())?;
+        writeln!(f, "\"id\",\"auditDate\",\"auditedBy\",\"notes\",\"status\"")
+            .map_err(|e| e.to_string())?;
         for a in &audits {
             writeln!(
                 f,
@@ -422,7 +758,8 @@ pub fn export_entire_db_csv(db: &Database, target_dir: &Path) -> Result<Database
                 escape_csv(a.audited_by.as_deref().unwrap_or("")),
                 escape_csv(a.notes.as_deref().unwrap_or("")),
                 escape_csv(&a.status)
-            ).map_err(|e| e.to_string())?;
+            )
+            .map_err(|e| e.to_string())?;
         }
         filenames.push(fname.to_string());
     }
@@ -431,7 +768,11 @@ pub fn export_entire_db_csv(db: &Database, target_dir: &Path) -> Result<Database
     {
         let fname = "quantlib_audit_logs.csv";
         let mut f = File::create(target_dir.join(fname)).map_err(|e| e.to_string())?;
-        writeln!(f, "\"id\",\"subjectId\",\"field\",\"oldValue\",\"newValue\",\"changedBy\",\"changedAt\"").map_err(|e| e.to_string())?;
+        writeln!(
+            f,
+            "\"id\",\"subjectId\",\"field\",\"oldValue\",\"newValue\",\"changedBy\",\"changedAt\""
+        )
+        .map_err(|e| e.to_string())?;
         for l in &audit_logs {
             writeln!(
                 f,
@@ -443,7 +784,8 @@ pub fn export_entire_db_csv(db: &Database, target_dir: &Path) -> Result<Database
                 escape_csv(&l.new_value),
                 escape_csv(l.changed_by.as_deref().unwrap_or("")),
                 escape_csv(l.changed_at.as_deref().unwrap_or(""))
-            ).map_err(|e| e.to_string())?;
+            )
+            .map_err(|e| e.to_string())?;
         }
         filenames.push(fname.to_string());
     }
@@ -452,7 +794,11 @@ pub fn export_entire_db_csv(db: &Database, target_dir: &Path) -> Result<Database
     {
         let fname = "quantlib_school_info.csv";
         let mut f = File::create(target_dir.join(fname)).map_err(|e| e.to_string())?;
-        writeln!(f, "\"name\",\"motto\",\"logoPath\",\"address\",\"contactPhone\",\"academicYear\"").map_err(|e| e.to_string())?;
+        writeln!(
+            f,
+            "\"name\",\"motto\",\"logoPath\",\"address\",\"contactPhone\",\"academicYear\""
+        )
+        .map_err(|e| e.to_string())?;
         for sc in &schools {
             writeln!(
                 f,
@@ -463,7 +809,8 @@ pub fn export_entire_db_csv(db: &Database, target_dir: &Path) -> Result<Database
                 escape_csv(sc.address.as_deref().unwrap_or("")),
                 escape_csv(sc.contact_phone.as_deref().unwrap_or("")),
                 escape_csv(sc.academic_year.as_deref().unwrap_or(""))
-            ).map_err(|e| e.to_string())?;
+            )
+            .map_err(|e| e.to_string())?;
         }
         filenames.push(fname.to_string());
     }

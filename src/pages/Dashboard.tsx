@@ -88,6 +88,10 @@ export default function Dashboard() {
     return mapped.sort((a, b) => b.total - a.total)
   }, [summaryData])
 
+  const lowStockSubjects = useMemo(() => {
+    return subjectData.filter((s) => s.available < 5)
+  }, [subjectData])
+
   if (errorMsg) {
     return (
       <div className="p-8 text-center bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-2xl max-w-xl mx-auto my-12">
@@ -141,7 +145,6 @@ export default function Dashboard() {
 
         {/* Global Action Button Hierarchy */}
         <div className="flex flex-wrap items-center gap-3 print:hidden">
-          {/* Primary Action Button (Solid Fill) */}
           <Button
             variant="primary"
             icon={<PlusCircle size={17} />}
@@ -150,7 +153,6 @@ export default function Dashboard() {
             + Add Book
           </Button>
 
-          {/* Secondary Actions (Outlined) */}
           <Button
             variant="secondary"
             icon={<BookOpen size={17} />}
@@ -167,7 +169,6 @@ export default function Dashboard() {
             Clearance
           </Button>
 
-          {/* Ghost / Utility Trigger */}
           <Button
             variant="ghost"
             icon={<Printer size={18} />}
@@ -177,9 +178,33 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* Low Stock Alert Banner */}
+      {lowStockSubjects.length > 0 && (
+        <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/80 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-start space-x-3">
+            <AlertTriangle size={20} className="text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <h3 className="text-sm font-bold text-amber-900 dark:text-amber-200">
+                Low Stock Alert ({lowStockSubjects.length} {lowStockSubjects.length === 1 ? 'Subject' : 'Subjects'} &lt; 5 Available Copies)
+              </h3>
+              <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">
+                {lowStockSubjects.slice(0, 5).map((s) => `${s.name} (${s.available} left)`).join(', ')}
+                {lowStockSubjects.length > 5 ? ` and ${lowStockSubjects.length - 5} more...` : ''}
+              </p>
+            </div>
+          </div>
+          <Button
+            variant="secondary"
+            className="text-xs px-3 py-1.5 flex-shrink-0"
+            onClick={() => navigate('/inventory', { state: { filterLowStock: true } })}
+          >
+            Review Low Stock
+          </Button>
+        </div>
+      )}
+
       {/* 2. Standardized KPI Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5">
-        {/* Total Books */}
         <StatCard
           label="Total Books"
           value={summaryData.totalBooks.toLocaleString()}
@@ -189,7 +214,6 @@ export default function Dashboard() {
           badgeText="Collection"
         />
 
-        {/* Available in Stock */}
         <StatCard
           label="Available in Stock"
           value={summaryData.available.toLocaleString()}
@@ -199,7 +223,6 @@ export default function Dashboard() {
           badgeText={`${totalAvailablePercent}% In Stock`}
         />
 
-        {/* Currently Issued */}
         <StatCard
           label="Currently Issued"
           value={summaryData.issued.toLocaleString()}
@@ -209,7 +232,6 @@ export default function Dashboard() {
           badgeText="Active"
         />
 
-        {/* Damaged / Lost */}
         <StatCard
           label="Damaged & Lost"
           value={summaryData.damagedLost.toLocaleString()}
@@ -219,7 +241,6 @@ export default function Dashboard() {
           badgeText={summaryData.damagedLost > 0 ? "Review" : "Clean"}
         />
 
-        {/* Overdue Returns (Interactive Drilldown) */}
         <StatCard
           label="Overdue Books"
           value={summaryData.overdueCount.toLocaleString()}
@@ -234,7 +255,6 @@ export default function Dashboard() {
 
       {/* 3. Main Visualizations & Horizontal Bar Breakdown */}
       {!hasInventory ? (
-        /* Standardized Global Empty State */
         <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xs border border-slate-200/80 dark:border-slate-700/80 p-12 text-center">
           <div className="w-14 h-14 bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-blue-100 dark:border-blue-900/50">
             <Layers size={28} />
@@ -263,9 +283,7 @@ export default function Dashboard() {
           </div>
         </div>
       ) : (
-        /* Charts Grid with 60/40 Proportion Split */
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Left Column (60%): Horizontal Stock by Subject with Micro-Metrics & Drilldown */}
           <div className="lg:col-span-7 bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-xs border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between">
             <div className="flex items-center justify-between mb-5">
               <div>
@@ -288,7 +306,6 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* Horizontal Bar Breakdown Rows */}
             <div className="space-y-4 overflow-y-auto max-h-[420px] pr-1">
               {subjectData.map((sub, idx) => {
                 const totalBarWidthPercent = Math.min(100, Math.max(8, Math.round((sub.total / maxSubjectTotal) * 100)))
@@ -301,7 +318,6 @@ export default function Dashboard() {
                     className="group p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700/40 border border-transparent hover:border-slate-200 dark:hover:border-slate-700 transition-all duration-150 cursor-pointer"
                     title={`Click to filter inventory for ${sub.name}`}
                   >
-                    {/* Row Header: Subject Name, Rank, and Micro-Metrics */}
                     <div className="flex items-center justify-between text-xs mb-2">
                       <div className="flex items-center space-x-2 min-w-0">
                         <span className="w-5 h-5 rounded-md bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold text-[10px] flex items-center justify-center flex-shrink-0">
@@ -313,7 +329,6 @@ export default function Dashboard() {
                         <ExternalLink size={12} className="opacity-0 group-hover:opacity-100 text-blue-500 transition-opacity flex-shrink-0" />
                       </div>
 
-                      {/* Micro-Metrics (e.g., "240 copies (28%)") */}
                       <div className="flex items-center space-x-2 font-medium text-slate-600 dark:text-slate-300 flex-shrink-0">
                         <span className="font-bold text-slate-900 dark:text-white">
                           {sub.total.toLocaleString()} copies
@@ -324,25 +339,21 @@ export default function Dashboard() {
                       </div>
                     </div>
 
-                    {/* Proportional Horizontal Bar with Stacked Segments */}
                     <div className="w-full bg-slate-100 dark:bg-slate-700/60 rounded-full h-3 overflow-hidden flex">
                       <div
                         style={{ width: `${totalBarWidthPercent}%` }}
                         className="h-full flex rounded-full overflow-hidden transition-all duration-500"
                       >
-                        {/* Available Segment (Emerald) */}
                         <div 
                           style={{ width: `${availableRatio * 100}%` }}
                           className="bg-emerald-500 h-full"
                           title={`Available: ${sub.available}`}
                         />
-                        {/* Issued Segment (Amber) */}
                         <div 
                           style={{ width: `${issuedRatio * 100}%` }}
                           className="bg-amber-500 h-full"
                           title={`Issued: ${sub.issued}`}
                         />
-                        {/* Remainder / Damaged / Lost (Crimson) */}
                         {sub.damaged + sub.lost > 0 && (
                           <div 
                             style={{ width: `${((sub.damaged + sub.lost) / sub.total) * 100}%` }}
@@ -353,7 +364,6 @@ export default function Dashboard() {
                       </div>
                     </div>
 
-                    {/* Row Micro-Footer Breakdown */}
                     <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 mt-1.5 px-0.5">
                       <span className="text-emerald-600 dark:text-emerald-400 font-medium">
                         {sub.available} available ({sub.availPercent}%)
@@ -368,7 +378,6 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Right Column (40%): Collection Share Breakdown Donut */}
           <div className="lg:col-span-5 bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-xs border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between">
             <div className="mb-3">
               <h2 className="text-base sm:text-lg font-semibold text-slate-900 dark:text-white">
@@ -379,7 +388,6 @@ export default function Dashboard() {
               </p>
             </div>
 
-            {/* Donut Chart Visualization */}
             <div className="h-52 w-full flex items-center justify-center relative">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -415,7 +423,6 @@ export default function Dashboard() {
                 </PieChart>
               </ResponsiveContainer>
 
-              {/* Center donut metric */}
               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                 <span className="text-2xl font-black text-slate-900 dark:text-white">
                   {summaryData.totalBooks.toLocaleString()}
@@ -426,7 +433,6 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* Custom Interactive Legend List with direct drill-down */}
             <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-700/60 max-h-48 overflow-y-auto space-y-1.5 pr-1">
               {subjectData.map((sub, index) => (
                 <div 

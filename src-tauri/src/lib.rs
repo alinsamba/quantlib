@@ -35,17 +35,22 @@ pub fn run() {
             commands::check_db_status,
             commands::setup_db,
             commands::unlock_db,
+            commands::lock_db,
             commands::change_password,
             commands::backup_database,
+            commands::restore_backup,
             commands::get_subjects,
             commands::get_incidents,
             commands::get_summary,
             commands::add_subject,
             commands::update_subject,
+            commands::delete_subject,
             commands::add_incident,
+            commands::resolve_incident,
             commands::set_theme,
             commands::add_checkout,
             commands::return_checkout,
+            commands::renew_checkout,
             commands::get_active_checkouts,
             commands::record_fine_payment,
             commands::waive_fine,
@@ -76,6 +81,7 @@ pub fn run() {
         ])
         .on_window_event(move |_window, event| {
             if let tauri::WindowEvent::Destroyed = event {
+                services::stop_lan_sync_server();
                 db_for_cleanup.close();
                 vault_for_cleanup.cleanup();
             }
@@ -92,7 +98,11 @@ mod tests {
     use std::fs;
 
     fn create_test_dir(name: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("quantlib_test_{}_{}", name, Utc::now().timestamp_nanos_opt().unwrap_or(0)));
+        let dir = std::env::temp_dir().join(format!(
+            "quantlib_test_{}_{}",
+            name,
+            Utc::now().timestamp_nanos_opt().unwrap_or(0)
+        ));
         let _ = fs::create_dir_all(&dir);
         dir
     }
@@ -104,7 +114,12 @@ mod tests {
 
         assert_eq!(vault.check_db_status(), "SETUP");
 
-        let recovery_key = vault.setup_database("SuperSecurePassword123!").expect("Setup failed");
+        // Weak password should be rejected
+        assert!(vault.setup_database("weak").is_err());
+
+        let recovery_key = vault
+            .setup_database("SuperSecurePassword123!")
+            .expect("Setup failed");
         assert!(!recovery_key.is_empty());
         assert_eq!(vault.check_db_status(), "LOCKED");
         assert!(vault.has_master_key());
@@ -118,12 +133,16 @@ mod tests {
         assert!(!vault.has_master_key());
 
         // Unlock with correct password
-        vault.unlock_database("SuperSecurePassword123!", false).expect("Unlock failed");
+        vault
+            .unlock_database("SuperSecurePassword123!", false)
+            .expect("Unlock failed");
         assert!(vault.has_master_key());
 
         // Unlock with recovery key
         vault.clear_master_key();
-        vault.unlock_database(&recovery_key, true).expect("Recovery unlock failed");
+        vault
+            .unlock_database(&recovery_key, true)
+            .expect("Recovery unlock failed");
         assert!(vault.has_master_key());
 
         // Clean up
@@ -137,28 +156,43 @@ mod tests {
         let db = Database::new();
         db.open(&db_path).expect("Failed to open test DB");
 
-        // 1. Add subject
-        let subject = db.add_subject(SubjectInput {
-            name: Some("Mathematics S.4".into()),
-            category: Some("Science".into()),
-            opening_count: Some(50),
-        }).expect("Failed to add subject");
+        // 1. Add subject with notes
+        let subject = db
+            .add_subject(SubjectInput {
+                name: Some("Mathematics S.4".into()),
+                category: Some("Science".into()),
+                opening_count: Some(50),
+                notes: Some("Core curriculum textbook".into()),
+                ..Default::default()
+            })
+            .expect("Failed to add subject");
 
         assert_eq!(subject.name, "Mathematics S.4");
         assert_eq!(subject.opening_count, 50);
+        assert_eq!(subject.notes.as_deref(), Some("Core curriculum textbook"));
         assert_eq!(subject.available, Some(50));
 
-        // 2. Add checkout
-        let checkout = db.add_checkout(
-            subject.id,
-            "John Doe".into(),
-            Some("S.4A".into()),
-            None,
-            Some(3),
-        ).expect("Failed to add checkout");
+        // 2. Add checkout & test renew_checkout
+        let checkout = db
+            .add_checkout(
+                subject.id,
+                "John Doe".into(),
+                Some("S.4A".into()),
+                None,
+                Some(3),
+            )
+            .expect("Failed to add checkout");
 
         assert_eq!(checkout.status, "ACTIVE");
         assert_eq!(checkout.condition_out, 3);
+
+        let renewed = db
+            .renew_checkout(checkout.id, Some(7), None)
+            .expect("Failed to renew checkout");
+        assert!(renewed.due_date > checkout.due_date);
+
+        // Deleting subject with active checkout must be blocked
+        assert!(db.delete_subject(subject.id).is_err());
 
         // Check availability decreased
         let subjects = db.get_subjects().expect("Failed to get subjects");
@@ -167,76 +201,122 @@ mod tests {
         assert_eq!(math.available, Some(49));
 
         // 3. Return checkout with condition 2 (degraded)
-        let returned = db.return_checkout(checkout.id, Some(2)).expect("Failed to return checkout");
+        let returned = db
+            .return_checkout(checkout.id, Some(2))
+            .expect("Failed to return checkout");
         assert_eq!(returned.status, "RETURNED");
         assert_eq!(returned.condition_in, Some(2));
 
         let subjects_after_return = db.get_subjects().expect("Failed to get subjects");
-        let math_after = subjects_after_return.iter().find(|s| s.id == subject.id).unwrap();
+        let math_after = subjects_after_return
+            .iter()
+            .find(|s| s.id == subject.id)
+            .unwrap();
         assert_eq!(math_after.issued, 0);
         assert_eq!(math_after.available, Some(50));
         assert!(math_after.average_condition < 3.0);
 
-        // 4. Incident tracking and audit log
-        let incident = db.add_incident(IncidentInput {
-            incident_type: "DAMAGED".into(),
-            date: None,
-            subject_id: Some(subject.id),
-            book_title: "Mathematics S.4 Volume 1".into(),
-            condition: Some("Torn cover".into()),
-            comment: Some("Water spill".into()),
-            reported_by: Some("Librarian".into()),
-            responsible_party: Some("John Doe".into()),
-            student_class: Some("S.4A".into()),
-            action_taken: None,
-        }).expect("Failed to log incident");
+        // 4. Incident tracking, resolution, and audit log
+        let incident = db
+            .add_incident(IncidentInput {
+                incident_type: "DAMAGED".into(),
+                date: None,
+                subject_id: Some(subject.id),
+                book_title: "Mathematics S.4 Volume 1".into(),
+                condition: Some("Torn cover".into()),
+                comment: Some("Water spill".into()),
+                reported_by: Some("Librarian".into()),
+                responsible_party: Some("John Doe".into()),
+                student_class: Some("S.4A".into()),
+                action_taken: None,
+            })
+            .expect("Failed to log incident");
 
         assert_eq!(incident.incident_type, "DAMAGED");
 
         // Available should now be 49 because 1 book is damaged
         let subjects_after_damage = db.get_subjects().unwrap();
-        let math_damaged = subjects_after_damage.iter().find(|s| s.id == subject.id).unwrap();
+        let math_damaged = subjects_after_damage
+            .iter()
+            .find(|s| s.id == subject.id)
+            .unwrap();
         assert_eq!(math_damaged.damaged, 1);
         assert_eq!(math_damaged.available, Some(49));
 
         // Verify audit log exists
         let logs = db.get_audit_logs().unwrap();
-        assert!(logs.iter().any(|l| l.subject_id == subject.id && l.field == "damaged"));
+        assert!(logs
+            .iter()
+            .any(|l| l.subject_id == subject.id && l.field == "damaged"));
 
         // 5. Clearance calculation
         let clearance = db.calculate_clearance("John Doe", Some("S.4A")).unwrap();
         assert_eq!(clearance.status, "HOLD"); // has unresolved incident
         assert!(clearance.total_replacement_charges > 0.0);
 
-        // Waive fine
-        let cleared = db.waive_fine("John Doe", Some("S.4A"), "First warning", Some("Headteacher")).unwrap();
-        assert_eq!(cleared.status, "CLEARED");
+        // Resolve incident directly via resolve_incident
+        let resolved_inc = db
+            .resolve_incident(incident.id, Some("Repaired binding".into()))
+            .expect("Failed to resolve incident");
+        assert_eq!(resolved_inc.action_taken.as_deref(), Some("RESOLVED"));
 
-        // 6. Stock Audit
-        let audit = db.create_stock_audit(Some("Auditor".into()), Some("Annual Check".into())).unwrap();
+        let math_repaired = db
+            .get_subjects()
+            .unwrap()
+            .into_iter()
+            .find(|s| s.id == subject.id)
+            .unwrap();
+        assert_eq!(math_repaired.damaged, 0);
+        assert_eq!(math_repaired.available, Some(50));
+
+        // 6. Stock Audit with surplus reconciliation
+        let audit = db
+            .create_stock_audit(Some("Auditor".into()), Some("Annual Check".into()))
+            .unwrap();
         assert_eq!(audit.status, "IN_PROGRESS");
+        assert!(audit.summary.is_some());
 
-        let completed_audit = db.complete_stock_audit(audit.id, Some("All verified".into())).unwrap();
+        // Record a surplus of +2 copies found during audit
+        db.save_stock_audit_item(audit.id, subject.id, 52, Some("Found 2 extra copies".into()))
+            .unwrap();
+
+        let completed_audit = db
+            .complete_stock_audit(audit.id, Some("All verified".into()))
+            .unwrap();
         assert_eq!(completed_audit.status, "COMPLETED");
-        assert!(completed_audit.summary.is_some());
+        assert_eq!(completed_audit.summary.as_ref().unwrap().misplaced_items, 2);
 
-        // Clean up
+        let math_after_audit = db
+            .get_subjects()
+            .unwrap()
+            .into_iter()
+            .find(|s| s.id == subject.id)
+            .unwrap();
+        assert_eq!(math_after_audit.recovered, 2);
+        assert_eq!(math_after_audit.available, Some(52));
+
         // 7. Test overdue date detection with ISO-8601 'T' separator
-        let overdue_checkout = db.add_checkout(
-            subject.id,
-            "Jane Smith".into(),
-            Some("S.4A".into()),
-            Some("2020-01-01T12:00:00Z".into()),
-            Some(3),
-        ).unwrap();
+        let overdue_checkout = db
+            .add_checkout(
+                subject.id,
+                "Jane Smith".into(),
+                Some("S.4A".into()),
+                Some("2020-01-01T12:00:00Z".into()),
+                Some(3),
+            )
+            .unwrap();
         assert_eq!(overdue_checkout.status, "ACTIVE");
         let overdue_list = db.get_overdue_checkouts().unwrap();
         assert!(overdue_list.iter().any(|c| c.id == overdue_checkout.id));
 
         // 8. Test incident on active checkout does not double-deduct
-        // Currently math has opening=50, damaged=1, issued=1 (Jane Smith). Available = 50 - 1 - 1 = 48.
-        let sub_before = db.get_subjects().unwrap().into_iter().find(|s| s.id == subject.id).unwrap();
-        assert_eq!(sub_before.available, Some(48));
+        let sub_before = db
+            .get_subjects()
+            .unwrap()
+            .into_iter()
+            .find(|s| s.id == subject.id)
+            .unwrap();
+        assert_eq!(sub_before.available, Some(51));
         assert_eq!(sub_before.issued, 1);
 
         // Jane Smith reports book LOST
@@ -251,14 +331,18 @@ mod tests {
             reported_by: Some("Librarian".into()),
             action_taken: None,
             date: None,
-        }).unwrap();
+        })
+        .unwrap();
 
-        let sub_after = db.get_subjects().unwrap().into_iter().find(|s| s.id == subject.id).unwrap();
-        // Issued is decremented to 0, lost is incremented to 1
+        let sub_after = db
+            .get_subjects()
+            .unwrap()
+            .into_iter()
+            .find(|s| s.id == subject.id)
+            .unwrap();
         assert_eq!(sub_after.issued, 0);
         assert_eq!(sub_after.lost, 1);
-        // Available should still be 50 - 1(damaged) - 1(lost) = 48 (NOT 47 from double deduction!)
-        assert_eq!(sub_after.available, Some(48));
+        assert_eq!(sub_after.available, Some(51));
 
         // 9. Test School info persistence
         let new_school = SchoolInfo {
@@ -269,10 +353,11 @@ mod tests {
             contact_phone: Some("+256 711 222 333".into()),
             academic_year: Some("2026/2027".into()),
         };
-        db.update_school_info(new_school.clone()).unwrap();
+        db.update_school_info(new_school).unwrap();
         let fetched_school = db.get_school_info().unwrap();
         assert_eq!(fetched_school.name, "Updated High School");
         assert_eq!(fetched_school.academic_year, Some("2026/2027".into()));
+        assert_eq!(fetched_school.address, Some("Plot 42, Kampala".into()));
 
         // Clean up
         db.close();
@@ -283,21 +368,41 @@ mod tests {
     fn test_backup_creates_both_enc_and_meta() {
         let test_dir = create_test_dir("backup_test");
         let vault = VaultManager::new(test_dir.clone());
-        vault.setup_database("StrongPassword123!").expect("Setup failed");
+        vault
+            .setup_database("StrongPassword123!")
+            .expect("Setup failed");
 
         let backup_dir = test_dir.join("backups");
         let (dest_path, filename) = services::perform_vault_backup(
             &backup_dir,
             &vault.enc_file(),
             &vault.meta_file(),
-        ).expect("Backup failed");
+        )
+        .expect("Backup failed");
 
         assert!(std::path::Path::new(&dest_path).exists());
         assert!(filename.ends_with(".enc"));
 
         let meta_filename = filename.replace(".enc", ".meta");
         let meta_path = backup_dir.join(meta_filename);
-        assert!(meta_path.exists(), "quantlib.meta backup must be created alongside quantlib.enc");
+        assert!(
+            meta_path.exists(),
+            "quantlib.meta backup must be created alongside quantlib.enc"
+        );
+
+        // Verify restore_vault_backup works into a target location
+        let restore_dir = test_dir.join("restored");
+        let _ = fs::create_dir_all(&restore_dir);
+        let restored_enc = restore_dir.join("quantlib.enc");
+        let restored_meta = restore_dir.join("quantlib.meta");
+        services::restore_vault_backup(
+            std::path::Path::new(&dest_path),
+            &restored_enc,
+            &restored_meta,
+        )
+        .expect("Restore backup failed");
+        assert!(restored_enc.exists());
+        assert!(restored_meta.exists());
 
         let _ = fs::remove_dir_all(&test_dir);
     }

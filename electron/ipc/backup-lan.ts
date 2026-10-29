@@ -1,4 +1,4 @@
-import { ipcMain, dialog, BrowserWindow } from 'electron'
+import { ipcMain, dialog, BrowserWindow, app } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
 import { ensureDb, sanitizeError } from '../database'
@@ -235,6 +235,33 @@ export function registerBackupAndLanHandlers(getMainWindow: () => BrowserWindow 
       const targetDir = configRes[0]?.autoBackupPath || undefined
       const list = await listVaultBackups(targetDir || undefined)
       return { success: true, data: list }
+    } catch (err: unknown) {
+      return { success: false, error: sanitizeError(err) }
+    }
+  })
+
+  ipcMain.handle('restore-backup', async (_, backupPath: string) => {
+    try {
+      ensureDb()
+      if (!backupPath || typeof backupPath !== 'string') {
+        throw new Error('Invalid backup path')
+      }
+      if (!fs.existsSync(backupPath)) {
+        throw new Error('Selected backup file does not exist')
+      }
+      const metaSource = `${backupPath}.meta`
+      if (!fs.existsSync(metaSource)) {
+        throw new Error('Backup metadata file (.meta) is missing')
+      }
+
+      const dataDir = app.getPath('userData')
+      const encDest = path.join(dataDir, 'quantlib.enc')
+      const metaDest = path.join(dataDir, 'quantlib.meta')
+
+      fs.copyFileSync(backupPath, encDest)
+      fs.copyFileSync(metaSource, metaDest)
+
+      return { success: true }
     } catch (err: unknown) {
       return { success: false, error: sanitizeError(err) }
     }

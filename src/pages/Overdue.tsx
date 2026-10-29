@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { Printer, Clock, AlertTriangle, RotateCcw } from 'lucide-react'
+import { useState, useEffect, useMemo } from 'react'
+import { Printer, Clock, AlertTriangle, RotateCcw, CalendarPlus, Search } from 'lucide-react'
 import { db } from '../lib/ipc-client'
 import { useAsync } from '../hooks/useAsync'
 import { Button } from '../components/Button'
@@ -12,7 +12,9 @@ export default function Overdue() {
   const [selectedCheckout, setSelectedCheckout] = useState<Checkout | null>(null)
   const [conditionIn, setConditionIn] = useState<number>(3)
   const [returnLoading, setReturnLoading] = useState(false)
+  const [renewingId, setRenewingId] = useState<number | null>(null)
   const [returnError, setReturnError] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
 
   useEffect(() => {
     execute(async () => {
@@ -20,10 +22,34 @@ export default function Overdue() {
     })
   }, [execute])
 
+  const filteredOverdue = useMemo(() => {
+    const list = overdueCheckouts || []
+    if (!searchQuery.trim()) return list
+    const q = searchQuery.toLowerCase()
+    return list.filter(
+      (c) =>
+        c.studentName.toLowerCase().includes(q) ||
+        (c.studentClass || '').toLowerCase().includes(q) ||
+        (c.subject?.name || '').toLowerCase().includes(q)
+    )
+  }, [overdueCheckouts, searchQuery])
+
   const handleOpenReturnModal = (checkout: Checkout) => {
     setSelectedCheckout(checkout)
     setConditionIn(3)
     setReturnError('')
+  }
+
+  const handleRenewCheckout = async (checkout: Checkout) => {
+    setRenewingId(checkout.id)
+    try {
+      await db.renewCheckout({ id: checkout.id, extraDays: 7 })
+      execute(async () => db.getOverdueCheckouts())
+    } catch (err: unknown) {
+      console.error('Error renewing checkout', err)
+    } finally {
+      setRenewingId(null)
+    }
   }
 
   const handleReturnSubmit = async (e: React.FormEvent) => {
@@ -46,23 +72,35 @@ export default function Overdue() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between mb-8 print:hidden">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 print:hidden">
         <div>
           <h1 className="text-2xl font-bold text-slate-800 dark:text-white flex items-center space-x-2">
             <Clock className="text-rose-500" />
             <span>Overdue Books</span>
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Books that have passed their due date.
+            Books that have passed their due date. Renew or return directly below.
           </p>
         </div>
-        <button
-          onClick={() => window.print()}
-          className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 shadow-sm"
-        >
-          <Printer size={16} />
-          <span>Print Notices</span>
-        </button>
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Filter student, class, subject..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 pr-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <button
+            onClick={() => window.print()}
+            className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center space-x-2 shadow-sm"
+          >
+            <Printer size={16} />
+            <span>Print Notices</span>
+          </button>
+        </div>
       </div>
 
       {isLoading && !overdueCheckouts ? (
@@ -73,13 +111,13 @@ export default function Overdue() {
         <div className="bg-red-50 dark:bg-red-900/20 p-8 rounded-xl shadow-sm border border-red-200 dark:border-red-800 text-center text-red-600 dark:text-red-400 print:hidden">
           {error}
         </div>
-      ) : (overdueCheckouts || []).length === 0 ? (
+      ) : filteredOverdue.length === 0 ? (
         <div className="bg-white dark:bg-slate-800 p-8 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 text-center text-slate-500 print:hidden">
-          No overdue books right now! Great job keeping track.
+          {searchQuery ? 'No overdue books match your search filter.' : 'No overdue books right now! Great job keeping track.'}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 print:grid-cols-2 print:gap-4 print:text-black">
-          {overdueCheckouts?.map((checkout, index) => (
+          {filteredOverdue.map((checkout, index) => (
             <div
               key={checkout.id ?? `checkout-${index}`}
               className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 print:border-black print:border-2 print:shadow-none print:break-inside-avoid flex flex-col justify-between"
@@ -142,18 +180,29 @@ export default function Overdue() {
               </div>
 
               <div className="pt-4 border-t border-slate-100 dark:border-slate-700 print:border-gray-300 mt-4 flex items-center justify-between gap-2">
-                <span className="text-sm text-slate-600 dark:text-slate-400 print:text-black">
+                <span className="text-xs text-slate-600 dark:text-slate-400 print:text-black">
                   Please return this book as soon as possible.
                 </span>
-                <Button 
-                  size="sm"
-                  variant="primary"
-                  icon={<RotateCcw size={16} />}
-                  onClick={() => handleOpenReturnModal(checkout)}
-                  className="print:hidden flex-shrink-0"
-                >
-                  Return Book
-                </Button>
+                <div className="flex items-center gap-2 print:hidden flex-shrink-0">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    icon={<CalendarPlus size={15} />}
+                    isLoading={renewingId === checkout.id}
+                    onClick={() => handleRenewCheckout(checkout)}
+                    title="Extend due date by 7 days from today"
+                  >
+                    +7d Renew
+                  </Button>
+                  <Button 
+                    size="sm"
+                    variant="primary"
+                    icon={<RotateCcw size={16} />}
+                    onClick={() => handleOpenReturnModal(checkout)}
+                  >
+                    Return Book
+                  </Button>
+                </div>
               </div>
             </div>
           ))}

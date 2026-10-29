@@ -30,7 +30,9 @@ declare global {
       getSummary: () => Promise<{ success: boolean; data?: DashboardSummary; error?: string }>
       addSubject: (data: Omit<Subject, 'id' | 'createdAt' | 'updatedAt'> | Partial<Subject>) => Promise<{ success: boolean; data?: Subject; error?: string }>
       addIncident: (data: Partial<Incident>) => Promise<{ success: boolean; data?: Incident; error?: string }>
+      resolveIncident: (data: { id: number; resolutionNotes?: string }) => Promise<{ success: boolean; data?: Incident; error?: string }>
       updateSubject: (args: { id: number; data: Partial<Subject> }) => Promise<{ success: boolean; data?: Subject; error?: string }>
+      deleteSubject: (id: number) => Promise<{ success: boolean; error?: string }>
       setTheme: (mode: 'light' | 'dark') => Promise<{ success: boolean; error?: string }>
       addCheckout: (data: {
         subjectId: number
@@ -40,6 +42,7 @@ declare global {
         conditionOut?: number
       }) => Promise<{ success: boolean; data?: Checkout; error?: string }>
       returnCheckout: (data: { id: number; conditionIn?: number }) => Promise<{ success: boolean; data?: Checkout; error?: string }>
+      renewCheckout: (data: { id: number; extraDays?: number; newDueDate?: string }) => Promise<{ success: boolean; data?: Checkout; error?: string }>
       getActiveCheckouts: (subjectId?: number) => Promise<{ success: boolean; data?: Checkout[]; error?: string }>
       recordFinePayment: (data: { studentName: string; studentClass?: string; amount: number; paymentMethod: string; notes?: string }) => Promise<{ success: boolean; data?: ClearanceRecord; error?: string }>
       waiveFine: (data: { studentName: string; studentClass?: string; reason: string; approvedBy?: string }) => Promise<{ success: boolean; data?: ClearanceRecord; error?: string }>
@@ -48,6 +51,7 @@ declare global {
       checkDbStatus: () => Promise<'SETUP' | 'LOCKED'>
       setupDb: (password: string) => Promise<{ success: boolean; recoveryKey?: string; error?: string }>
       unlockDb: (args: { password?: string; isRecovery?: boolean }) => Promise<{ success: boolean; error?: string }>
+      lockDb: () => Promise<{ success: boolean; error?: string }>
       changePassword: (args: { oldPassword?: string; newPassword?: string }) => Promise<{ success: boolean; recoveryKey?: string; error?: string }>
       backupDatabase: () => Promise<{ success: boolean; error?: string }>
       getBorrowingRules: () => Promise<{ success: boolean; data?: BorrowingRule[]; error?: string }>
@@ -65,6 +69,7 @@ declare global {
       saveBackupConfig: (data: Partial<BackupConfig>) => Promise<{ success: boolean; data?: BackupConfig; error?: string }>
       triggerAutoBackup: (customPath?: string) => Promise<{ success: boolean; backupPath?: string; filename?: string; error?: string }>
       listBackups: () => Promise<{ success: boolean; data?: BackupFileRecord[]; error?: string }>
+      restoreBackup: (backupPath: string) => Promise<{ success: boolean; error?: string }>
       getLanSyncConfig: () => Promise<{ success: boolean; data?: LanSyncConfig; error?: string }>
       saveLanSyncConfig: (data: Partial<LanSyncConfig>) => Promise<{ success: boolean; data?: LanSyncConfig; error?: string }>
       syncWithLanPeer: (data: { peerIp: string; peerPort?: number; passcode?: string }) => Promise<{ success: boolean; data?: LanSyncResult; error?: string }>

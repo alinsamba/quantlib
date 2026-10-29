@@ -43,3 +43,22 @@ export function exportToCsv(data: Record<string, unknown>[], fileName: string) {
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Data')
   XLSX.writeFile(workbook, `${fileName}.csv`)
 }
+
+/**
+ * Parses an ArrayBuffer or Uint8Array from an Excel (.xlsx/.xls) or CSV (.csv) file into JSON records.
+ */
+export function parseSpreadsheetBuffer(buffer: ArrayBuffer | Uint8Array): Record<string, unknown>[] {
+  const workbook = XLSX.read(buffer, { type: 'array' })
+  const firstSheetName = workbook.SheetNames[0]
+  if (!firstSheetName) return []
+  const worksheet = workbook.Sheets[firstSheetName]
+  return XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, { defval: '' })
+}
+
+/**
+ * Parses a browser File object (.xlsx, .xls, .csv) into JSON records.
+ */
+export async function parseSpreadsheetFile(file: File): Promise<Record<string, unknown>[]> {
+  const buffer = await file.arrayBuffer()
+  return parseSpreadsheetBuffer(buffer)
+}

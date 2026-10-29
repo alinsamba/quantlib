@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { sanitizeCellValue, sanitizeExportRecord } from './exportUtils'
+import * as XLSX from 'xlsx'
+import { sanitizeCellValue, sanitizeExportRecord, parseSpreadsheetBuffer } from './exportUtils'
 
 describe('Spreadsheet Export Security Tests (CWE-1236)', () => {
   it('neutralizes formula injection characters with leading apostrophe', () => {
@@ -33,5 +34,21 @@ describe('Spreadsheet Export Security Tests (CWE-1236)', () => {
     expect(clean.student).toBe('Normal Student')
     expect(clean.comment).toBe('\'+DangerousFormula')
     expect(clean.count).toBe(42)
+  })
+
+  it('parses spreadsheet buffers into normalized key-value rows', () => {
+    const ws = XLSX.utils.json_to_sheet([
+      { Name: 'Chemistry S.3', Category: 'Science', OpeningCount: 40, Notes: 'Lab edition' }
+    ])
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Sheet1')
+    const out = XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer
+
+    const rows = parseSpreadsheetBuffer(out)
+    expect(rows).toHaveLength(1)
+    expect(rows[0].Name).toBe('Chemistry S.3')
+    expect(rows[0].Category).toBe('Science')
+    expect(rows[0].OpeningCount).toBe(40)
+    expect(rows[0].Notes).toBe('Lab edition')
   })
 })

@@ -1,490 +1,256 @@
-import { BrowserWindow, app, dialog, ipcMain } from "electron";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { PrismaClient } from "@prisma/client";
-import crypto from "node:crypto";
-import fs from "node:fs";
-import http from "node:http";
-import os from "node:os";
+import { BrowserWindow as e, app as t, dialog as n, ipcMain as r } from "electron";
+import i from "node:path";
+import { fileURLToPath as a } from "node:url";
+import { PrismaClient as o } from "@prisma/client";
+import s from "node:crypto";
+import c from "node:fs";
+import l from "node:http";
+import u from "node:os";
 //#region electron/crypto.ts
-var DATA_DIR = app.getPath("userData");
-var META_FILE = path.join(DATA_DIR, "quantlib.meta");
-var ENC_FILE = path.join(DATA_DIR, "quantlib.enc");
-var ENC_BACKUP_FILE = path.join(DATA_DIR, "quantlib.enc.bak");
-var ENC_TEMP_FILE = path.join(DATA_DIR, "quantlib.enc.tmp");
-var TEMP_DB = path.join(DATA_DIR, "quantlib_temp.db");
-var LEGACY_DB = path.join(process.cwd(), "quantlib.db");
-var currentMasterKey = null;
-var activePrismaClient = null;
-function runWalCheckpoint(prisma) {
-	const client = prisma || activePrismaClient;
-	if (client && typeof client.$executeRawUnsafe === "function") try {
-		client.$executeRawUnsafe("PRAGMA wal_checkpoint(FULL)").catch(() => {});
+var d = t.getPath("userData"), f = i.join(d, "quantlib.meta"), p = i.join(d, "quantlib.enc"), m = i.join(d, "quantlib.enc.bak"), h = i.join(d, "quantlib.enc.tmp"), g = i.join(d, "quantlib_temp.db"), _ = i.join(process.cwd(), "quantlib.db"), v = null, y = null;
+function b(e) {
+	let t = e || y;
+	if (t && typeof t.$executeRawUnsafe == "function") try {
+		t.$executeRawUnsafe("PRAGMA wal_checkpoint(FULL)").catch(() => {});
 	} catch {}
 }
-function getTempDbPath() {
-	return TEMP_DB;
+function x() {
+	return g;
 }
-function checkDbStatus() {
-	if (fs.existsSync(META_FILE) && fs.existsSync(ENC_FILE)) return "LOCKED";
-	return "SETUP";
+function S() {
+	return c.existsSync(f) && c.existsSync(p) ? "LOCKED" : "SETUP";
 }
-function deriveUserKey(password, salt, iterations = 6e5) {
-	return crypto.pbkdf2Sync(password, salt, iterations, 32, "sha256");
+function C(e, t, n = 6e5) {
+	return s.pbkdf2Sync(e, t, n, 32, "sha256");
 }
-/**
-* Generates a 12-byte (96-bit) initialization vector where the first byte is set to the provided domain identifier.
-* This ensures distinct IV handling for different key streams, improving cryptographic hygiene.
-*/
-function generateDistinctIv(_domain) {
-	return crypto.randomBytes(12);
+function w(e) {
+	return s.randomBytes(12);
 }
-function setupDatabase(password) {
-	let userKey = null;
-	let recoveryUserKey = null;
+function ee(e) {
+	let t = null, n = null;
 	try {
-		if (checkDbStatus() !== "SETUP") return {
-			success: false,
+		if (S() !== "SETUP") return {
+			success: !1,
 			error: "Database is already set up"
 		};
-		if (fs.existsSync(META_FILE) || fs.existsSync(ENC_FILE)) return {
-			success: false,
+		if (c.existsSync(f) || c.existsSync(p)) return {
+			success: !1,
 			error: "Existing database state found. Unlock or recover the database instead."
 		};
-		const salt = crypto.randomBytes(16);
-		const masterKey = crypto.randomBytes(32);
-		const recoveryKey = crypto.randomBytes(16).toString("hex").match(/.{1,4}/g)?.join("-").toUpperCase() || "";
-		userKey = deriveUserKey(password, salt);
-		recoveryUserKey = deriveUserKey(recoveryKey, salt);
-		const iv1 = generateDistinctIv(0);
-		const cipher1 = crypto.createCipheriv("aes-256-gcm", userKey, iv1);
-		const passPayload = Buffer.concat([cipher1.update(masterKey), cipher1.final()]);
-		const tag1 = cipher1.getAuthTag();
-		const iv2 = generateDistinctIv(1);
-		const cipher2 = crypto.createCipheriv("aes-256-gcm", recoveryUserKey, iv2);
-		const recPayload = Buffer.concat([cipher2.update(masterKey), cipher2.final()]);
-		const tag2 = cipher2.getAuthTag();
-		const meta = {
-			salt: salt.toString("base64"),
+		let r = s.randomBytes(16), i = s.randomBytes(32), a = s.randomBytes(16).toString("hex").match(/.{1,4}/g)?.join("-").toUpperCase() || "";
+		t = C(e, r), n = C(a, r);
+		let o = w(0), l = s.createCipheriv("aes-256-gcm", t, o), u = Buffer.concat([l.update(i), l.final()]), d = l.getAuthTag(), m = w(1), h = s.createCipheriv("aes-256-gcm", n, m), y = Buffer.concat([h.update(i), h.final()]), b = h.getAuthTag(), x = {
+			salt: r.toString("base64"),
 			iterations: 6e5,
 			password_payload: Buffer.concat([
-				iv1,
-				tag1,
-				passPayload
+				o,
+				d,
+				u
 			]).toString("base64"),
 			recovery_payload: Buffer.concat([
-				iv2,
-				tag2,
-				recPayload
+				m,
+				b,
+				y
 			]).toString("base64")
 		};
-		fs.writeFileSync(META_FILE, JSON.stringify(meta));
-		if (fs.existsSync(LEGACY_DB)) {
-			fs.copyFileSync(LEGACY_DB, TEMP_DB);
+		if (c.writeFileSync(f, JSON.stringify(x)), c.existsSync(_)) {
+			c.copyFileSync(_, g);
 			try {
-				secureWipe(LEGACY_DB);
+				E(_);
 			} catch {}
 			try {
-				secureWipe(LEGACY_DB + ".bak");
+				E(_ + ".bak");
 			} catch {}
-		} else fs.writeFileSync(TEMP_DB, "");
-		currentMasterKey = masterKey;
-		encryptTempDatabase();
-		return {
-			success: true,
-			recoveryKey
+		} else c.writeFileSync(g, "");
+		return v = i, T(), {
+			success: !0,
+			recoveryKey: a
 		};
-	} catch (err) {
+	} catch (e) {
 		return {
-			success: false,
-			error: err instanceof Error ? err.message : String(err)
+			success: !1,
+			error: e instanceof Error ? e.message : String(e)
 		};
 	} finally {
-		if (userKey) userKey.fill(0);
-		if (recoveryUserKey) recoveryUserKey.fill(0);
+		t && t.fill(0), n && n.fill(0);
 	}
 }
-function decryptPayload(payloadBase64, key) {
+function te(e, t) {
 	try {
-		const buf = Buffer.from(payloadBase64, "base64");
-		const iv = buf.subarray(0, 12);
-		const tag = buf.subarray(12, 28);
-		const encrypted = buf.subarray(28);
-		const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
-		decipher.setAuthTag(tag);
-		return Buffer.concat([decipher.update(encrypted), decipher.final()]);
+		let n = Buffer.from(e, "base64"), r = n.subarray(0, 12), i = n.subarray(12, 28), a = n.subarray(28), o = s.createDecipheriv("aes-256-gcm", t, r);
+		return o.setAuthTag(i), Buffer.concat([o.update(a), o.final()]);
 	} catch {
 		return null;
 	}
 }
-function unlockDatabase(password, isRecovery = false) {
-	let userKey = null;
-	let newUserKey = null;
+function ne(e, t = !1) {
+	let n = null, r = null;
 	try {
-		const metaStr = fs.readFileSync(META_FILE, "utf-8");
-		const meta = JSON.parse(metaStr);
-		const salt = Buffer.from(meta.salt, "base64");
-		const iterations = meta.iterations || 1e5;
-		userKey = deriveUserKey(password, salt, iterations);
-		const masterKey = decryptPayload(isRecovery ? meta.recovery_payload : meta.password_payload, userKey);
-		if (!masterKey) return {
-			success: false,
+		let i = c.readFileSync(f, "utf-8"), a = JSON.parse(i), o = Buffer.from(a.salt, "base64"), l = a.iterations || 1e5;
+		n = C(e, o, l);
+		let u = te(t ? a.recovery_payload : a.password_payload, n);
+		if (!u) return {
+			success: !1,
 			error: "Invalid password or recovery key"
 		};
-		if (iterations < 6e5 && !isRecovery) {
-			newUserKey = deriveUserKey(password, salt, 6e5);
-			const iv1 = generateDistinctIv(0);
-			const cipher1 = crypto.createCipheriv("aes-256-gcm", newUserKey, iv1);
-			const passPayload = Buffer.concat([cipher1.update(masterKey), cipher1.final()]);
-			const tag1 = cipher1.getAuthTag();
-			meta.iterations = 6e5;
-			meta.password_payload = Buffer.concat([
-				iv1,
-				tag1,
-				passPayload
-			]).toString("base64");
-			fs.writeFileSync(META_FILE, JSON.stringify(meta));
+		if (l < 6e5 && !t) {
+			r = C(e, o, 6e5);
+			let t = w(0), n = s.createCipheriv("aes-256-gcm", r, t), i = Buffer.concat([n.update(u), n.final()]), l = n.getAuthTag();
+			a.iterations = 6e5, a.password_payload = Buffer.concat([
+				t,
+				l,
+				i
+			]).toString("base64"), c.writeFileSync(f, JSON.stringify(a));
 		}
-		currentMasterKey = masterKey;
-		const encData = fs.readFileSync(ENC_FILE);
-		if (encData.length > 0) {
-			const iv = encData.subarray(0, 12);
-			const tag = encData.subarray(12, 28);
-			const encrypted = encData.subarray(28);
-			const decipher = crypto.createDecipheriv("aes-256-gcm", currentMasterKey, iv);
-			decipher.setAuthTag(tag);
-			const decrypted = Buffer.concat([decipher.update(encrypted), decipher.final()]);
-			fs.writeFileSync(TEMP_DB, decrypted);
-		} else fs.writeFileSync(TEMP_DB, "");
-		return { success: true };
-	} catch (err) {
+		v = u;
+		let d = c.readFileSync(p);
+		if (d.length > 0) {
+			let e = d.subarray(0, 12), t = d.subarray(12, 28), n = d.subarray(28), r = s.createDecipheriv("aes-256-gcm", v, e);
+			r.setAuthTag(t);
+			let i = Buffer.concat([r.update(n), r.final()]);
+			c.writeFileSync(g, i);
+		} else c.writeFileSync(g, "");
+		return { success: !0 };
+	} catch (e) {
 		return {
-			success: false,
-			error: err instanceof Error ? err.message : "Unlock failed"
+			success: !1,
+			error: e instanceof Error ? e.message : "Unlock failed"
 		};
 	} finally {
-		if (userKey) userKey.fill(0);
-		if (newUserKey) newUserKey.fill(0);
+		n && n.fill(0), r && r.fill(0);
 	}
 }
-async function encryptTempDatabase(prisma) {
-	if (!currentMasterKey || !fs.existsSync(TEMP_DB)) return;
-	try {
-		runWalCheckpoint(prisma);
-		const dbData = await fs.promises.readFile(TEMP_DB);
-		const iv = generateDistinctIv(2);
-		const cipher = crypto.createCipheriv("aes-256-gcm", currentMasterKey, iv);
-		const encrypted = Buffer.concat([cipher.update(dbData), cipher.final()]);
-		const tag = cipher.getAuthTag();
-		await fs.promises.writeFile(ENC_TEMP_FILE, Buffer.concat([
-			iv,
-			tag,
-			encrypted
-		]));
-		if (fs.existsSync(ENC_FILE)) await fs.promises.copyFile(ENC_FILE, ENC_BACKUP_FILE);
-		await fs.promises.rename(ENC_TEMP_FILE, ENC_FILE);
-	} catch (err) {
-		console.error("Failed to encrypt database:", err);
+async function T(e) {
+	if (!(!v || !c.existsSync(g))) try {
+		b(e);
+		let t = await c.promises.readFile(g), n = w(2), r = s.createCipheriv("aes-256-gcm", v, n), i = Buffer.concat([r.update(t), r.final()]), a = r.getAuthTag();
+		await c.promises.writeFile(h, Buffer.concat([
+			n,
+			a,
+			i
+		])), c.existsSync(p) && await c.promises.copyFile(p, m), await c.promises.rename(h, p);
+	} catch (e) {
+		console.error("Failed to encrypt database:", e);
 		try {
-			if (fs.existsSync(ENC_TEMP_FILE)) await fs.promises.unlink(ENC_TEMP_FILE);
+			c.existsSync(h) && await c.promises.unlink(h);
 		} catch {}
 	}
 }
-function encryptTempDatabaseSync(prisma) {
-	if (!currentMasterKey || !fs.existsSync(TEMP_DB)) return;
-	try {
-		runWalCheckpoint(prisma);
-		const dbData = fs.readFileSync(TEMP_DB);
-		const iv = generateDistinctIv(2);
-		const cipher = crypto.createCipheriv("aes-256-gcm", currentMasterKey, iv);
-		const encrypted = Buffer.concat([cipher.update(dbData), cipher.final()]);
-		const tag = cipher.getAuthTag();
-		fs.writeFileSync(ENC_TEMP_FILE, Buffer.concat([
-			iv,
-			tag,
-			encrypted
-		]));
-		if (fs.existsSync(ENC_FILE)) fs.copyFileSync(ENC_FILE, ENC_BACKUP_FILE);
-		fs.renameSync(ENC_TEMP_FILE, ENC_FILE);
-	} catch (err) {
-		console.error("Failed to encrypt database sync:", err);
+function re(e) {
+	if (!(!v || !c.existsSync(g))) try {
+		b(e);
+		let t = c.readFileSync(g), n = w(2), r = s.createCipheriv("aes-256-gcm", v, n), i = Buffer.concat([r.update(t), r.final()]), a = r.getAuthTag();
+		c.writeFileSync(h, Buffer.concat([
+			n,
+			a,
+			i
+		])), c.existsSync(p) && c.copyFileSync(p, m), c.renameSync(h, p);
+	} catch (e) {
+		console.error("Failed to encrypt database sync:", e);
 		try {
-			if (fs.existsSync(ENC_TEMP_FILE)) fs.unlinkSync(ENC_TEMP_FILE);
+			c.existsSync(h) && c.unlinkSync(h);
 		} catch {}
 	}
 }
-function secureWipe(filePath) {
-	if (!fs.existsSync(filePath)) return;
-	let fd = null;
+function E(e) {
+	if (!c.existsSync(e)) return;
+	let t = null;
 	try {
-		const stats = fs.statSync(filePath);
-		fd = fs.openSync(filePath, "r+");
-		const bufferSize = 4096;
-		const zeroBuffer = Buffer.alloc(bufferSize, 0);
-		let bytesWrittenTotal = 0;
-		while (bytesWrittenTotal < stats.size) {
-			const bytesToWrite = Math.min(bufferSize, stats.size - bytesWrittenTotal);
-			const written = fs.writeSync(fd, zeroBuffer, 0, bytesToWrite, bytesWrittenTotal);
-			bytesWrittenTotal += written;
+		let n = c.statSync(e);
+		t = c.openSync(e, "r+");
+		let r = 4096, i = Buffer.alloc(r, 0), a = 0;
+		for (; a < n.size;) {
+			let e = Math.min(r, n.size - a), o = c.writeSync(t, i, 0, e, a);
+			a += o;
 		}
-		fs.fsyncSync(fd);
-	} catch (err) {
-		console.error(`Failed to securely wipe ${filePath}:`, err);
+		c.fsyncSync(t);
+	} catch (t) {
+		console.error(`Failed to securely wipe ${e}:`, t);
 	} finally {
-		if (fd !== null) try {
-			fs.closeSync(fd);
-		} catch (err) {
-			console.error(`Failed to close ${filePath}:`, err);
+		if (t !== null) try {
+			c.closeSync(t);
+		} catch (t) {
+			console.error(`Failed to close ${e}:`, t);
 		}
 		try {
-			if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-		} catch (err) {
-			console.error(`Failed to delete ${filePath}:`, err);
+			c.existsSync(e) && c.unlinkSync(e);
+		} catch (t) {
+			console.error(`Failed to delete ${e}:`, t);
 		}
 	}
 }
-function cleanupTempDatabase(prisma) {
+function D(e) {
 	try {
-		if (fs.existsSync(TEMP_DB)) {
-			runWalCheckpoint(prisma);
-			encryptTempDatabaseSync(prisma);
-			secureWipe(TEMP_DB);
-			secureWipe(`${TEMP_DB}-wal`);
-			secureWipe(`${TEMP_DB}-shm`);
-		}
+		c.existsSync(g) && (b(e), re(e), E(g), E(`${g}-wal`), E(`${g}-shm`));
 	} catch (e) {
 		console.error("Cleanup failed:", e);
 	} finally {
-		if (currentMasterKey) {
-			currentMasterKey.fill(0);
-			currentMasterKey = null;
-		}
+		v &&= (v.fill(0), null);
 	}
 }
-function changePassword(oldPassword, newPassword) {
-	let oldUserKey = null;
-	let newUserKey = null;
-	let newRecoveryUserKey = null;
+function ie(e, t) {
+	let n = null, r = null, i = null;
 	try {
-		const metaStr = fs.readFileSync(META_FILE, "utf-8");
-		const meta = JSON.parse(metaStr);
-		oldUserKey = deriveUserKey(oldPassword, Buffer.from(meta.salt, "base64"), meta.iterations || 1e5);
-		const masterKey = decryptPayload(meta.password_payload, oldUserKey);
-		if (!masterKey) return {
-			success: false,
+		let a = c.readFileSync(f, "utf-8"), o = JSON.parse(a);
+		n = C(e, Buffer.from(o.salt, "base64"), o.iterations || 1e5);
+		let l = te(o.password_payload, n);
+		if (!l) return {
+			success: !1,
 			error: "Incorrect current password"
 		};
-		const newSalt = crypto.randomBytes(16);
-		const recoveryKey = crypto.randomBytes(16).toString("hex").match(/.{1,4}/g)?.join("-").toUpperCase() || "";
-		newUserKey = deriveUserKey(newPassword, newSalt);
-		newRecoveryUserKey = deriveUserKey(recoveryKey, newSalt);
-		const iv1 = generateDistinctIv(0);
-		const cipher1 = crypto.createCipheriv("aes-256-gcm", newUserKey, iv1);
-		const passPayload = Buffer.concat([cipher1.update(masterKey), cipher1.final()]);
-		const tag1 = cipher1.getAuthTag();
-		const iv2 = generateDistinctIv(1);
-		const cipher2 = crypto.createCipheriv("aes-256-gcm", newRecoveryUserKey, iv2);
-		const recPayload = Buffer.concat([cipher2.update(masterKey), cipher2.final()]);
-		const tag2 = cipher2.getAuthTag();
-		const newMeta = {
-			salt: newSalt.toString("base64"),
+		let u = s.randomBytes(16), d = s.randomBytes(16).toString("hex").match(/.{1,4}/g)?.join("-").toUpperCase() || "";
+		r = C(t, u), i = C(d, u);
+		let p = w(0), m = s.createCipheriv("aes-256-gcm", r, p), h = Buffer.concat([m.update(l), m.final()]), g = m.getAuthTag(), _ = w(1), v = s.createCipheriv("aes-256-gcm", i, _), y = Buffer.concat([v.update(l), v.final()]), b = v.getAuthTag(), x = {
+			salt: u.toString("base64"),
 			iterations: 6e5,
 			password_payload: Buffer.concat([
-				iv1,
-				tag1,
-				passPayload
+				p,
+				g,
+				h
 			]).toString("base64"),
 			recovery_payload: Buffer.concat([
-				iv2,
-				tag2,
-				recPayload
+				_,
+				b,
+				y
 			]).toString("base64")
 		};
-		fs.writeFileSync(META_FILE, JSON.stringify(newMeta));
-		return {
-			success: true,
-			recoveryKey
+		return c.writeFileSync(f, JSON.stringify(x)), {
+			success: !0,
+			recoveryKey: d
 		};
-	} catch (err) {
+	} catch (e) {
 		return {
-			success: false,
-			error: err instanceof Error ? err.message : "Failed to change password"
+			success: !1,
+			error: e instanceof Error ? e.message : "Failed to change password"
 		};
 	} finally {
-		if (oldUserKey) oldUserKey.fill(0);
-		if (newUserKey) newUserKey.fill(0);
-		if (newRecoveryUserKey) newRecoveryUserKey.fill(0);
+		n && n.fill(0), r && r.fill(0), i && i.fill(0);
 	}
 }
 //#endregion
 //#region electron/database.ts
-var prisma = null;
-var databaseCleanupDone = false;
-var activeOperationsCount = 0;
-var isShuttingDown = false;
-function getPrisma() {
-	return prisma;
+var O = null, k = !1, ae = 0, oe = !1;
+function se() {
+	return O;
 }
-function ensureDb() {
-	if (isShuttingDown) throw new Error("Application is shutting down.");
-	if (!prisma) throw new Error("Database is locked. Please authenticate first.");
-	return prisma;
+function A() {
+	if (oe) throw Error("Application is shutting down.");
+	if (!O) throw Error("Database is locked. Please authenticate first.");
+	return O;
 }
-function sanitizeError(err) {
-	if (err instanceof Error) return err.message;
-	return String(err);
+function j(e) {
+	return e instanceof Error ? e.message : String(e);
 }
-async function initializeDatabase(client) {
-	await client.$executeRawUnsafe("PRAGMA foreign_keys = ON");
-	await client.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS "School" (
-      "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-      "name" TEXT NOT NULL,
-      "motto" TEXT,
-      "logoPath" TEXT,
-      "address" TEXT,
-      "contactName" TEXT,
-      "contactPhone" TEXT,
-      "academicYear" TEXT,
-      "updatedAt" DATETIME NOT NULL,
-      "checkoutDuration" INTEGER NOT NULL DEFAULT 14
-    )
-  `);
-	await client.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS "Subject" (
-      "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-      "name" TEXT NOT NULL,
-      "category" TEXT,
-      "openingCount" INTEGER NOT NULL DEFAULT 0,
-      "recovered" INTEGER NOT NULL DEFAULT 0,
-      "issued" INTEGER NOT NULL DEFAULT 0,
-      "damaged" INTEGER NOT NULL DEFAULT 0,
-      "lost" INTEGER NOT NULL DEFAULT 0,
-      "notes" TEXT,
-      "averageCondition" REAL NOT NULL DEFAULT 3.0,
-      "degradationRate" REAL NOT NULL DEFAULT 0.0,
-      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      "updatedAt" DATETIME NOT NULL
-    )
-  `);
-	await client.$executeRawUnsafe("CREATE UNIQUE INDEX IF NOT EXISTS \"Subject_name_key\" ON \"Subject\"(\"name\")");
-	await client.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS "Incident" (
-      "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-      "type" TEXT NOT NULL,
-      "date" DATETIME NOT NULL,
-      "subjectId" INTEGER,
-      "bookTitle" TEXT NOT NULL,
-      "condition" TEXT,
-      "comment" TEXT,
-      "reportedBy" TEXT,
-      "responsibleParty" TEXT,
-      "studentClass" TEXT,
-      "actionTaken" TEXT,
-      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      CONSTRAINT "Incident_subjectId_fkey" FOREIGN KEY ("subjectId") REFERENCES "Subject" ("id") ON DELETE SET NULL ON UPDATE CASCADE
-    )
-  `);
-	await client.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS "AuditLog" (
-      "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-      "subjectId" INTEGER NOT NULL,
-      "field" TEXT NOT NULL,
-      "oldValue" TEXT NOT NULL,
-      "newValue" TEXT NOT NULL,
-      "changedBy" TEXT,
-      "changedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      CONSTRAINT "AuditLog_subjectId_fkey" FOREIGN KEY ("subjectId") REFERENCES "Subject" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
-    )
-  `);
-	await client.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS "User" (
-      "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-      "name" TEXT NOT NULL,
-      "role" TEXT NOT NULL DEFAULT 'LIBRARIAN',
-      "pinHash" TEXT,
-      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-	await client.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS "Checkout" (
-      "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-      "subjectId" INTEGER NOT NULL,
-      "studentName" TEXT NOT NULL,
-      "studentClass" TEXT,
-      "checkoutDate" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      "dueDate" DATETIME NOT NULL,
-      "returnDate" DATETIME,
-      "status" TEXT NOT NULL DEFAULT 'ACTIVE',
-      "conditionOut" INTEGER NOT NULL,
-      "conditionIn" INTEGER,
-      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      "updatedAt" DATETIME NOT NULL,
-      CONSTRAINT "Checkout_subjectId_fkey" FOREIGN KEY ("subjectId") REFERENCES "Subject" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
-    )
-  `);
-	await client.$executeRawUnsafe("CREATE INDEX IF NOT EXISTS \"Checkout_subjectId_idx\" ON \"Checkout\"(\"subjectId\")");
-	await client.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS "BorrowingRule" (
-      "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-      "roleOrGrade" TEXT NOT NULL,
-      "maxBooksAllowed" INTEGER NOT NULL DEFAULT 2,
-      "borrowDurationDays" INTEGER NOT NULL DEFAULT 14,
-      "finePerDay" REAL NOT NULL DEFAULT 0.0,
-      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      "updatedAt" DATETIME NOT NULL
-    )
-  `);
-	await client.$executeRawUnsafe("CREATE UNIQUE INDEX IF NOT EXISTS \"BorrowingRule_roleOrGrade_key\" ON \"BorrowingRule\"(\"roleOrGrade\")");
-	await client.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS "StockAudit" (
-      "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-      "auditDate" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      "auditedBy" TEXT,
-      "notes" TEXT,
-      "status" TEXT NOT NULL DEFAULT 'IN_PROGRESS',
-      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      "updatedAt" DATETIME NOT NULL
-    )
-  `);
-	await client.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS "StockAuditItem" (
-      "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-      "auditId" INTEGER NOT NULL,
-      "subjectId" INTEGER NOT NULL,
-      "expectedCount" INTEGER NOT NULL,
-      "actualCount" INTEGER NOT NULL,
-      "discrepancy" INTEGER NOT NULL,
-      "notes" TEXT,
-      CONSTRAINT "StockAuditItem_auditId_fkey" FOREIGN KEY ("auditId") REFERENCES "StockAudit" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
-      CONSTRAINT "StockAuditItem_subjectId_fkey" FOREIGN KEY ("subjectId") REFERENCES "Subject" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
-    )
-  `);
-	await client.$executeRawUnsafe("CREATE UNIQUE INDEX IF NOT EXISTS \"StockAuditItem_auditId_subjectId_key\" ON \"StockAuditItem\"(\"auditId\", \"subjectId\")");
-	await client.$executeRawUnsafe("CREATE INDEX IF NOT EXISTS \"StockAuditItem_auditId_idx\" ON \"StockAuditItem\"(\"auditId\")");
-	await client.$executeRawUnsafe("CREATE INDEX IF NOT EXISTS \"StockAuditItem_subjectId_idx\" ON \"StockAuditItem\"(\"subjectId\")");
-	await client.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS "AppConfig" (
-      "id" INTEGER NOT NULL PRIMARY KEY DEFAULT 1,
-      "autoBackupEnabled" BOOLEAN NOT NULL DEFAULT 0,
-      "autoBackupPath" TEXT,
-      "autoBackupIntervalHours" INTEGER NOT NULL DEFAULT 24,
-      "lastAutoBackupAt" DATETIME,
-      "lanSyncEnabled" BOOLEAN NOT NULL DEFAULT 0,
-      "lanPort" INTEGER NOT NULL DEFAULT 8085,
-      "lanPasscode" TEXT DEFAULT 'quantlib-sync',
-      "lastLanSyncAt" DATETIME,
-      "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-	const configCountRes = await client.$queryRawUnsafe("SELECT COUNT(*) as count FROM \"AppConfig\"");
-	if (Number(configCountRes[0]?.count || 0) === 0) {
-		const now = (/* @__PURE__ */ new Date()).toISOString();
-		await client.$executeRawUnsafe(`INSERT INTO "AppConfig" ("id", "autoBackupEnabled", "autoBackupIntervalHours", "lanSyncEnabled", "lanPort", "lanPasscode", "updatedAt") VALUES (1, 0, 24, 0, 8085, 'quantlib-sync', ?)`, now);
+async function ce(e) {
+	await e.$executeRawUnsafe("PRAGMA foreign_keys = ON"), await e.$executeRawUnsafe("\n    CREATE TABLE IF NOT EXISTS \"School\" (\n      \"id\" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,\n      \"name\" TEXT NOT NULL,\n      \"motto\" TEXT,\n      \"logoPath\" TEXT,\n      \"address\" TEXT,\n      \"contactName\" TEXT,\n      \"contactPhone\" TEXT,\n      \"academicYear\" TEXT,\n      \"updatedAt\" DATETIME NOT NULL,\n      \"checkoutDuration\" INTEGER NOT NULL DEFAULT 14\n    )\n  "), await e.$executeRawUnsafe("\n    CREATE TABLE IF NOT EXISTS \"Subject\" (\n      \"id\" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,\n      \"name\" TEXT NOT NULL,\n      \"category\" TEXT,\n      \"openingCount\" INTEGER NOT NULL DEFAULT 0,\n      \"recovered\" INTEGER NOT NULL DEFAULT 0,\n      \"issued\" INTEGER NOT NULL DEFAULT 0,\n      \"damaged\" INTEGER NOT NULL DEFAULT 0,\n      \"lost\" INTEGER NOT NULL DEFAULT 0,\n      \"notes\" TEXT,\n      \"averageCondition\" REAL NOT NULL DEFAULT 3.0,\n      \"degradationRate\" REAL NOT NULL DEFAULT 0.0,\n      \"createdAt\" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n      \"updatedAt\" DATETIME NOT NULL\n    )\n  "), await e.$executeRawUnsafe("CREATE UNIQUE INDEX IF NOT EXISTS \"Subject_name_key\" ON \"Subject\"(\"name\")"), await e.$executeRawUnsafe("\n    CREATE TABLE IF NOT EXISTS \"Incident\" (\n      \"id\" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,\n      \"type\" TEXT NOT NULL,\n      \"date\" DATETIME NOT NULL,\n      \"subjectId\" INTEGER,\n      \"bookTitle\" TEXT NOT NULL,\n      \"condition\" TEXT,\n      \"comment\" TEXT,\n      \"reportedBy\" TEXT,\n      \"responsibleParty\" TEXT,\n      \"studentClass\" TEXT,\n      \"actionTaken\" TEXT,\n      \"createdAt\" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n      CONSTRAINT \"Incident_subjectId_fkey\" FOREIGN KEY (\"subjectId\") REFERENCES \"Subject\" (\"id\") ON DELETE SET NULL ON UPDATE CASCADE\n    )\n  "), await e.$executeRawUnsafe("\n    CREATE TABLE IF NOT EXISTS \"AuditLog\" (\n      \"id\" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,\n      \"subjectId\" INTEGER NOT NULL,\n      \"field\" TEXT NOT NULL,\n      \"oldValue\" TEXT NOT NULL,\n      \"newValue\" TEXT NOT NULL,\n      \"changedBy\" TEXT,\n      \"changedAt\" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n      CONSTRAINT \"AuditLog_subjectId_fkey\" FOREIGN KEY (\"subjectId\") REFERENCES \"Subject\" (\"id\") ON DELETE RESTRICT ON UPDATE CASCADE\n    )\n  "), await e.$executeRawUnsafe("\n    CREATE TABLE IF NOT EXISTS \"User\" (\n      \"id\" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,\n      \"name\" TEXT NOT NULL,\n      \"role\" TEXT NOT NULL DEFAULT 'LIBRARIAN',\n      \"pinHash\" TEXT,\n      \"createdAt\" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP\n    )\n  "), await e.$executeRawUnsafe("\n    CREATE TABLE IF NOT EXISTS \"Checkout\" (\n      \"id\" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,\n      \"subjectId\" INTEGER NOT NULL,\n      \"studentName\" TEXT NOT NULL,\n      \"studentClass\" TEXT,\n      \"checkoutDate\" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n      \"dueDate\" DATETIME NOT NULL,\n      \"returnDate\" DATETIME,\n      \"status\" TEXT NOT NULL DEFAULT 'ACTIVE',\n      \"conditionOut\" INTEGER NOT NULL,\n      \"conditionIn\" INTEGER,\n      \"createdAt\" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n      \"updatedAt\" DATETIME NOT NULL,\n      CONSTRAINT \"Checkout_subjectId_fkey\" FOREIGN KEY (\"subjectId\") REFERENCES \"Subject\" (\"id\") ON DELETE RESTRICT ON UPDATE CASCADE\n    )\n  "), await e.$executeRawUnsafe("CREATE INDEX IF NOT EXISTS \"Checkout_subjectId_idx\" ON \"Checkout\"(\"subjectId\")"), await e.$executeRawUnsafe("\n    CREATE TABLE IF NOT EXISTS \"BorrowingRule\" (\n      \"id\" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,\n      \"roleOrGrade\" TEXT NOT NULL,\n      \"maxBooksAllowed\" INTEGER NOT NULL DEFAULT 2,\n      \"borrowDurationDays\" INTEGER NOT NULL DEFAULT 14,\n      \"finePerDay\" REAL NOT NULL DEFAULT 0.0,\n      \"createdAt\" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n      \"updatedAt\" DATETIME NOT NULL\n    )\n  "), await e.$executeRawUnsafe("CREATE UNIQUE INDEX IF NOT EXISTS \"BorrowingRule_roleOrGrade_key\" ON \"BorrowingRule\"(\"roleOrGrade\")"), await e.$executeRawUnsafe("\n    CREATE TABLE IF NOT EXISTS \"StockAudit\" (\n      \"id\" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,\n      \"auditDate\" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n      \"auditedBy\" TEXT,\n      \"notes\" TEXT,\n      \"status\" TEXT NOT NULL DEFAULT 'IN_PROGRESS',\n      \"createdAt\" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,\n      \"updatedAt\" DATETIME NOT NULL\n    )\n  "), await e.$executeRawUnsafe("\n    CREATE TABLE IF NOT EXISTS \"StockAuditItem\" (\n      \"id\" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,\n      \"auditId\" INTEGER NOT NULL,\n      \"subjectId\" INTEGER NOT NULL,\n      \"expectedCount\" INTEGER NOT NULL,\n      \"actualCount\" INTEGER NOT NULL,\n      \"discrepancy\" INTEGER NOT NULL,\n      \"notes\" TEXT,\n      CONSTRAINT \"StockAuditItem_auditId_fkey\" FOREIGN KEY (\"auditId\") REFERENCES \"StockAudit\" (\"id\") ON DELETE CASCADE ON UPDATE CASCADE,\n      CONSTRAINT \"StockAuditItem_subjectId_fkey\" FOREIGN KEY (\"subjectId\") REFERENCES \"Subject\" (\"id\") ON DELETE RESTRICT ON UPDATE CASCADE\n    )\n  "), await e.$executeRawUnsafe("CREATE UNIQUE INDEX IF NOT EXISTS \"StockAuditItem_auditId_subjectId_key\" ON \"StockAuditItem\"(\"auditId\", \"subjectId\")"), await e.$executeRawUnsafe("CREATE INDEX IF NOT EXISTS \"StockAuditItem_auditId_idx\" ON \"StockAuditItem\"(\"auditId\")"), await e.$executeRawUnsafe("CREATE INDEX IF NOT EXISTS \"StockAuditItem_subjectId_idx\" ON \"StockAuditItem\"(\"subjectId\")"), await e.$executeRawUnsafe("\n    CREATE TABLE IF NOT EXISTS \"AppConfig\" (\n      \"id\" INTEGER NOT NULL PRIMARY KEY DEFAULT 1,\n      \"autoBackupEnabled\" BOOLEAN NOT NULL DEFAULT 0,\n      \"autoBackupPath\" TEXT,\n      \"autoBackupIntervalHours\" INTEGER NOT NULL DEFAULT 24,\n      \"lastAutoBackupAt\" DATETIME,\n      \"lanSyncEnabled\" BOOLEAN NOT NULL DEFAULT 0,\n      \"lanPort\" INTEGER NOT NULL DEFAULT 8085,\n      \"lanPasscode\" TEXT DEFAULT 'quantlib-sync',\n      \"lastLanSyncAt\" DATETIME,\n      \"updatedAt\" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP\n    )\n  ");
+	let t = await e.$queryRawUnsafe("SELECT COUNT(*) as count FROM \"AppConfig\"");
+	if (Number(t[0]?.count || 0) === 0) {
+		let t = (/* @__PURE__ */ new Date()).toISOString();
+		await e.$executeRawUnsafe("INSERT INTO \"AppConfig\" (\"id\", \"autoBackupEnabled\", \"autoBackupIntervalHours\", \"lanSyncEnabled\", \"lanPort\", \"lanPasscode\", \"updatedAt\") VALUES (1, 0, 24, 0, 8085, 'quantlib-sync', ?)", t);
 	}
-	const ruleCountRes = await client.$queryRawUnsafe("SELECT COUNT(*) as count FROM \"BorrowingRule\"");
-	if (Number(ruleCountRes[0]?.count || 0) === 0) {
-		const defaultRules = [
+	let n = await e.$queryRawUnsafe("SELECT COUNT(*) as count FROM \"BorrowingRule\"");
+	if (Number(n[0]?.count || 0) === 0) {
+		let t = [
 			{
 				roleOrGrade: "DEFAULT",
 				maxBooksAllowed: 2,
@@ -509,793 +275,780 @@ async function initializeDatabase(client) {
 				borrowDurationDays: 30,
 				finePerDay: 0
 			}
-		];
-		const now = (/* @__PURE__ */ new Date()).toISOString();
-		for (const rule of defaultRules) await client.$executeRawUnsafe(`INSERT INTO "BorrowingRule" ("roleOrGrade", "maxBooksAllowed", "borrowDurationDays", "finePerDay", "updatedAt") VALUES (?, ?, ?, ?, ?)`, rule.roleOrGrade, rule.maxBooksAllowed, rule.borrowDurationDays, rule.finePerDay, now);
+		], n = (/* @__PURE__ */ new Date()).toISOString();
+		for (let r of t) await e.$executeRawUnsafe("INSERT INTO \"BorrowingRule\" (\"roleOrGrade\", \"maxBooksAllowed\", \"borrowDurationDays\", \"finePerDay\", \"updatedAt\") VALUES (?, ?, ?, ?, ?)", r.roleOrGrade, r.maxBooksAllowed, r.borrowDurationDays, r.finePerDay, n);
 	}
 }
-async function openPrismaDatabase() {
-	prisma = new PrismaClient({ datasources: { db: { url: `file:${getTempDbPath()}?connection_limit=1` } } });
-	await initializeDatabase(prisma);
-	return prisma;
+async function le() {
+	return O = new o({ datasources: { db: { url: `file:${x()}?connection_limit=1` } } }), await ce(O), O;
 }
-async function disconnectPrisma() {
-	if (!prisma) return;
-	await prisma.$disconnect();
-	prisma = null;
+async function M() {
+	O &&= (await O.$disconnect(), null);
 }
-async function disconnectAndCleanupDatabase() {
-	if (databaseCleanupDone) return;
-	isShuttingDown = true;
-	const startTime = Date.now();
-	while (activeOperationsCount > 0 && Date.now() - startTime < 5e3) await new Promise((resolve) => setTimeout(resolve, 50));
-	await disconnectPrisma();
+async function N() {
+	if (k) return;
+	oe = !0;
+	let e = Date.now();
+	for (; ae > 0 && Date.now() - e < 5e3;) await new Promise((e) => setTimeout(e, 50));
+	await M();
 	try {
-		await cleanupTempDatabase();
+		await D();
 	} finally {
-		databaseCleanupDone = true;
+		k = !0;
 	}
 }
 //#endregion
 //#region src/lib/utils.ts
-/**
-* Calculates current available book copies in stock ready for circulation.
-*
-* Invariant: Available stock represents physical copies currently on shelves.
-* Formula: Available = max(0, Opening Stock + Recovered - Issued - Damaged - Lost)
-* Clamped to 0 to prevent negative inventory rendering anomalies.
-*
-* @param subject - Stock count metrics for a given subject catalog entry
-* @param subject.openingCount - Baseline physical count at start of academic period (copies)
-* @param subject.recovered - Damaged or lost books returned to circulating pool (copies)
-* @param subject.issued - Active loans currently borrowed by students (copies)
-* @param subject.damaged - Non-circulating damaged copies awaiting repair/write-off (copies)
-* @param subject.lost - Unrecovered lost copies written off from stock (copies)
-* @returns Net count of available physical copies ready for checkout (integer >= 0)
-*/
-function calculateAvailable(subject) {
-	const net = subject.openingCount + subject.recovered - subject.issued - subject.damaged - subject.lost;
-	return Math.max(0, net);
+function P(e) {
+	let t = e.openingCount + e.recovered - e.issued - e.damaged - e.lost;
+	return Math.max(0, t);
 }
-/**
-* Validates master password strength against enterprise vault security standards.
-*
-* Requirements:
-* - Minimum 12 characters
-* - At least one lowercase letter [a-z]
-* - At least one uppercase letter [A-Z]
-* - At least one numerical digit [0-9]
-* - At least one special symbol [!@#$%^&*()_+-=[]{};':"\\|,.<>/?]
-*
-* @param password - Candidate master vault password string
-* @returns Error message string if invalid, or empty string if valid
-*/
-function validateMasterPassword(password) {
-	if (password.length < 12) return "Password must be at least 12 characters long";
-	if (!/[a-z]/.test(password)) return "Password must include at least one lowercase letter";
-	if (!/[A-Z]/.test(password)) return "Password must include at least one uppercase letter";
-	if (!/\d/.test(password)) return "Password must include at least one number";
-	if (!/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(password)) return "Password must include at least one special character";
-	return "";
+function ue(e) {
+	return e.length < 12 ? "Password must be at least 12 characters long" : /[a-z]/.test(e) ? /[A-Z]/.test(e) ? /\d/.test(e) ? /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(e) ? "" : "Password must include at least one special character" : "Password must include at least one number" : "Password must include at least one uppercase letter" : "Password must include at least one lowercase letter";
 }
-var IncidentType = {
+var F = {
 	DAMAGED: "DAMAGED",
 	LOST: "LOST",
 	NEW: "NEW",
 	RECOVERED: "RECOVERED",
 	DONATION: "DONATION"
-};
-//#endregion
-//#region electron/ipc/auth.ts
-var unlockAttempts = /* @__PURE__ */ new Map();
-function registerAuthHandlers() {
-	ipcMain.handle("check-db-status", () => {
-		return checkDbStatus();
-	});
-	ipcMain.handle("setup-db", async (_, password) => {
-		const pwdError = validateMasterPassword(password);
-		if (pwdError) return {
-			success: false,
-			error: pwdError
+}, I = /* @__PURE__ */ new Map();
+function de() {
+	r.handle("check-db-status", () => S()), r.handle("setup-db", async (e, t) => {
+		let n = ue(t);
+		if (n) return {
+			success: !1,
+			error: n
 		};
-		const result = setupDatabase(password);
-		if (result.success) try {
-			await openPrismaDatabase();
-		} catch (err) {
-			await disconnectPrisma();
-			return {
-				success: false,
-				error: sanitizeError(err)
+		let r = ee(t);
+		if (r.success) try {
+			await le();
+		} catch (e) {
+			return await M(), {
+				success: !1,
+				error: j(e)
 			};
 		}
-		return result;
-	});
-	ipcMain.handle("unlock-db", async (_, { password, isRecovery = false }) => {
-		const key = isRecovery ? "recovery" : "password";
-		const state = unlockAttempts.get(key) || {
+		return r;
+	}), r.handle("unlock-db", async (e, { password: t, isRecovery: n = !1 }) => {
+		let r = n ? "recovery" : "password", i = I.get(r) || {
 			attempts: 0,
 			nextAllowedTime: 0
 		};
-		if (Date.now() < state.nextAllowedTime) return {
-			success: false,
-			error: `Too many failed attempts. Try again in ${Math.ceil((state.nextAllowedTime - Date.now()) / 1e3)} seconds.`
+		if (Date.now() < i.nextAllowedTime) return {
+			success: !1,
+			error: `Too many failed attempts. Try again in ${Math.ceil((i.nextAllowedTime - Date.now()) / 1e3)} seconds.`
 		};
-		const result = unlockDatabase(password, isRecovery);
-		if (!result.success) {
-			state.attempts++;
-			const backoffSeconds = Math.min(60, Math.pow(2, state.attempts - 1));
-			state.nextAllowedTime = Date.now() + backoffSeconds * 1e3;
-			unlockAttempts.set(key, state);
-			return {
-				success: false,
+		let a = ne(t, n);
+		if (!a.success) {
+			i.attempts++;
+			let e = Math.min(60, 2 ** (i.attempts - 1));
+			return i.nextAllowedTime = Date.now() + e * 1e3, I.set(r, i), {
+				success: !1,
 				error: "Invalid password or recovery key"
 			};
 		}
-		unlockAttempts.delete(key);
-		if (result.success) try {
-			await openPrismaDatabase();
-		} catch (err) {
-			await disconnectPrisma();
-			return {
-				success: false,
-				error: sanitizeError(err)
+		if (I.delete(r), a.success) try {
+			await le();
+		} catch (e) {
+			return await M(), {
+				success: !1,
+				error: j(e)
 			};
 		}
-		return result;
-	});
-	ipcMain.handle("change-password", (_, { oldPassword, newPassword }) => {
-		const pwdError = validateMasterPassword(newPassword);
-		if (pwdError) return {
-			success: false,
-			error: pwdError
-		};
-		return changePassword(oldPassword, newPassword);
+		return a;
+	}), r.handle("lock-db", async () => {
+		try {
+			return D(), await M(), { success: !0 };
+		} catch (e) {
+			return {
+				success: !1,
+				error: j(e)
+			};
+		}
+	}), r.handle("change-password", (e, { oldPassword: t, newPassword: n }) => {
+		let r = ue(n);
+		return r ? {
+			success: !1,
+			error: r
+		} : ie(t, n);
 	});
 }
 //#endregion
 //#region electron/ipc/inventory.ts
-var ALLOWED_INCIDENT_TYPES = Object.values(IncidentType);
-function registerInventoryHandlers() {
-	ipcMain.handle("get-subjects", async () => {
+var fe = Object.values(F);
+function pe() {
+	r.handle("get-subjects", async () => {
 		try {
 			return {
-				success: true,
-				data: await ensureDb().subject.findMany()
+				success: !0,
+				data: await A().subject.findMany()
 			};
-		} catch (err) {
+		} catch (e) {
 			return {
-				success: false,
-				error: sanitizeError(err)
+				success: !1,
+				error: j(e)
 			};
 		}
-	});
-	ipcMain.handle("get-incidents", async () => {
+	}), r.handle("get-incidents", async () => {
 		try {
 			return {
-				success: true,
-				data: await ensureDb().incident.findMany({
-					include: { subject: true },
+				success: !0,
+				data: await A().incident.findMany({
+					include: { subject: !0 },
 					orderBy: { date: "desc" }
 				})
 			};
-		} catch (err) {
+		} catch (e) {
 			return {
-				success: false,
-				error: sanitizeError(err)
+				success: !1,
+				error: j(e)
 			};
 		}
-	});
-	ipcMain.handle("get-summary", async () => {
+	}), r.handle("get-summary", async () => {
 		try {
-			const prisma = ensureDb();
-			const [subjects, overdueCount] = await Promise.all([prisma.subject.findMany(), prisma.checkout.count({ where: {
+			let e = A(), [t, n] = await Promise.all([e.subject.findMany(), e.checkout.count({ where: {
 				status: "ACTIVE",
 				dueDate: { lt: /* @__PURE__ */ new Date() }
-			} })]);
-			const { totalBooks, available, issued, damagedLost } = subjects.reduce((acc, s) => {
-				acc.totalBooks += s.openingCount + s.recovered;
-				acc.issued += s.issued;
-				acc.damagedLost += s.damaged + s.lost;
-				acc.available += calculateAvailable(s);
-				return acc;
-			}, {
+			} })]), { totalBooks: r, available: i, issued: a, damagedLost: o } = t.reduce((e, t) => (e.totalBooks += t.openingCount + t.recovered, e.issued += t.issued, e.damagedLost += t.damaged + t.lost, e.available += P(t), e), {
 				totalBooks: 0,
 				available: 0,
 				issued: 0,
 				damagedLost: 0
 			});
 			return {
-				success: true,
+				success: !0,
 				data: {
-					totalBooks,
-					available,
-					issued,
-					damagedLost,
-					subjects,
-					overdueCount
+					totalBooks: r,
+					available: i,
+					issued: a,
+					damagedLost: o,
+					subjects: t,
+					overdueCount: n
 				}
 			};
-		} catch (err) {
+		} catch (e) {
 			return {
-				success: false,
-				error: sanitizeError(err)
+				success: !1,
+				error: j(e)
 			};
 		}
-	});
-	ipcMain.handle("add-subject", async (_, data) => {
+	}), r.handle("add-subject", async (e, t) => {
 		try {
-			const prisma = ensureDb();
-			if (!data.name || typeof data.name !== "string") throw new Error("Invalid subject name");
-			const res = await prisma.subject.create({ data: {
-				name: data.name,
-				category: typeof data.category === "string" ? data.category : "General",
-				openingCount: typeof data.openingCount === "number" ? data.openingCount : 0
+			let e = A();
+			if (!t.name || typeof t.name != "string") throw Error("Invalid subject name");
+			let n = await e.subject.create({ data: {
+				name: t.name.trim(),
+				category: typeof t.category == "string" && t.category.trim() ? t.category.trim() : "General",
+				openingCount: typeof t.openingCount == "number" ? Math.max(0, t.openingCount) : 0,
+				notes: typeof t.notes == "string" && t.notes.trim() ? t.notes.trim() : null
 			} });
-			await encryptTempDatabase();
-			return {
-				success: true,
-				data: res
+			return await T(), {
+				success: !0,
+				data: n
 			};
-		} catch (err) {
+		} catch (e) {
 			return {
-				success: false,
-				error: sanitizeError(err)
+				success: !1,
+				error: j(e)
 			};
 		}
-	});
-	ipcMain.handle("add-incident", async (_, data) => {
+	}), r.handle("add-incident", async (e, t) => {
 		try {
-			const prisma = ensureDb();
-			if (!data.bookTitle || typeof data.bookTitle !== "string") throw new Error("Invalid book title");
-			if (!ALLOWED_INCIDENT_TYPES.includes(data.type)) throw new Error("Invalid incident type");
-			if (data.subjectId && typeof data.subjectId !== "number") throw new Error("Invalid subject ID");
-			const res = await prisma.$transaction(async (tx) => {
-				let subject = null;
-				if (data.subjectId) {
-					subject = await tx.subject.findUnique({ where: { id: data.subjectId } });
-					if (!subject) throw new Error("Referenced subject does not exist");
-				}
-				const incident = await tx.incident.create({ data: {
-					type: data.type,
-					date: data.date ? new Date(data.date) : /* @__PURE__ */ new Date(),
-					subjectId: data.subjectId || null,
-					bookTitle: data.bookTitle,
-					condition: data.condition || null,
-					comment: data.comment || null,
-					reportedBy: data.reportedBy || null,
-					responsibleParty: data.responsibleParty || null,
-					studentClass: data.studentClass || null,
-					actionTaken: data.actionTaken || null
-				} });
-				if (data.subjectId && subject) {
-					const updateData = {};
-					if (data.type === IncidentType.DAMAGED) updateData.damaged = { increment: 1 };
-					if (data.type === IncidentType.LOST) updateData.lost = { increment: 1 };
-					if (data.type === IncidentType.RECOVERED) updateData.recovered = { increment: 1 };
-					if (Object.keys(updateData).length > 0) {
-						await tx.subject.update({
-							where: { id: data.subjectId },
-							data: updateData
+			let e = A();
+			if (!t.bookTitle || typeof t.bookTitle != "string") throw Error("Invalid book title");
+			if (!fe.includes(t.type)) throw Error("Invalid incident type");
+			if (t.subjectId && typeof t.subjectId != "number") throw Error("Invalid subject ID");
+			let n = await e.$transaction(async (e) => {
+				let n = null;
+				if (t.subjectId && (n = await e.subject.findUnique({ where: { id: t.subjectId } }), !n)) throw Error("Referenced subject does not exist");
+				let r = await e.incident.create({
+					data: {
+						type: t.type,
+						date: t.date ? new Date(t.date) : /* @__PURE__ */ new Date(),
+						subjectId: t.subjectId || null,
+						bookTitle: t.bookTitle,
+						condition: t.condition || null,
+						comment: t.comment || null,
+						reportedBy: t.reportedBy || null,
+						responsibleParty: t.responsibleParty || null,
+						studentClass: t.studentClass || null,
+						actionTaken: t.actionTaken || "PENDING"
+					},
+					include: { subject: !0 }
+				});
+				if (t.subjectId && n) {
+					let r = {};
+					if (t.type === F.DAMAGED && (r.damaged = { increment: 1 }), t.type === F.LOST && (r.lost = { increment: 1 }), t.type === F.RECOVERED && (r.recovered = { increment: 1 }), (t.type === F.NEW || t.type === F.DONATION) && (r.openingCount = { increment: 1 }), Object.keys(r).length > 0) {
+						await e.subject.update({
+							where: { id: t.subjectId },
+							data: r
 						});
-						const field = data.type === IncidentType.DAMAGED ? "damaged" : data.type === IncidentType.LOST ? "lost" : data.type === IncidentType.RECOVERED ? "recovered" : null;
-						if (field) {
-							const oldValueStr = String(subject[field] ?? 0);
-							const newValueStr = String(Number(subject[field] ?? 0) + 1);
-							await tx.auditLog.create({ data: {
-								subjectId: data.subjectId,
-								field,
-								oldValue: oldValueStr,
-								newValue: newValueStr,
+						let i = t.type === F.DAMAGED ? "damaged" : t.type === F.LOST ? "lost" : t.type === F.RECOVERED ? "recovered" : t.type === F.NEW || t.type === F.DONATION ? "openingCount" : null;
+						if (i) {
+							let r = String(n[i] ?? 0), a = String(Number(n[i] ?? 0) + 1);
+							await e.auditLog.create({ data: {
+								subjectId: t.subjectId,
+								field: i,
+								oldValue: r,
+								newValue: a,
 								changedBy: "LIBRARIAN"
 							} });
 						}
 					}
 				}
-				return incident;
+				return r;
 			});
-			await encryptTempDatabase();
-			return {
-				success: true,
-				data: res
+			return await T(), {
+				success: !0,
+				data: n
 			};
-		} catch (err) {
+		} catch (e) {
 			return {
-				success: false,
-				error: sanitizeError(err)
+				success: !1,
+				error: j(e)
 			};
 		}
-	});
-	ipcMain.handle("update-subject", async (_, data) => {
+	}), r.handle("resolve-incident", async (e, t) => {
 		try {
-			const prisma = ensureDb();
-			if (!data.id || typeof data.id !== "number") throw new Error("Invalid subject ID");
-			const res = await prisma.$transaction(async (tx) => {
-				const oldSubject = await tx.subject.findUnique({ where: { id: data.id } });
-				if (!oldSubject) throw new Error("Referenced subject does not exist");
-				const updated = await tx.subject.update({
-					where: { id: data.id },
+			let e = A();
+			if (!t?.id || typeof t.id != "number") throw Error("Invalid incident ID");
+			let n = await e.$transaction(async (e) => {
+				let n = await e.incident.findUnique({ where: { id: t.id } });
+				if (!n) throw Error("Incident not found");
+				if (n.actionTaken === "RESOLVED") throw Error("Incident is already resolved");
+				let r = t.resolutionNotes ? n.comment ? `${n.comment} | Resolved: ${t.resolutionNotes}` : `Resolved: ${t.resolutionNotes}` : n.comment, i = await e.incident.update({
+					where: { id: t.id },
 					data: {
-						name: typeof data.data?.name === "string" ? data.data.name : void 0,
-						category: typeof data.data?.category === "string" ? data.data.category : void 0,
-						openingCount: typeof data.data?.openingCount === "number" ? data.data.openingCount : void 0
+						actionTaken: "RESOLVED",
+						comment: r
+					},
+					include: { subject: !0 }
+				});
+				if (n.subjectId) {
+					let t = await e.subject.findUnique({ where: { id: n.subjectId } });
+					if (t) {
+						if (n.type === F.DAMAGED && t.damaged > 0) {
+							let n = Math.max(0, t.damaged - 1);
+							await e.subject.update({
+								where: { id: t.id },
+								data: { damaged: n }
+							}), await e.auditLog.create({ data: {
+								subjectId: t.id,
+								field: "damaged",
+								oldValue: String(t.damaged),
+								newValue: String(n),
+								changedBy: "INCIDENT_RESOLVED"
+							} });
+						} else if (n.type === F.LOST) {
+							let n = t.recovered + 1;
+							await e.subject.update({
+								where: { id: t.id },
+								data: { recovered: n }
+							}), await e.auditLog.create({ data: {
+								subjectId: t.id,
+								field: "recovered",
+								oldValue: String(t.recovered),
+								newValue: String(n),
+								changedBy: "INCIDENT_RESOLVED"
+							} });
+						}
 					}
-				});
-				const logs = [];
-				if (data.data?.name && data.data.name !== oldSubject.name) logs.push({
-					field: "name",
-					oldValue: oldSubject.name,
-					newValue: data.data.name
-				});
-				if (data.data?.category && data.data.category !== oldSubject.category) logs.push({
-					field: "category",
-					oldValue: oldSubject.category || "",
-					newValue: data.data.category
-				});
-				if (typeof data.data?.openingCount === "number" && data.data.openingCount !== oldSubject.openingCount) logs.push({
-					field: "openingCount",
-					oldValue: oldSubject.openingCount.toString(),
-					newValue: data.data.openingCount.toString()
-				});
-				if (logs.length > 0) await tx.auditLog.createMany({ data: logs.map((l) => ({
-					subjectId: data.id,
-					changedBy: "LIBRARIAN",
-					...l
-				})) });
-				return updated;
+				}
+				return i;
 			});
-			await encryptTempDatabase();
-			return {
-				success: true,
-				data: res
+			return await T(), {
+				success: !0,
+				data: n
 			};
-		} catch (err) {
+		} catch (e) {
 			return {
-				success: false,
-				error: sanitizeError(err)
+				success: !1,
+				error: j(e)
 			};
 		}
-	});
-	ipcMain.handle("get-audit-logs", async () => {
+	}), r.handle("update-subject", async (e, t) => {
+		try {
+			let e = A();
+			if (!t.id || typeof t.id != "number") throw Error("Invalid subject ID");
+			let n = await e.$transaction(async (e) => {
+				let n = await e.subject.findUnique({ where: { id: t.id } });
+				if (!n) throw Error("Referenced subject does not exist");
+				let r = {}, i = [];
+				if (typeof t.data?.name == "string" && t.data.name.trim()) {
+					let e = t.data.name.trim();
+					r.name = e, e !== n.name && i.push({
+						field: "name",
+						oldValue: n.name,
+						newValue: e
+					});
+				}
+				if (typeof t.data?.category == "string") {
+					let e = t.data.category.trim() || "General";
+					r.category = e, e !== (n.category || "") && i.push({
+						field: "category",
+						oldValue: n.category || "",
+						newValue: e
+					});
+				}
+				if (t.data?.notes !== void 0) {
+					let e = typeof t.data.notes == "string" && t.data.notes.trim() ? t.data.notes.trim() : null;
+					r.notes = e, (e || "") !== (n.notes || "") && i.push({
+						field: "notes",
+						oldValue: n.notes || "",
+						newValue: e || ""
+					});
+				}
+				for (let e of [
+					"openingCount",
+					"recovered",
+					"issued",
+					"damaged",
+					"lost"
+				]) {
+					let a = t.data?.[e];
+					if (typeof a == "number" && !Number.isNaN(a)) {
+						let t = Math.max(0, Math.floor(a));
+						r[e] = t, t !== n[e] && i.push({
+							field: e,
+							oldValue: String(n[e]),
+							newValue: String(t)
+						});
+					}
+				}
+				let a = await e.subject.update({
+					where: { id: t.id },
+					data: r
+				});
+				return i.length > 0 && await e.auditLog.createMany({ data: i.map((e) => ({
+					subjectId: t.id,
+					changedBy: "LIBRARIAN",
+					...e
+				})) }), a;
+			});
+			return await T(), {
+				success: !0,
+				data: n
+			};
+		} catch (e) {
+			return {
+				success: !1,
+				error: j(e)
+			};
+		}
+	}), r.handle("delete-subject", async (e, t) => {
+		try {
+			let e = A();
+			if (!t || typeof t != "number") throw Error("Invalid subject ID");
+			return await e.$transaction(async (e) => {
+				if (!await e.subject.findUnique({ where: { id: t } })) throw Error("Subject not found");
+				if (await e.checkout.count({ where: {
+					subjectId: t,
+					status: "ACTIVE"
+				} }) > 0) throw Error("Cannot delete a subject with active student loans. Return all active checkouts first.");
+				await e.stockAuditItem.deleteMany({ where: { subjectId: t } }), await e.incident.deleteMany({ where: { subjectId: t } }), await e.auditLog.deleteMany({ where: { subjectId: t } }), await e.checkout.deleteMany({ where: { subjectId: t } }), await e.subject.delete({ where: { id: t } });
+			}), await T(), { success: !0 };
+		} catch (e) {
+			return {
+				success: !1,
+				error: j(e)
+			};
+		}
+	}), r.handle("get-audit-logs", async () => {
 		try {
 			return {
-				success: true,
-				data: await ensureDb().auditLog.findMany({
-					include: { subject: true },
+				success: !0,
+				data: await A().auditLog.findMany({
+					include: { subject: !0 },
 					orderBy: { changedAt: "desc" },
 					take: 100
 				})
 			};
-		} catch (err) {
+		} catch (e) {
 			return {
-				success: false,
-				error: sanitizeError(err)
+				success: !1,
+				error: j(e)
 			};
 		}
-	});
-	ipcMain.handle("get-school-info", async () => {
+	}), r.handle("get-school-info", async () => {
 		try {
 			return {
-				success: true,
-				data: await ensureDb().school.findFirst() || {
+				success: !0,
+				data: await A().school.findFirst() || {
 					name: "Mentor High School - Kitende",
 					motto: "Education is the Key",
-					academicYear: "2026"
+					academicYear: "2026",
+					address: "",
+					contactPhone: ""
 				}
 			};
-		} catch (err) {
+		} catch (e) {
 			return {
-				success: false,
-				error: sanitizeError(err)
+				success: !1,
+				error: j(e)
 			};
 		}
-	});
-	ipcMain.handle("save-school-info", async (_event, data) => {
+	}), r.handle("save-school-info", async (e, t) => {
 		try {
-			const prisma = ensureDb();
-			const existing = await prisma.school.findFirst();
-			let updated;
-			if (existing) updated = await prisma.school.update({
-				where: { id: existing.id },
-				data: {
-					name: data.name,
-					motto: data.motto,
-					academicYear: data.academicYear
-				}
-			});
-			else updated = await prisma.school.create({ data: {
-				name: data.name,
-				motto: data.motto,
-				academicYear: data.academicYear
-			} });
-			await encryptTempDatabase();
-			return {
-				success: true,
-				data: updated
+			let e = A(), n = await e.school.findFirst(), r = {
+				name: t.name,
+				motto: t.motto ?? null,
+				academicYear: t.academicYear ?? null,
+				address: t.address ?? null,
+				contactPhone: t.contactPhone ?? null,
+				logoPath: t.logoPath ?? null
+			}, i;
+			return i = n ? await e.school.update({
+				where: { id: n.id },
+				data: r
+			}) : await e.school.create({ data: r }), await T(), {
+				success: !0,
+				data: i
 			};
-		} catch (err) {
+		} catch (e) {
 			return {
-				success: false,
-				error: sanitizeError(err)
+				success: !1,
+				error: j(e)
 			};
 		}
 	});
 }
 //#endregion
 //#region electron/ipc/checkouts.ts
-function getRuleForClass(studentClass, rules) {
-	if (!rules || rules.length === 0) return {
+function L(e, t) {
+	if (!t || t.length === 0) return {
 		roleOrGrade: "DEFAULT",
 		maxBooksAllowed: 2,
 		borrowDurationDays: 14,
 		finePerDay: 0
 	};
-	const defaultRule = rules.find((r) => r.roleOrGrade === "DEFAULT") || {
+	let n = t.find((e) => e.roleOrGrade === "DEFAULT") || {
 		roleOrGrade: "DEFAULT",
 		maxBooksAllowed: 2,
 		borrowDurationDays: 14,
 		finePerDay: 0
 	};
-	if (!studentClass || !studentClass.trim()) return defaultRule;
-	const sClass = studentClass.trim().toUpperCase();
-	const exactMatch = rules.find((r) => r.roleOrGrade.trim().toUpperCase() === sClass);
-	if (exactMatch) return exactMatch;
-	if (sClass.startsWith("S.1") || sClass.startsWith("S.2") || sClass.startsWith("S.3") || sClass.startsWith("S.4")) {
-		const oLevel = rules.find((r) => r.roleOrGrade === "S.1-S.4");
-		if (oLevel) return oLevel;
+	if (!e || !e.trim()) return n;
+	let r = e.trim().toUpperCase(), i = t.find((e) => e.roleOrGrade.trim().toUpperCase() === r);
+	if (i) return i;
+	if (r.startsWith("S.1") || r.startsWith("S.2") || r.startsWith("S.3") || r.startsWith("S.4")) {
+		let e = t.find((e) => e.roleOrGrade === "S.1-S.4");
+		if (e) return e;
 	}
-	if (sClass.startsWith("S.5") || sClass.startsWith("S.6")) {
-		const aLevel = rules.find((r) => r.roleOrGrade === "S.5-S.6");
-		if (aLevel) return aLevel;
+	if (r.startsWith("S.5") || r.startsWith("S.6")) {
+		let e = t.find((e) => e.roleOrGrade === "S.5-S.6");
+		if (e) return e;
 	}
-	if (sClass.includes("TEACHER") || sClass.includes("STAFF")) {
-		const teacher = rules.find((r) => r.roleOrGrade === "TEACHER");
-		if (teacher) return teacher;
+	if (r.includes("TEACHER") || r.includes("STAFF")) {
+		let e = t.find((e) => e.roleOrGrade === "TEACHER");
+		if (e) return e;
 	}
-	return defaultRule;
+	return n;
 }
-async function calculateClearance(studentName, studentClass) {
-	if (!studentName || typeof studentName !== "string" || !studentName.trim()) throw new Error("Invalid student name");
-	const prisma = ensureDb();
-	const sName = studentName.trim();
-	const sClass = studentClass ? studentClass.trim() : null;
-	const activeCheckouts = (await prisma.checkout.findMany({
+async function R(e, t) {
+	if (!e || typeof e != "string" || !e.trim()) throw Error("Invalid student name");
+	let n = A(), r = e.trim(), i = t ? t.trim() : null, a = (await n.checkout.findMany({
 		where: { status: "ACTIVE" },
-		include: { subject: true }
-	})).filter((c) => c.studentName.trim().toLowerCase() === sName.toLowerCase() && (!sClass || (c.studentClass || "").trim().toLowerCase() === sClass.toLowerCase()));
-	const studentIncidents = (await prisma.incident.findMany({ include: { subject: true } })).filter((i) => i.responsibleParty && i.responsibleParty.trim().toLowerCase() === sName.toLowerCase() && (!sClass || !i.studentClass || i.studentClass.trim().toLowerCase() === sClass.toLowerCase()));
-	const unresolvedIncidents = studentIncidents.filter((i) => {
-		if (i.actionTaken === "RESOLVED" || i.actionTaken === "PAID") return false;
-		return true;
-	});
-	const rule = getRuleForClass(sClass, await prisma.borrowingRule.findMany());
-	const now = /* @__PURE__ */ new Date();
-	let overdueFines = 0;
-	for (const checkout of activeCheckouts) if (checkout.dueDate < now) {
-		const diffMs = now.getTime() - new Date(checkout.dueDate).getTime();
-		const daysOverdue = Math.ceil(diffMs / (1e3 * 60 * 60 * 24));
-		overdueFines += daysOverdue * rule.finePerDay;
+		include: { subject: !0 }
+	})).filter((e) => e.studentName.trim().toLowerCase() === r.toLowerCase() && (!i || (e.studentClass || "").trim().toLowerCase() === i.toLowerCase())), o = (await n.incident.findMany({ include: { subject: !0 } })).filter((e) => e.responsibleParty && e.responsibleParty.trim().toLowerCase() === r.toLowerCase() && (!i || !e.studentClass || e.studentClass.trim().toLowerCase() === i.toLowerCase())), s = o.filter((e) => !(e.actionTaken && (e.actionTaken.toUpperCase().includes("RESOLVED") || e.actionTaken.toUpperCase().includes("PAID") || e.actionTaken.toUpperCase().includes("WAIVED")))), c = L(i, await n.borrowingRule.findMany()), l = /* @__PURE__ */ new Date(), u = 0;
+	for (let e of a) if (e.dueDate < l) {
+		let t = l.getTime() - new Date(e.dueDate).getTime(), n = Math.ceil(t / (1e3 * 60 * 60 * 24));
+		u += Math.min(15, n * c.finePerDay);
 	}
-	let incidentCharges = 0;
-	for (const incident of unresolvedIncidents) if (incident.type === "LOST") incidentCharges += 25;
-	else if (incident.type === "DAMAGED") incidentCharges += 10;
-	else incidentCharges += 5;
-	const totalReplacementCharges = overdueFines + incidentCharges;
+	let d = 0;
+	for (let e of s) e.type === "LOST" ? d += 25 : e.type === "DAMAGED" ? d += 10 : d += 5;
+	let f = Math.round((u + d) * 100) / 100, p = a.length === 0 && s.length === 0;
 	return {
-		studentName: sName,
-		studentClass: sClass,
-		status: activeCheckouts.length === 0 && unresolvedIncidents.length === 0 ? "CLEARED" : "HOLD",
-		activeCheckouts,
-		incidents: studentIncidents,
-		unresolvedIncidents,
-		totalReplacementCharges
+		studentName: r,
+		studentClass: i,
+		status: p ? "CLEARED" : "HOLD",
+		activeCheckouts: a,
+		incidents: o,
+		unresolvedIncidents: s,
+		totalReplacementCharges: f,
+		totalOverdueFines: Math.round(u * 100) / 100,
+		totalIncidentCharges: Math.round(d * 100) / 100,
+		totalAmountDue: f,
+		isCleared: p
 	};
 }
-function registerCheckoutHandlers() {
-	ipcMain.handle("add-checkout", async (_, data) => {
+function me() {
+	r.handle("add-checkout", async (e, t) => {
 		try {
-			const prisma = ensureDb();
-			if (!data.subjectId || typeof data.subjectId !== "number") throw new Error("Invalid subject ID");
-			if (!data.studentName || typeof data.studentName !== "string") throw new Error("Invalid student name");
-			const studentName = data.studentName.trim();
-			const studentClass = data.studentClass ? data.studentClass.trim() : null;
-			const rule = getRuleForClass(studentClass, await prisma.borrowingRule.findMany());
-			const res = await prisma.$transaction(async (tx) => {
-				const subject = await tx.subject.findUnique({ where: { id: data.subjectId } });
-				if (!subject) throw new Error("Referenced subject does not exist");
-				if (calculateAvailable(subject) <= 0) throw new Error("No available books for this subject");
-				const activeCheckouts = await tx.checkout.count({ where: {
-					studentName,
+			let e = A();
+			if (!t.subjectId || typeof t.subjectId != "number") throw Error("Invalid subject ID");
+			if (!t.studentName || typeof t.studentName != "string") throw Error("Invalid student name");
+			let n = t.studentName.trim(), r = t.studentClass ? t.studentClass.trim() : null, i = L(r, await e.borrowingRule.findMany()), a = await e.$transaction(async (e) => {
+				let a = await e.subject.findUnique({ where: { id: t.subjectId } });
+				if (!a) throw Error("Referenced subject does not exist");
+				if (P(a) <= 0) throw Error("No available books for this subject");
+				let o = await e.checkout.count({ where: {
+					studentName: n,
 					status: "ACTIVE",
-					...studentClass ? { studentClass } : {}
+					...r ? { studentClass: r } : {}
 				} });
-				if (activeCheckouts >= rule.maxBooksAllowed) throw new Error(`Borrowing limit exceeded: ${studentName} already has ${activeCheckouts} active book(s) checked out (max allowed for ${rule.roleOrGrade}: ${rule.maxBooksAllowed}).`);
-				let dueDate;
-				if (data.dueDate) dueDate = new Date(data.dueDate);
-				else {
-					dueDate = /* @__PURE__ */ new Date();
-					dueDate.setDate(dueDate.getDate() + rule.borrowDurationDays);
-				}
-				const checkout = await tx.checkout.create({ data: {
-					subjectId: data.subjectId,
-					studentName,
-					studentClass,
-					dueDate,
-					conditionOut: typeof data.conditionOut === "number" ? data.conditionOut : 3,
+				if (o >= i.maxBooksAllowed) throw Error(`Borrowing limit exceeded: ${n} already has ${o} active book(s) checked out (max allowed for ${i.roleOrGrade}: ${i.maxBooksAllowed}).`);
+				let s;
+				t.dueDate ? s = new Date(t.dueDate) : (s = /* @__PURE__ */ new Date(), s.setDate(s.getDate() + i.borrowDurationDays));
+				let c = await e.checkout.create({ data: {
+					subjectId: t.subjectId,
+					studentName: n,
+					studentClass: r,
+					dueDate: s,
+					conditionOut: typeof t.conditionOut == "number" ? t.conditionOut : 3,
 					status: "ACTIVE"
 				} });
-				await tx.subject.update({
-					where: { id: data.subjectId },
+				return await e.subject.update({
+					where: { id: t.subjectId },
 					data: { issued: { increment: 1 } }
-				});
-				await tx.auditLog.create({ data: {
-					subjectId: data.subjectId,
+				}), await e.auditLog.create({ data: {
+					subjectId: t.subjectId,
 					field: "issued",
-					oldValue: subject.issued.toString(),
-					newValue: (subject.issued + 1).toString(),
+					oldValue: a.issued.toString(),
+					newValue: (a.issued + 1).toString(),
 					changedBy: "LIBRARIAN"
-				} });
-				return checkout;
+				} }), c;
 			});
-			await encryptTempDatabase();
-			return {
-				success: true,
-				data: res
+			return await T(), {
+				success: !0,
+				data: a
 			};
-		} catch (err) {
+		} catch (e) {
 			return {
-				success: false,
-				error: sanitizeError(err)
+				success: !1,
+				error: j(e)
 			};
 		}
-	});
-	ipcMain.handle("return-checkout", async (_, { id, conditionIn }) => {
+	}), r.handle("return-checkout", async (e, { id: t, conditionIn: n }) => {
 		try {
-			const prisma = ensureDb();
-			if (typeof id !== "number") throw new Error("Invalid checkout ID");
-			const res = await prisma.$transaction(async (tx) => {
-				const existingCheckout = await tx.checkout.findUnique({ where: { id } });
-				if (!existingCheckout) throw new Error("Checkout record not found");
-				if (existingCheckout.status !== "ACTIVE") throw new Error("Checkout is not active");
-				const checkout = await tx.checkout.update({
-					where: { id },
+			let e = A();
+			if (typeof t != "number") throw Error("Invalid checkout ID");
+			let r = await e.$transaction(async (e) => {
+				let r = await e.checkout.findUnique({ where: { id: t } });
+				if (!r) throw Error("Checkout record not found");
+				if (r.status !== "ACTIVE") throw Error("Checkout is not active");
+				let i = await e.checkout.update({
+					where: { id: t },
 					data: {
 						status: "RETURNED",
 						returnDate: /* @__PURE__ */ new Date(),
-						conditionIn: typeof conditionIn === "number" ? conditionIn : null
+						conditionIn: typeof n == "number" ? n : null
 					}
+				}), a = await e.subject.findUnique({
+					where: { id: i.subjectId },
+					include: { checkouts: !0 }
 				});
-				const subject = await tx.subject.findUnique({
-					where: { id: checkout.subjectId },
-					include: { checkouts: true }
-				});
-				if (subject) {
-					const { totalDegradation, count } = subject.checkouts.reduce((acc, c) => {
-						if (c.status === "RETURNED" && c.conditionIn !== null) {
-							acc.totalDegradation += c.conditionOut - (c.conditionIn ?? c.conditionOut);
-							acc.count++;
-						}
-						return acc;
-					}, {
+				if (a) {
+					let { totalDegradation: t, count: r } = a.checkouts.reduce((e, t) => (t.status === "RETURNED" && t.conditionIn !== null && (e.totalDegradation += t.conditionOut - (t.conditionIn ?? t.conditionOut), e.count++), e), {
 						totalDegradation: 0,
 						count: 0
-					});
-					const newDegradationRate = count > 0 ? totalDegradation / count : 0;
-					const totalBooks = subject.openingCount + subject.recovered - subject.lost - subject.damaged;
-					const conditionLoss = checkout.conditionOut - (conditionIn ?? checkout.conditionOut);
-					const conditionShift = totalBooks > 0 ? conditionLoss / totalBooks : conditionLoss;
-					const newAverageCondition = Math.max(1, subject.averageCondition - conditionShift);
-					await tx.subject.update({
-						where: { id: subject.id },
+					}), o = r > 0 ? t / r : 0, s = a.openingCount + a.recovered - a.lost - a.damaged, c = i.conditionOut - (n ?? i.conditionOut), l = s > 0 ? c / s : c, u = Math.max(1, a.averageCondition - l);
+					await e.subject.update({
+						where: { id: a.id },
 						data: {
 							issued: { decrement: 1 },
-							degradationRate: newDegradationRate,
-							averageCondition: newAverageCondition
+							degradationRate: o,
+							averageCondition: u
 						}
-					});
-					await tx.auditLog.create({ data: {
-						subjectId: subject.id,
+					}), await e.auditLog.create({ data: {
+						subjectId: a.id,
 						field: "issued",
-						oldValue: subject.issued.toString(),
-						newValue: (subject.issued - 1).toString(),
+						oldValue: a.issued.toString(),
+						newValue: (a.issued - 1).toString(),
 						changedBy: "LIBRARIAN"
 					} });
 				}
-				return checkout;
+				return i;
 			});
-			await encryptTempDatabase();
-			return {
-				success: true,
-				data: res
+			return await T(), {
+				success: !0,
+				data: r
 			};
-		} catch (err) {
+		} catch (e) {
 			return {
-				success: false,
-				error: sanitizeError(err)
+				success: !1,
+				error: j(e)
 			};
 		}
-	});
-	ipcMain.handle("get-active-checkouts", async (_, subjectId) => {
+	}), r.handle("renew-checkout", async (e, t) => {
 		try {
-			const prisma = ensureDb();
-			const whereClause = { status: "ACTIVE" };
-			if (typeof subjectId === "number" && subjectId > 0) whereClause.subjectId = subjectId;
+			let e = A(), { id: n, extraDays: r = 7, newDueDate: i } = t || {};
+			if (!n || typeof n != "number") throw Error("Invalid checkout ID");
+			let a = await e.$transaction(async (e) => {
+				let t = await e.checkout.findUnique({ where: { id: n } });
+				if (!t) throw Error("Checkout record not found");
+				if (t.status !== "ACTIVE") throw Error("Only active checkouts can be renewed");
+				let a;
+				if (i) a = new Date(i);
+				else {
+					let e = Math.max(Date.now(), new Date(t.dueDate).getTime());
+					a = new Date(e + Math.max(1, r) * 24 * 60 * 60 * 1e3);
+				}
+				return e.checkout.update({
+					where: { id: n },
+					data: { dueDate: a },
+					include: { subject: !0 }
+				});
+			});
+			return await T(), {
+				success: !0,
+				data: a
+			};
+		} catch (e) {
 			return {
-				success: true,
-				data: await prisma.checkout.findMany({
-					where: whereClause,
-					include: { subject: true },
+				success: !1,
+				error: j(e)
+			};
+		}
+	}), r.handle("get-active-checkouts", async (e, t) => {
+		try {
+			let e = A(), n = { status: "ACTIVE" };
+			return typeof t == "number" && t > 0 && (n.subjectId = t), {
+				success: !0,
+				data: await e.checkout.findMany({
+					where: n,
+					include: { subject: !0 },
 					orderBy: { checkoutDate: "desc" }
 				})
 			};
-		} catch (err) {
+		} catch (e) {
 			return {
-				success: false,
-				error: sanitizeError(err)
+				success: !1,
+				error: j(e)
 			};
 		}
-	});
-	ipcMain.handle("record-fine-payment", async (_, data) => {
+	}), r.handle("record-fine-payment", async (e, t) => {
 		try {
-			const prisma = ensureDb();
-			const { studentName, studentClass, amount, paymentMethod, notes } = data || {};
-			if (!studentName || typeof studentName !== "string" || !studentName.trim()) throw new Error("Invalid student name");
-			const amt = Number(amount);
-			if (isNaN(amt) || amt < 0) throw new Error("Invalid payment amount");
-			const sName = studentName.trim();
-			const sClass = studentClass ? studentClass.trim() : null;
-			const method = paymentMethod || "Cash";
-			const dateStr = (/* @__PURE__ */ new Date()).toLocaleDateString();
-			const studentIncidents = (await prisma.incident.findMany()).filter((i) => i.responsibleParty && i.responsibleParty.trim().toLowerCase() === sName.toLowerCase() && (!sClass || !i.studentClass || i.studentClass.trim().toLowerCase() === sClass.toLowerCase()) && (!i.actionTaken || !i.actionTaken.toUpperCase().includes("PAID") && !i.actionTaken.toUpperCase().includes("WAIVED") && !i.actionTaken.toUpperCase().includes("RESOLVED")));
-			for (const inc of studentIncidents) await prisma.incident.update({
-				where: { id: inc.id },
-				data: { actionTaken: `PAID (${method} - $${amt.toFixed(2)}${notes ? " - " + notes : ""}) on ${dateStr}` }
+			let e = A(), { studentName: n, studentClass: r, amount: i, paymentMethod: a, notes: o } = t || {};
+			if (!n || typeof n != "string" || !n.trim()) throw Error("Invalid student name");
+			let s = Number(i);
+			if (isNaN(s) || s < 0) throw Error("Invalid payment amount");
+			let c = n.trim(), l = r ? r.trim() : null, u = a || "Cash", d = (/* @__PURE__ */ new Date()).toLocaleDateString(), f = (await e.incident.findMany()).filter((e) => e.responsibleParty && e.responsibleParty.trim().toLowerCase() === c.toLowerCase() && (!l || !e.studentClass || e.studentClass.trim().toLowerCase() === l.toLowerCase()) && (!e.actionTaken || !e.actionTaken.toUpperCase().includes("PAID") && !e.actionTaken.toUpperCase().includes("WAIVED") && !e.actionTaken.toUpperCase().includes("RESOLVED")));
+			for (let t of f) await e.incident.update({
+				where: { id: t.id },
+				data: { actionTaken: `PAID (${u} - $${s.toFixed(2)}${o ? " - " + o : ""}) on ${d}` }
 			});
-			const updatedClearance = await calculateClearance(sName, sClass);
-			await encryptTempDatabase();
-			return {
-				success: true,
-				data: updatedClearance
+			let p = await R(c, l);
+			return await T(), {
+				success: !0,
+				data: p
 			};
-		} catch (err) {
+		} catch (e) {
 			return {
-				success: false,
-				error: sanitizeError(err)
+				success: !1,
+				error: j(e)
 			};
 		}
-	});
-	ipcMain.handle("waive-fine", async (_, data) => {
+	}), r.handle("waive-fine", async (e, t) => {
 		try {
-			const prisma = ensureDb();
-			const { studentName, studentClass, reason, approvedBy } = data || {};
-			if (!studentName || typeof studentName !== "string" || !studentName.trim()) throw new Error("Invalid student name");
-			if (!reason || typeof reason !== "string" || !reason.trim()) throw new Error("Waiver reason is required");
-			const sName = studentName.trim();
-			const sClass = studentClass ? studentClass.trim() : null;
-			const approver = approvedBy ? approvedBy.trim() : "LIBRARIAN";
-			const dateStr = (/* @__PURE__ */ new Date()).toLocaleDateString();
-			const studentIncidents = (await prisma.incident.findMany()).filter((i) => i.responsibleParty && i.responsibleParty.trim().toLowerCase() === sName.toLowerCase() && (!sClass || !i.studentClass || i.studentClass.trim().toLowerCase() === sClass.toLowerCase()) && (!i.actionTaken || !i.actionTaken.toUpperCase().includes("PAID") && !i.actionTaken.toUpperCase().includes("WAIVED") && !i.actionTaken.toUpperCase().includes("RESOLVED")));
-			for (const inc of studentIncidents) await prisma.incident.update({
-				where: { id: inc.id },
-				data: { actionTaken: `WAIVED (Reason: ${reason.trim()} by ${approver}) on ${dateStr}` }
+			let e = A(), { studentName: n, studentClass: r, reason: i, approvedBy: a } = t || {};
+			if (!n || typeof n != "string" || !n.trim()) throw Error("Invalid student name");
+			if (!i || typeof i != "string" || !i.trim()) throw Error("Waiver reason is required");
+			let o = n.trim(), s = r ? r.trim() : null, c = a ? a.trim() : "LIBRARIAN", l = (/* @__PURE__ */ new Date()).toLocaleDateString(), u = (await e.incident.findMany()).filter((e) => e.responsibleParty && e.responsibleParty.trim().toLowerCase() === o.toLowerCase() && (!s || !e.studentClass || e.studentClass.trim().toLowerCase() === s.toLowerCase()) && (!e.actionTaken || !e.actionTaken.toUpperCase().includes("PAID") && !e.actionTaken.toUpperCase().includes("WAIVED") && !e.actionTaken.toUpperCase().includes("RESOLVED")));
+			for (let t of u) await e.incident.update({
+				where: { id: t.id },
+				data: { actionTaken: `WAIVED (Reason: ${i.trim()} by ${c}) on ${l}` }
 			});
-			const updatedClearance = await calculateClearance(sName, sClass);
-			await encryptTempDatabase();
-			return {
-				success: true,
-				data: updatedClearance
+			let d = await R(o, s);
+			return await T(), {
+				success: !0,
+				data: d
 			};
-		} catch (err) {
+		} catch (e) {
 			return {
-				success: false,
-				error: sanitizeError(err)
+				success: !1,
+				error: j(e)
 			};
 		}
-	});
-	ipcMain.handle("get-overdue-checkouts", async () => {
+	}), r.handle("get-overdue-checkouts", async () => {
 		try {
 			return {
-				success: true,
-				data: await ensureDb().checkout.findMany({
+				success: !0,
+				data: await A().checkout.findMany({
 					where: {
 						status: "ACTIVE",
 						dueDate: { lt: /* @__PURE__ */ new Date() }
 					},
-					include: { subject: true },
+					include: { subject: !0 },
 					orderBy: { dueDate: "asc" }
 				})
 			};
-		} catch (err) {
+		} catch (e) {
 			return {
-				success: false,
-				error: sanitizeError(err)
+				success: !1,
+				error: j(e)
 			};
 		}
-	});
-	ipcMain.handle("get-borrowing-rules", async () => {
+	}), r.handle("get-borrowing-rules", async () => {
 		try {
 			return {
-				success: true,
-				data: await ensureDb().borrowingRule.findMany({ orderBy: { id: "asc" } })
+				success: !0,
+				data: await A().borrowingRule.findMany({ orderBy: { id: "asc" } })
 			};
-		} catch (err) {
+		} catch (e) {
 			return {
-				success: false,
-				error: sanitizeError(err)
+				success: !1,
+				error: j(e)
 			};
 		}
-	});
-	ipcMain.handle("save-borrowing-rule", async (_, ruleData) => {
+	}), r.handle("save-borrowing-rule", async (e, t) => {
 		try {
-			const prisma = ensureDb();
-			if (!ruleData.roleOrGrade || typeof ruleData.roleOrGrade !== "string") throw new Error("Invalid role or grade");
-			const roleOrGrade = ruleData.roleOrGrade.trim().toUpperCase();
-			const maxBooksAllowed = typeof ruleData.maxBooksAllowed === "number" ? ruleData.maxBooksAllowed : Number(ruleData.maxBooksAllowed || 2);
-			const borrowDurationDays = typeof ruleData.borrowDurationDays === "number" ? ruleData.borrowDurationDays : Number(ruleData.borrowDurationDays || 14);
-			const finePerDay = typeof ruleData.finePerDay === "number" ? ruleData.finePerDay : Number(ruleData.finePerDay || 0);
-			const res = await prisma.borrowingRule.upsert({
-				where: { roleOrGrade },
+			let e = A();
+			if (!t.roleOrGrade || typeof t.roleOrGrade != "string") throw Error("Invalid role or grade");
+			let n = t.roleOrGrade.trim().toUpperCase(), r = typeof t.maxBooksAllowed == "number" ? t.maxBooksAllowed : Number(t.maxBooksAllowed || 2), i = typeof t.borrowDurationDays == "number" ? t.borrowDurationDays : Number(t.borrowDurationDays || 14), a = typeof t.finePerDay == "number" ? t.finePerDay : Number(t.finePerDay || 0), o = await e.borrowingRule.upsert({
+				where: { roleOrGrade: n },
 				update: {
-					maxBooksAllowed,
-					borrowDurationDays,
-					finePerDay
+					maxBooksAllowed: r,
+					borrowDurationDays: i,
+					finePerDay: a
 				},
 				create: {
-					roleOrGrade,
-					maxBooksAllowed,
-					borrowDurationDays,
-					finePerDay
+					roleOrGrade: n,
+					maxBooksAllowed: r,
+					borrowDurationDays: i,
+					finePerDay: a
 				}
 			});
-			await encryptTempDatabase();
-			return {
-				success: true,
-				data: res
+			return await T(), {
+				success: !0,
+				data: o
 			};
-		} catch (err) {
+		} catch (e) {
 			return {
-				success: false,
-				error: sanitizeError(err)
-			};
-		}
-	});
-	ipcMain.handle("delete-borrowing-rule", async (_, data) => {
-		try {
-			const prisma = ensureDb();
-			const id = typeof data === "number" ? data : data?.id;
-			if (!id || typeof id !== "number") throw new Error("Invalid rule ID");
-			if ((await prisma.borrowingRule.findUnique({ where: { id } }))?.roleOrGrade === "DEFAULT") throw new Error("Cannot delete the DEFAULT borrowing rule");
-			await prisma.borrowingRule.delete({ where: { id } });
-			await encryptTempDatabase();
-			return { success: true };
-		} catch (err) {
-			return {
-				success: false,
-				error: sanitizeError(err)
+				success: !1,
+				error: j(e)
 			};
 		}
-	});
-	ipcMain.handle("get-clearance-status", async (_, data) => {
+	}), r.handle("delete-borrowing-rule", async (e, t) => {
 		try {
-			ensureDb();
-			const { studentName, studentClass } = data || {};
+			let e = A(), n = typeof t == "number" ? t : t?.id;
+			if (!n || typeof n != "number") throw Error("Invalid rule ID");
+			if ((await e.borrowingRule.findUnique({ where: { id: n } }))?.roleOrGrade === "DEFAULT") throw Error("Cannot delete the DEFAULT borrowing rule");
+			return await e.borrowingRule.delete({ where: { id: n } }), await T(), { success: !0 };
+		} catch (e) {
 			return {
-				success: true,
-				data: await calculateClearance(studentName, studentClass)
-			};
-		} catch (err) {
-			return {
-				success: false,
-				error: sanitizeError(err)
+				success: !1,
+				error: j(e)
 			};
 		}
-	});
-	ipcMain.handle("generate-clearance-slip", async (_, data) => {
+	}), r.handle("get-clearance-status", async (e, t) => {
 		try {
-			const prisma = ensureDb();
-			const { studentName, studentClass } = data || {};
-			const clearance = await calculateClearance(studentName, studentClass);
-			let school = await prisma.school.findFirst();
-			if (!school) school = {
+			A();
+			let { studentName: e, studentClass: n } = t || {};
+			return {
+				success: !0,
+				data: await R(e, n)
+			};
+		} catch (e) {
+			return {
+				success: !1,
+				error: j(e)
+			};
+		}
+	}), r.handle("generate-clearance-slip", async (e, t) => {
+		try {
+			let e = A(), { studentName: n, studentClass: r } = t || {}, i = await R(n, r), a = await e.school.findFirst();
+			a ||= {
 				id: 1,
 				name: "Mentor High School - Kitende",
 				motto: "Education is the Key",
@@ -1307,311 +1060,306 @@ function registerCheckoutHandlers() {
 				updatedAt: /* @__PURE__ */ new Date(),
 				checkoutDuration: 14
 			};
-			const decisionText = clearance.status === "CLEARED" ? "CLEARED - Student has returned all materials and cleared all outstanding obligations." : "HOLD - Clearance withheld due to outstanding checkouts or unaddressed incidents.";
+			let o = i.status === "CLEARED" ? "CLEARED - Student has returned all materials and cleared all outstanding obligations." : "HOLD - Clearance withheld due to outstanding checkouts or unaddressed incidents.";
 			return {
-				success: true,
+				success: !0,
 				data: {
 					timestamp: (/* @__PURE__ */ new Date()).toISOString(),
 					school: {
-						name: school.name,
-						motto: school.motto,
-						logoPath: school.logoPath,
-						address: school.address,
-						contactPhone: school.contactPhone,
-						academicYear: school.academicYear
+						name: a.name,
+						motto: a.motto,
+						logoPath: a.logoPath,
+						address: a.address,
+						contactPhone: a.contactPhone,
+						academicYear: a.academicYear
 					},
 					student: {
-						studentName: clearance.studentName,
-						studentClass: clearance.studentClass
+						studentName: i.studentName,
+						studentClass: i.studentClass
 					},
-					status: clearance.status,
-					activeCheckouts: clearance.activeCheckouts,
-					incidents: clearance.incidents,
-					unresolvedIncidents: clearance.unresolvedIncidents,
-					totalReplacementCharges: clearance.totalReplacementCharges,
-					clearanceDecision: decisionText
+					status: i.status,
+					activeCheckouts: i.activeCheckouts,
+					incidents: i.incidents,
+					unresolvedIncidents: i.unresolvedIncidents,
+					totalReplacementCharges: i.totalReplacementCharges,
+					clearanceDecision: o
 				}
 			};
-		} catch (err) {
+		} catch (e) {
 			return {
-				success: false,
-				error: sanitizeError(err)
+				success: !1,
+				error: j(e)
 			};
 		}
 	});
 }
 //#endregion
 //#region electron/ipc/audits.ts
-function calculateStockAuditDiscrepancy(expectedCount, actualCount) {
-	const exp = typeof expectedCount === "number" && !isNaN(expectedCount) ? Math.max(0, expectedCount) : 0;
-	const act = typeof actualCount === "number" && !isNaN(actualCount) ? Math.max(0, actualCount) : 0;
-	const discrepancy = act - exp;
+function z(e, t) {
+	let n = typeof e == "number" && !isNaN(e) ? Math.max(0, e) : 0, r = typeof t == "number" && !isNaN(t) ? Math.max(0, t) : 0, i = r - n;
 	return {
-		expectedCount: exp,
-		actualCount: act,
-		discrepancy,
-		hasDiscrepancy: discrepancy !== 0,
-		isMissing: discrepancy < 0,
-		isMisplaced: discrepancy > 0,
-		discrepancyAmount: Math.abs(discrepancy)
+		expectedCount: n,
+		actualCount: r,
+		discrepancy: i,
+		hasDiscrepancy: i !== 0,
+		isMissing: i < 0,
+		isMisplaced: i > 0,
+		discrepancyAmount: Math.abs(i)
 	};
 }
-function registerAuditHandlers() {
-	ipcMain.handle("create-stock-audit", async (_, data) => {
+function B(e) {
+	let t = 0, n = 0, r = 0, i = 0, a = 0;
+	for (let o of e) t += o.expectedCount, n += o.actualCount, r += o.discrepancy, o.discrepancy < 0 && (i += Math.abs(o.discrepancy)), o.discrepancy > 0 && (a += o.discrepancy);
+	return {
+		totalSubjects: e.length,
+		totalExpected: t,
+		totalActual: n,
+		totalDiscrepancy: r,
+		missingItems: i,
+		misplacedItems: a
+	};
+}
+function he() {
+	r.handle("create-stock-audit", async (e, t) => {
 		try {
-			const prisma = ensureDb();
-			const auditedBy = typeof data?.auditedBy === "string" ? data.auditedBy : "LIBRARIAN";
-			const notes = typeof data?.notes === "string" ? data.notes : null;
-			const subjects = await prisma.subject.findMany();
-			const audit = await prisma.$transaction(async (tx) => {
-				const createdAudit = await tx.stockAudit.create({ data: {
-					auditedBy,
-					notes,
+			let e = A(), n = typeof t?.auditedBy == "string" && t.auditedBy.trim() ? t.auditedBy.trim() : "LIBRARIAN", r = typeof t?.notes == "string" && t.notes.trim() ? t.notes.trim() : null, i = await e.subject.findMany(), a = await e.$transaction(async (e) => {
+				let t = await e.stockAudit.create({ data: {
+					auditedBy: n,
+					notes: r,
 					status: "IN_PROGRESS"
 				} });
-				if (subjects.length > 0) {
-					const itemsData = subjects.map((s) => {
-						const exp = calculateAvailable(s);
+				if (i.length > 0) {
+					let n = i.map((e) => {
+						let n = P(e);
 						return {
-							auditId: createdAudit.id,
-							subjectId: s.id,
-							expectedCount: exp,
-							actualCount: exp,
+							auditId: t.id,
+							subjectId: e.id,
+							expectedCount: n,
+							actualCount: n,
 							discrepancy: 0
 						};
 					});
-					await tx.stockAuditItem.createMany({ data: itemsData });
+					await e.stockAuditItem.createMany({ data: n });
 				}
-				return tx.stockAudit.findUnique({
-					where: { id: createdAudit.id },
-					include: { items: { include: { subject: true } } }
+				let a = await e.stockAudit.findUnique({
+					where: { id: t.id },
+					include: { items: { include: { subject: !0 } } }
 				});
-			});
-			await encryptTempDatabase();
-			return {
-				success: true,
-				data: audit
-			};
-		} catch (err) {
-			return {
-				success: false,
-				error: sanitizeError(err)
-			};
-		}
-	});
-	ipcMain.handle("save-stock-audit-item", async (_, data) => {
-		try {
-			const prisma = ensureDb();
-			const { auditId, subjectId, actualCount, notes } = data || {};
-			if (!auditId || typeof auditId !== "number") throw new Error("Invalid audit ID");
-			if (!subjectId || typeof subjectId !== "number") throw new Error("Invalid subject ID");
-			if (typeof actualCount !== "number") throw new Error("Invalid actual count");
-			const res = await prisma.$transaction(async (tx) => {
-				const audit = await tx.stockAudit.findUnique({ where: { id: auditId } });
-				if (!audit) throw new Error("Stock audit not found");
-				if (audit.status === "COMPLETED") throw new Error("Cannot edit a completed audit");
-				const subject = await tx.subject.findUnique({ where: { id: subjectId } });
-				if (!subject) throw new Error("Referenced subject does not exist");
-				const expectedCount = calculateAvailable(subject);
-				const discrepancyInfo = calculateStockAuditDiscrepancy(expectedCount, actualCount);
-				return await tx.stockAuditItem.upsert({
-					where: { auditId_subjectId: {
-						auditId,
-						subjectId
-					} },
-					create: {
-						auditId,
-						subjectId,
-						expectedCount,
-						actualCount: discrepancyInfo.actualCount,
-						discrepancy: discrepancyInfo.discrepancy,
-						notes: notes || null
-					},
-					update: {
-						expectedCount,
-						actualCount: discrepancyInfo.actualCount,
-						discrepancy: discrepancyInfo.discrepancy,
-						notes: notes !== void 0 ? notes : void 0
-					},
-					include: { subject: true }
-				});
-			});
-			await encryptTempDatabase();
-			return {
-				success: true,
-				data: res
-			};
-		} catch (err) {
-			return {
-				success: false,
-				error: sanitizeError(err)
-			};
-		}
-	});
-	ipcMain.handle("complete-stock-audit", async (_, data) => {
-		try {
-			const prisma = ensureDb();
-			const { auditId, notes } = data || {};
-			if (!auditId || typeof auditId !== "number") throw new Error("Invalid audit ID");
-			const res = await prisma.$transaction(async (tx) => {
-				const audit = await tx.stockAudit.findUnique({
-					where: { id: auditId },
-					include: { items: { include: { subject: true } } }
-				});
-				if (!audit) throw new Error("Stock audit not found");
-				if (audit.status === "COMPLETED") throw new Error("Stock audit is already completed");
-				const updatedAudit = await tx.stockAudit.update({
-					where: { id: auditId },
-					data: {
-						status: "COMPLETED",
-						notes: notes !== void 0 ? notes : audit.notes,
-						updatedAt: /* @__PURE__ */ new Date()
-					},
-					include: { items: { include: { subject: true } } }
-				});
-				let totalExpected = 0;
-				let totalActual = 0;
-				let totalDiscrepancy = 0;
-				let missingItems = 0;
-				let misplacedItems = 0;
-				for (const item of updatedAudit.items) {
-					totalExpected += item.expectedCount;
-					totalActual += item.actualCount;
-					totalDiscrepancy += item.discrepancy;
-					if (item.discrepancy < 0) missingItems += Math.abs(item.discrepancy);
-					if (item.discrepancy > 0) misplacedItems += item.discrepancy;
-					if (item.discrepancy < 0 && item.subject) {
-						const lostQty = Math.abs(item.discrepancy);
-						await tx.subject.update({
-							where: { id: item.subjectId },
-							data: { lost: { increment: lostQty } }
-						});
-						await tx.auditLog.create({ data: {
-							subjectId: item.subjectId,
-							field: "lost",
-							oldValue: item.subject.lost.toString(),
-							newValue: (item.subject.lost + lostQty).toString(),
-							changedBy: "AUDIT_AUTO"
-						} });
-					}
-				}
-				return {
-					...updatedAudit,
-					summary: {
-						totalSubjects: updatedAudit.items.length,
-						totalExpected,
-						totalActual,
-						totalDiscrepancy,
-						missingItems,
-						misplacedItems
-					}
+				return a && {
+					...a,
+					summary: B(a.items)
 				};
 			});
-			await encryptTempDatabase();
-			return {
-				success: true,
-				data: res
+			return await T(), {
+				success: !0,
+				data: a
 			};
-		} catch (err) {
+		} catch (e) {
 			return {
-				success: false,
-				error: sanitizeError(err)
+				success: !1,
+				error: j(e)
 			};
 		}
-	});
-	ipcMain.handle("get-stock-audits", async (_, data) => {
+	}), r.handle("save-stock-audit-item", async (e, t) => {
 		try {
-			const prisma = ensureDb();
-			const id = typeof data === "number" ? data : data?.id;
-			if (id) return {
-				success: true,
-				data: await prisma.stockAudit.findUnique({
-					where: { id },
-					include: { items: { include: { subject: true } } }
-				})
+			let e = A(), { auditId: n, subjectId: r, actualCount: i, notes: a } = t || {};
+			if (!n || typeof n != "number") throw Error("Invalid audit ID");
+			if (!r || typeof r != "number") throw Error("Invalid subject ID");
+			if (typeof i != "number") throw Error("Invalid actual count");
+			let o = await e.$transaction(async (e) => {
+				let t = await e.stockAudit.findUnique({ where: { id: n } });
+				if (!t) throw Error("Stock audit not found");
+				if (t.status === "COMPLETED") throw Error("Cannot edit a completed audit");
+				let o = await e.subject.findUnique({ where: { id: r } });
+				if (!o) throw Error("Referenced subject does not exist");
+				let s = P(o), c = z(s, i);
+				return await e.stockAuditItem.upsert({
+					where: { auditId_subjectId: {
+						auditId: n,
+						subjectId: r
+					} },
+					create: {
+						auditId: n,
+						subjectId: r,
+						expectedCount: s,
+						actualCount: c.actualCount,
+						discrepancy: c.discrepancy,
+						notes: a || null
+					},
+					update: {
+						expectedCount: s,
+						actualCount: c.actualCount,
+						discrepancy: c.discrepancy,
+						notes: a === void 0 ? void 0 : a
+					},
+					include: { subject: !0 }
+				});
+			});
+			return await T(), {
+				success: !0,
+				data: o
 			};
+		} catch (e) {
 			return {
-				success: true,
-				data: await prisma.stockAudit.findMany({
+				success: !1,
+				error: j(e)
+			};
+		}
+	}), r.handle("complete-stock-audit", async (e, t) => {
+		try {
+			let e = A(), { auditId: n, notes: r } = t || {};
+			if (!n || typeof n != "number") throw Error("Invalid audit ID");
+			let i = await e.$transaction(async (e) => {
+				let t = await e.stockAudit.findUnique({
+					where: { id: n },
+					include: { items: { include: { subject: !0 } } }
+				});
+				if (!t) throw Error("Stock audit not found");
+				if (t.status === "COMPLETED") throw Error("Stock audit is already completed");
+				let i = await e.stockAudit.update({
+					where: { id: n },
+					data: {
+						status: "COMPLETED",
+						notes: r === void 0 ? t.notes : r,
+						updatedAt: /* @__PURE__ */ new Date()
+					},
+					include: { items: { include: { subject: !0 } } }
+				});
+				for (let t of i.items) if (t.discrepancy < 0 && t.subject) {
+					let n = Math.abs(t.discrepancy);
+					await e.subject.update({
+						where: { id: t.subjectId },
+						data: { lost: { increment: n } }
+					}), await e.auditLog.create({ data: {
+						subjectId: t.subjectId,
+						field: "lost",
+						oldValue: t.subject.lost.toString(),
+						newValue: (t.subject.lost + n).toString(),
+						changedBy: "AUDIT_AUTO"
+					} });
+				} else if (t.discrepancy > 0 && t.subject) {
+					let r = t.discrepancy;
+					await e.subject.update({
+						where: { id: t.subjectId },
+						data: { recovered: { increment: r } }
+					}), await e.incident.create({ data: {
+						type: "RECOVERED",
+						date: /* @__PURE__ */ new Date(),
+						subjectId: t.subjectId,
+						bookTitle: `${t.subject.name} (x${r})`,
+						condition: "Good",
+						comment: `Auto-logged surplus from Stock Audit #${n}`,
+						reportedBy: "Stock Audit System",
+						actionTaken: "STOCK_ADJUSTED"
+					} }), await e.auditLog.create({ data: {
+						subjectId: t.subjectId,
+						field: "recovered",
+						oldValue: t.subject.recovered.toString(),
+						newValue: (t.subject.recovered + r).toString(),
+						changedBy: "AUDIT_AUTO"
+					} });
+				}
+				return {
+					...i,
+					summary: B(i.items)
+				};
+			});
+			return await T(), {
+				success: !0,
+				data: i
+			};
+		} catch (e) {
+			return {
+				success: !1,
+				error: j(e)
+			};
+		}
+	}), r.handle("get-stock-audits", async (e, t) => {
+		try {
+			let e = A(), n = typeof t == "number" ? t : t?.id;
+			if (n) {
+				let t = await e.stockAudit.findUnique({
+					where: { id: n },
+					include: { items: { include: { subject: !0 } } }
+				});
+				return {
+					success: !0,
+					data: t ? {
+						...t,
+						summary: B(t.items)
+					} : null
+				};
+			}
+			return {
+				success: !0,
+				data: (await e.stockAudit.findMany({
 					orderBy: { auditDate: "desc" },
-					include: { items: true }
-				})
+					include: { items: { include: { subject: !0 } } }
+				})).map((e) => ({
+					...e,
+					summary: B(e.items)
+				}))
 			};
-		} catch (err) {
+		} catch (e) {
 			return {
-				success: false,
-				error: sanitizeError(err)
+				success: !1,
+				error: j(e)
 			};
 		}
 	});
 }
 //#endregion
 //#region electron/ipc/analytics.ts
-function calculateConditionDecay(averageCondition, degradationRate, futureCheckouts) {
-	const currentCondition = Math.max(1, Math.min(3, averageCondition));
-	const rate = degradationRate > 0 ? degradationRate : .02;
+function V(e, t, n) {
+	let r = Math.max(1, Math.min(3, e)), i = t > 0 ? t : .02;
 	return {
-		currentCondition,
-		degradationRate: rate,
-		futureCheckouts,
-		projectedCondition: Math.max(1, Math.round((currentCondition - rate * futureCheckouts) * 100) / 100),
-		remainingCheckouts: Math.max(0, Math.floor((currentCondition - 1) / rate))
+		currentCondition: r,
+		degradationRate: i,
+		futureCheckouts: n,
+		projectedCondition: Math.max(1, Math.round((r - i * n) * 100) / 100),
+		remainingCheckouts: Math.max(0, Math.floor((r - 1) / i))
 	};
 }
-function calculateReplacementCost(subjects, unitCost = 25) {
-	let totalCost = 0;
-	let totalDamaged = 0;
-	let totalNearEndLife = 0;
-	const items = subjects.map((sub) => {
-		const totalBooks = Math.max(0, (sub.openingCount || 0) + (sub.recovered || 0));
-		const damaged = Math.max(0, sub.damaged || 0);
-		const lost = Math.max(0, sub.lost || 0);
-		const activeAvailable = Math.max(0, totalBooks - damaged - lost);
-		const cond = typeof sub.averageCondition === "number" ? sub.averageCondition : 3;
-		let nearEndLife = 0;
-		if (cond <= 1.5) nearEndLife = activeAvailable;
-		else if (cond < 2.5) {
-			const decayRatio = (2.5 - cond) / 1.5;
-			nearEndLife = Math.floor(activeAvailable * decayRatio);
+function ge(e, t = 25) {
+	let n = 0, r = 0, i = 0, a = e.map((e) => {
+		let a = Math.max(0, (e.openingCount || 0) + (e.recovered || 0)), o = Math.max(0, e.damaged || 0), s = Math.max(0, e.lost || 0), c = Math.max(0, a - o - s), l = typeof e.averageCondition == "number" ? e.averageCondition : 3, u = 0;
+		if (l <= 1.5) u = c;
+		else if (l < 2.5) {
+			let e = (2.5 - l) / 1.5;
+			u = Math.floor(c * e);
 		}
-		const replaceCount = damaged + nearEndLife;
-		const estimatedCost = Math.round(replaceCount * unitCost * 100) / 100;
-		totalCost += estimatedCost;
-		totalDamaged += damaged;
-		totalNearEndLife += nearEndLife;
-		return {
-			subjectId: sub.id,
-			name: sub.name || "Unknown",
-			category: sub.category || "General",
-			totalBooks,
-			damagedCount: damaged,
-			nearEndLifeCount: nearEndLife,
-			replacementCount: replaceCount,
-			estimatedCost,
-			averageCondition: cond
+		let d = o + u, f = Math.round(d * t * 100) / 100;
+		return n += f, r += o, i += u, {
+			subjectId: e.id,
+			name: e.name || "Unknown",
+			category: e.category || "General",
+			totalBooks: a,
+			damagedCount: o,
+			nearEndLifeCount: u,
+			replacementCount: d,
+			estimatedCost: f,
+			averageCondition: l
 		};
-	});
-	const categoryMap = /* @__PURE__ */ new Map();
-	for (const item of items) {
-		const cat = item.category || "General";
-		categoryMap.set(cat, (categoryMap.get(cat) || 0) + item.estimatedCost);
+	}), o = /* @__PURE__ */ new Map();
+	for (let e of a) {
+		let t = e.category || "General";
+		o.set(t, (o.get(t) || 0) + e.estimatedCost);
 	}
-	const categoryCosts = Array.from(categoryMap.entries()).map(([category, cost]) => ({
-		category,
-		cost: Math.round(cost * 100) / 100
+	let s = Array.from(o.entries()).map(([e, t]) => ({
+		category: e,
+		cost: Math.round(t * 100) / 100
 	}));
 	return {
-		subjects: items,
-		totalReplacementCost: Math.round(totalCost * 100) / 100,
-		totalDamaged,
-		totalNearEndLife,
-		categoryCosts,
-		unitCost
+		subjects: a,
+		totalReplacementCost: Math.round(n * 100) / 100,
+		totalDamaged: r,
+		totalNearEndLife: i,
+		categoryCosts: s,
+		unitCost: t
 	};
 }
-function aggregateCirculationTrends(checkouts) {
-	const monthsMap = /* @__PURE__ */ new Map();
-	const dayNames = [
+function _e(e) {
+	let t = /* @__PURE__ */ new Map(), n = [
 		"Sunday",
 		"Monday",
 		"Tuesday",
@@ -1619,740 +1367,638 @@ function aggregateCirculationTrends(checkouts) {
 		"Thursday",
 		"Friday",
 		"Saturday"
-	];
-	const dayMap = /* @__PURE__ */ new Map();
-	dayNames.forEach((d) => dayMap.set(d, 0));
-	const categoryMap = /* @__PURE__ */ new Map();
-	const studentMap = /* @__PURE__ */ new Map();
-	for (const c of checkouts) {
-		const cDate = new Date(c.checkoutDate);
-		if (isNaN(cDate.getTime())) continue;
-		const monthKey = `${cDate.getFullYear()}-${String(cDate.getMonth() + 1).padStart(2, "0")}`;
-		const monthLabel = cDate.toLocaleString("default", {
+	], r = /* @__PURE__ */ new Map();
+	n.forEach((e) => r.set(e, 0));
+	let i = /* @__PURE__ */ new Map(), a = /* @__PURE__ */ new Map();
+	for (let o of e) {
+		let e = new Date(o.checkoutDate);
+		if (isNaN(e.getTime())) continue;
+		let s = `${e.getFullYear()}-${String(e.getMonth() + 1).padStart(2, "0")}`, c = e.toLocaleString("default", {
 			month: "short",
 			year: "numeric"
 		});
-		if (!monthsMap.has(monthKey)) monthsMap.set(monthKey, {
-			month: monthLabel,
+		if (t.has(s) || t.set(s, {
+			month: c,
 			checkouts: 0,
 			returns: 0,
-			timestamp: new Date(cDate.getFullYear(), cDate.getMonth(), 1).getTime()
-		});
-		monthsMap.get(monthKey).checkouts++;
-		if (c.returnDate) {
-			const rDate = new Date(c.returnDate);
-			if (!isNaN(rDate.getTime())) {
-				const rMonthKey = `${rDate.getFullYear()}-${String(rDate.getMonth() + 1).padStart(2, "0")}`;
-				const rMonthLabel = rDate.toLocaleString("default", {
+			timestamp: new Date(e.getFullYear(), e.getMonth(), 1).getTime()
+		}), t.get(s).checkouts++, o.returnDate) {
+			let e = new Date(o.returnDate);
+			if (!isNaN(e.getTime())) {
+				let n = `${e.getFullYear()}-${String(e.getMonth() + 1).padStart(2, "0")}`, r = e.toLocaleString("default", {
 					month: "short",
 					year: "numeric"
 				});
-				if (!monthsMap.has(rMonthKey)) monthsMap.set(rMonthKey, {
-					month: rMonthLabel,
+				t.has(n) || t.set(n, {
+					month: r,
 					checkouts: 0,
 					returns: 0,
-					timestamp: new Date(rDate.getFullYear(), rDate.getMonth(), 1).getTime()
-				});
-				monthsMap.get(rMonthKey).returns++;
+					timestamp: new Date(e.getFullYear(), e.getMonth(), 1).getTime()
+				}), t.get(n).returns++;
 			}
 		}
-		const dayName = dayNames[cDate.getDay()];
-		dayMap.set(dayName, (dayMap.get(dayName) || 0) + 1);
-		const cat = c.subject?.category || "General";
-		categoryMap.set(cat, (categoryMap.get(cat) || 0) + 1);
-		const studentName = (c.studentName || "").trim();
-		if (studentName) {
-			const key = `${studentName.toLowerCase()}||${(c.studentClass || "").trim().toLowerCase()}`;
-			if (!studentMap.has(key)) studentMap.set(key, {
-				studentName,
-				studentClass: c.studentClass ? c.studentClass.trim() : null,
+		let l = n[e.getDay()];
+		r.set(l, (r.get(l) || 0) + 1);
+		let u = o.subject?.category || "General";
+		i.set(u, (i.get(u) || 0) + 1);
+		let d = (o.studentName || "").trim();
+		if (d) {
+			let e = `${d.toLowerCase()}||${(o.studentClass || "").trim().toLowerCase()}`;
+			a.has(e) || a.set(e, {
+				studentName: d,
+				studentClass: o.studentClass ? o.studentClass.trim() : null,
 				totalCheckouts: 0
-			});
-			studentMap.get(key).totalCheckouts++;
+			}), a.get(e).totalCheckouts++;
 		}
 	}
 	return {
-		monthlyTrends: Array.from(monthsMap.values()).sort((a, b) => a.timestamp - b.timestamp).map(({ month, checkouts, returns }) => ({
-			month,
-			checkouts,
-			returns
+		monthlyTrends: Array.from(t.values()).sort((e, t) => e.timestamp - t.timestamp).map(({ month: e, checkouts: t, returns: n }) => ({
+			month: e,
+			checkouts: t,
+			returns: n
 		})),
-		peakDays: Array.from(dayMap.entries()).map(([day, count]) => ({
-			day,
-			count
+		peakDays: Array.from(r.entries()).map(([e, t]) => ({
+			day: e,
+			count: t
 		})),
-		popularCategories: Array.from(categoryMap.entries()).map(([category, count]) => ({
-			category,
-			count
-		})).sort((a, b) => b.count - a.count),
-		topReaders: Array.from(studentMap.values()).sort((a, b) => b.totalCheckouts - a.totalCheckouts).slice(0, 10)
+		popularCategories: Array.from(i.entries()).map(([e, t]) => ({
+			category: e,
+			count: t
+		})).sort((e, t) => t.count - e.count),
+		topReaders: Array.from(a.values()).sort((e, t) => t.totalCheckouts - e.totalCheckouts).slice(0, 10)
 	};
 }
-function registerAnalyticsHandlers() {
-	ipcMain.handle("get-depreciation-analytics", async () => {
+function ve() {
+	r.handle("get-depreciation-analytics", async () => {
 		try {
-			const subjects = await ensureDb().subject.findMany({ include: { checkouts: true } });
+			let e = await A().subject.findMany({ include: { checkouts: !0 } });
 			return {
-				success: true,
+				success: !0,
 				data: {
-					decayProjections: subjects.map((s) => {
-						const projections = [
+					decayProjections: e.map((e) => {
+						let t = [
 							0,
 							10,
 							25,
 							50,
 							100
-						].map((checkouts) => calculateConditionDecay(s.averageCondition, s.degradationRate, checkouts));
-						const currentDecay = calculateConditionDecay(s.averageCondition, s.degradationRate, 0);
+						].map((t) => V(e.averageCondition, e.degradationRate, t)), n = V(e.averageCondition, e.degradationRate, 0);
 						return {
-							subjectId: s.id,
-							subjectName: s.name,
-							category: s.category || "General",
-							averageCondition: s.averageCondition,
-							degradationRate: currentDecay.degradationRate,
-							remainingCheckouts: currentDecay.remainingCheckouts,
-							projections
+							subjectId: e.id,
+							subjectName: e.name,
+							category: e.category || "General",
+							averageCondition: e.averageCondition,
+							degradationRate: n.degradationRate,
+							remainingCheckouts: n.remainingCheckouts,
+							projections: t
 						};
 					}),
-					replacementCostAnalysis: calculateReplacementCost(subjects, 25)
+					replacementCostAnalysis: ge(e, 25)
 				}
 			};
-		} catch (err) {
+		} catch (e) {
 			return {
-				success: false,
-				error: sanitizeError(err)
+				success: !1,
+				error: j(e)
 			};
 		}
-	});
-	ipcMain.handle("get-circulation-insights", async () => {
+	}), r.handle("get-circulation-insights", async () => {
 		try {
 			return {
-				success: true,
-				data: aggregateCirculationTrends(await ensureDb().checkout.findMany({
-					include: { subject: true },
+				success: !0,
+				data: _e(await A().checkout.findMany({
+					include: { subject: !0 },
 					orderBy: { checkoutDate: "asc" }
 				}))
 			};
-		} catch (err) {
+		} catch (e) {
 			return {
-				success: false,
-				error: sanitizeError(err)
+				success: !1,
+				error: j(e)
 			};
 		}
 	});
 }
 //#endregion
 //#region electron/services/backup.ts
-function formatBackupTimestamp(date = /* @__PURE__ */ new Date()) {
-	const d = !(date instanceof Date) || isNaN(date.getTime()) ? /* @__PURE__ */ new Date() : date;
-	return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}_${String(d.getHours()).padStart(2, "0")}${String(d.getMinutes()).padStart(2, "0")}${String(d.getSeconds()).padStart(2, "0")}`;
+function H(e = /* @__PURE__ */ new Date()) {
+	let t = !(e instanceof Date) || isNaN(e.getTime()) ? /* @__PURE__ */ new Date() : e;
+	return `${t.getFullYear()}${String(t.getMonth() + 1).padStart(2, "0")}${String(t.getDate()).padStart(2, "0")}_${String(t.getHours()).padStart(2, "0")}${String(t.getMinutes()).padStart(2, "0")}${String(t.getSeconds()).padStart(2, "0")}`;
 }
-function isBackupDue(lastBackupAt, intervalHours, now = /* @__PURE__ */ new Date()) {
-	if (!lastBackupAt) return true;
-	const lastDate = lastBackupAt instanceof Date ? lastBackupAt : new Date(lastBackupAt);
-	if (!(lastDate instanceof Date) || isNaN(lastDate.getTime())) return true;
-	if (lastDate.getTime() > now.getTime()) return true;
-	return (now.getTime() - lastDate.getTime()) / (1e3 * 60 * 60) >= intervalHours;
+function ye(e, t, n = /* @__PURE__ */ new Date()) {
+	if (!e) return !0;
+	let r = e instanceof Date ? e : new Date(e);
+	return !(r instanceof Date) || isNaN(r.getTime()) || r.getTime() > n.getTime() ? !0 : (n.getTime() - r.getTime()) / (1e3 * 60 * 60) >= t;
 }
-/**
-* Sanitizes and validates the target backup directory path to prevent path traversal attacks.
-*/
-function sanitizeBackupPath(targetDir) {
-	const resolved = path.resolve(targetDir);
-	const root = path.parse(resolved).root;
-	if (resolved === root || resolved === path.join(root, "Windows") || resolved === path.join(root, "System32")) throw new Error("Invalid or restricted backup directory path.");
-	return resolved;
+function U(e) {
+	let t = i.resolve(e), n = i.parse(t).root;
+	if (t === n || t === i.join(n, "Windows") || t === i.join(n, "System32")) throw Error("Invalid or restricted backup directory path.");
+	return t;
 }
-function performVaultBackup(targetDir, customSourceFile) {
+function W(e, n) {
 	try {
-		if (!targetDir || !targetDir.trim()) return {
-			success: false,
+		if (!e || !e.trim()) return {
+			success: !1,
 			error: "Target directory is required"
 		};
-		const safeTargetDir = sanitizeBackupPath(targetDir);
-		const dataDir = app.getPath("userData");
-		const sourceEncFile = customSourceFile || path.join(dataDir, "quantlib.enc");
-		if (!fs.existsSync(sourceEncFile)) return {
-			success: false,
+		let r = U(e), a = t.getPath("userData"), o = n || i.join(a, "quantlib.enc");
+		if (!c.existsSync(o)) return {
+			success: !1,
 			error: "Source vault file (quantlib.enc) does not exist."
 		};
-		if (!fs.existsSync(safeTargetDir)) fs.mkdirSync(safeTargetDir, { recursive: true });
-		const filename = `quantlib_backup_${formatBackupTimestamp()}.enc`;
-		const backupPath = path.join(safeTargetDir, filename);
-		fs.copyFileSync(sourceEncFile, backupPath);
-		return {
-			success: true,
-			backupPath,
-			filename
+		c.existsSync(r) || c.mkdirSync(r, { recursive: !0 });
+		let s = `quantlib_backup_${H()}.enc`, l = i.join(r, s);
+		return c.copyFileSync(o, l), {
+			success: !0,
+			backupPath: l,
+			filename: s
 		};
-	} catch (err) {
+	} catch (e) {
 		return {
-			success: false,
-			error: err instanceof Error ? err.message : String(err)
+			success: !1,
+			error: e instanceof Error ? e.message : String(e)
 		};
 	}
 }
-async function listVaultBackups(targetDir) {
+async function be(e) {
 	try {
-		const safeTargetDir = sanitizeBackupPath(targetDir || path.join(app.getPath("userData"), "backups"));
-		if (!fs.existsSync(safeTargetDir)) return [];
-		const backupFiles = (await fs.promises.readdir(safeTargetDir)).filter((f) => f.startsWith("quantlib_backup_") && f.endsWith(".enc"));
-		return (await Promise.all(backupFiles.map(async (filename) => {
-			const fullPath = path.join(safeTargetDir, filename);
-			const stats = await fs.promises.stat(fullPath);
+		let n = U(e || i.join(t.getPath("userData"), "backups"));
+		if (!c.existsSync(n)) return [];
+		let r = (await c.promises.readdir(n)).filter((e) => e.startsWith("quantlib_backup_") && e.endsWith(".enc"));
+		return (await Promise.all(r.map(async (e) => {
+			let t = i.join(n, e), r = await c.promises.stat(t);
 			return {
-				filename,
-				fullPath,
-				sizeBytes: stats.size,
-				createdAt: stats.birthtime ? stats.birthtime.toISOString() : stats.mtime.toISOString()
+				filename: e,
+				fullPath: t,
+				sizeBytes: r.size,
+				createdAt: r.birthtime ? r.birthtime.toISOString() : r.mtime.toISOString()
 			};
-		}))).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+		}))).sort((e, t) => t.createdAt.localeCompare(e.createdAt));
 	} catch {
 		return [];
 	}
 }
-/**
-* Synchronous version of listVaultBackups maintained for compatibility with tests expecting synchronous return.
-*/
-function listVaultBackupsSync(targetDir) {
+function xe(e) {
 	try {
-		const safeTargetDir = sanitizeBackupPath(targetDir || path.join(app.getPath("userData"), "backups"));
-		if (!fs.existsSync(safeTargetDir)) return [];
-		return fs.readdirSync(safeTargetDir).filter((f) => f.startsWith("quantlib_backup_") && f.endsWith(".enc")).map((filename) => {
-			const fullPath = path.join(safeTargetDir, filename);
-			const stats = fs.statSync(fullPath);
+		let n = U(e || i.join(t.getPath("userData"), "backups"));
+		return c.existsSync(n) ? c.readdirSync(n).filter((e) => e.startsWith("quantlib_backup_") && e.endsWith(".enc")).map((e) => {
+			let t = i.join(n, e), r = c.statSync(t);
 			return {
-				filename,
-				fullPath,
-				sizeBytes: stats.size,
-				createdAt: stats.birthtime ? stats.birthtime.toISOString() : stats.mtime.toISOString()
+				filename: e,
+				fullPath: t,
+				sizeBytes: r.size,
+				createdAt: r.birthtime ? r.birthtime.toISOString() : r.mtime.toISOString()
 			};
-		}).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+		}).sort((e, t) => t.createdAt.localeCompare(e.createdAt)) : [];
 	} catch {
 		return [];
 	}
 }
-var autoBackupIntervalTimer = null;
-function startAutoBackupScheduler() {
-	stopAutoBackupScheduler();
-	autoBackupIntervalTimer = setInterval(async () => {
+var G = null;
+function Se() {
+	K(), G = setInterval(async () => {
 		try {
-			const prisma = getPrisma();
-			if (!prisma) return;
-			const config = (await prisma.$queryRawUnsafe("SELECT autoBackupEnabled, autoBackupIntervalHours, autoBackupPath, lastAutoBackupAt FROM AppConfig WHERE id = 1"))[0];
-			if (!config || !config.autoBackupEnabled) return;
-			if (isBackupDue(config.lastAutoBackupAt, config.autoBackupIntervalHours)) {
-				if (performVaultBackup(config.autoBackupPath || path.join(app.getPath("userData"), "backups")).success) {
-					const now = (/* @__PURE__ */ new Date()).toISOString();
-					await prisma.$executeRawUnsafe("UPDATE AppConfig SET lastAutoBackupAt = ? WHERE id = 1", now);
-				}
+			let e = se();
+			if (!e) return;
+			let n = (await e.$queryRawUnsafe("SELECT autoBackupEnabled, autoBackupIntervalHours, autoBackupPath, lastAutoBackupAt FROM AppConfig WHERE id = 1"))[0];
+			if (!n || !n.autoBackupEnabled) return;
+			if (ye(n.lastAutoBackupAt, n.autoBackupIntervalHours) && W(n.autoBackupPath || i.join(t.getPath("userData"), "backups")).success) {
+				let t = (/* @__PURE__ */ new Date()).toISOString();
+				await e.$executeRawUnsafe("UPDATE AppConfig SET lastAutoBackupAt = ? WHERE id = 1", t);
 			}
-		} catch (err) {
-			console.error("Auto backup scheduler error:", err);
+		} catch (e) {
+			console.error("Auto backup scheduler error:", e);
 		}
 	}, 3600 * 1e3);
 }
-function stopAutoBackupScheduler() {
-	if (autoBackupIntervalTimer) {
-		clearInterval(autoBackupIntervalTimer);
-		autoBackupIntervalTimer = null;
-	}
+function K() {
+	G &&= (clearInterval(G), null);
 }
 //#endregion
 //#region electron/services/lan-sync.ts
-function getLocalIpAddress() {
-	const interfaces = os.networkInterfaces();
-	for (const name of Object.keys(interfaces)) for (const iface of interfaces[name] || []) if (iface.family === "IPv4" && !iface.internal) return iface.address;
+function Ce() {
+	let e = u.networkInterfaces();
+	for (let t of Object.keys(e)) for (let n of e[t] || []) if (n.family === "IPv4" && !n.internal) return n.address;
 	return "127.0.0.1";
 }
-async function packageLanSyncPayload(client) {
-	const [subjects, checkouts, incidents, borrowingRules] = await Promise.all([
-		client.subject.findMany(),
-		client.checkout.findMany({ include: { subject: { select: { name: true } } } }),
-		client.incident.findMany({ include: { subject: { select: { name: true } } } }),
-		client.borrowingRule.findMany()
+async function q(e) {
+	let [t, n, r, i] = await Promise.all([
+		e.subject.findMany(),
+		e.checkout.findMany({ include: { subject: { select: { name: !0 } } } }),
+		e.incident.findMany({ include: { subject: { select: { name: !0 } } } }),
+		e.borrowingRule.findMany()
 	]);
 	return {
 		version: 1,
 		exportedAt: (/* @__PURE__ */ new Date()).toISOString(),
-		subjects,
-		checkouts: checkouts.map((c) => ({
-			...c,
-			subjectName: c.subject?.name
+		subjects: t,
+		checkouts: n.map((e) => ({
+			...e,
+			subjectName: e.subject?.name
 		})),
-		incidents: incidents.map((i) => ({
-			...i,
-			subjectName: i.subject?.name
+		incidents: r.map((e) => ({
+			...e,
+			subjectName: e.subject?.name
 		})),
-		borrowingRules
+		borrowingRules: i
 	};
 }
-function safeDate(val, fallback = /* @__PURE__ */ new Date()) {
-	if (!val) return fallback;
-	const d = val instanceof Date ? val : new Date(val);
-	return isNaN(d.getTime()) ? fallback : d;
+function J(e, t = /* @__PURE__ */ new Date()) {
+	if (!e) return t;
+	let n = e instanceof Date ? e : new Date(e);
+	return isNaN(n.getTime()) ? t : n;
 }
-async function mergeLanSyncPayload(client, payload) {
-	const p = payload && typeof payload === "object" ? payload : null;
-	if (!p) return { mergedCounts: {
+async function Y(e, t) {
+	let n = t && typeof t == "object" ? t : null;
+	if (!n) return { mergedCounts: {
 		subjects: 0,
 		checkouts: 0,
 		incidents: 0,
 		rules: 0
 	} };
-	const hasRules = Array.isArray(p.borrowingRules) && p.borrowingRules.length > 0;
-	const hasSubjects = Array.isArray(p.subjects) && p.subjects.length > 0;
-	const hasCheckouts = Array.isArray(p.checkouts) && p.checkouts.length > 0;
-	const hasIncidents = Array.isArray(p.incidents) && p.incidents.length > 0;
-	if (!hasRules && !hasSubjects && !hasCheckouts && !hasIncidents) return { mergedCounts: {
+	let r = Array.isArray(n.borrowingRules) && n.borrowingRules.length > 0, i = Array.isArray(n.subjects) && n.subjects.length > 0, a = Array.isArray(n.checkouts) && n.checkouts.length > 0, o = Array.isArray(n.incidents) && n.incidents.length > 0;
+	if (!r && !i && !a && !o) return { mergedCounts: {
 		subjects: 0,
 		checkouts: 0,
 		incidents: 0,
 		rules: 0
 	} };
-	let subjectsMerged = 0;
-	let checkoutsMerged = 0;
-	let incidentsMerged = 0;
-	let rulesMerged = 0;
-	await client.$transaction(async (tx) => {
-		if (Array.isArray(p.borrowingRules)) {
-			for (const rule of p.borrowingRules) if (rule.roleOrGrade) {
-				await tx.borrowingRule.upsert({
-					where: { roleOrGrade: rule.roleOrGrade },
-					update: {
-						maxBooksAllowed: rule.maxBooksAllowed,
-						borrowDurationDays: rule.borrowDurationDays,
-						finePerDay: rule.finePerDay
-					},
-					create: {
-						roleOrGrade: rule.roleOrGrade,
-						maxBooksAllowed: rule.maxBooksAllowed,
-						borrowDurationDays: rule.borrowDurationDays,
-						finePerDay: rule.finePerDay
+	let s = 0, c = 0, l = 0, u = 0;
+	await e.$transaction(async (e) => {
+		if (Array.isArray(n.borrowingRules)) for (let t of n.borrowingRules) t.roleOrGrade && (await e.borrowingRule.upsert({
+			where: { roleOrGrade: t.roleOrGrade },
+			update: {
+				maxBooksAllowed: t.maxBooksAllowed,
+				borrowDurationDays: t.borrowDurationDays,
+				finePerDay: t.finePerDay
+			},
+			create: {
+				roleOrGrade: t.roleOrGrade,
+				maxBooksAllowed: t.maxBooksAllowed,
+				borrowDurationDays: t.borrowDurationDays,
+				finePerDay: t.finePerDay
+			}
+		}), u++);
+		let t = /* @__PURE__ */ new Map();
+		if (Array.isArray(n.subjects)) {
+			for (let r of n.subjects) if (r.name) {
+				let n = await e.subject.findUnique({ where: { name: r.name } }), i;
+				n ? (i = n.id, i = (await e.subject.update({
+					where: { id: n.id },
+					data: {
+						category: r.category ?? n.category,
+						openingCount: Math.max(n.openingCount, r.openingCount || 0),
+						recovered: Math.max(n.recovered, r.recovered || 0),
+						issued: Math.max(n.issued, r.issued || 0),
+						damaged: Math.max(n.damaged, r.damaged || 0),
+						lost: Math.max(n.lost, r.lost || 0),
+						notes: r.notes ?? n.notes
 					}
-				});
-				rulesMerged++;
+				})).id) : i = (await e.subject.create({ data: {
+					name: r.name,
+					category: r.category || "General",
+					openingCount: r.openingCount || 0,
+					recovered: r.recovered || 0,
+					issued: r.issued || 0,
+					damaged: r.damaged || 0,
+					lost: r.lost || 0,
+					notes: r.notes || null,
+					averageCondition: r.averageCondition ?? 3,
+					degradationRate: r.degradationRate ?? 0
+				} })).id, typeof r.id == "number" && t.set(r.id, i), s++;
 			}
 		}
-		const peerToLocalSubjectIdMap = /* @__PURE__ */ new Map();
-		if (Array.isArray(p.subjects)) {
-			for (const sub of p.subjects) if (sub.name) {
-				const existing = await tx.subject.findUnique({ where: { name: sub.name } });
-				let localSubjectId;
-				if (existing) {
-					localSubjectId = existing.id;
-					localSubjectId = (await tx.subject.update({
-						where: { id: existing.id },
-						data: {
-							category: sub.category ?? existing.category,
-							openingCount: Math.max(existing.openingCount, sub.openingCount || 0),
-							recovered: Math.max(existing.recovered, sub.recovered || 0),
-							issued: Math.max(existing.issued, sub.issued || 0),
-							damaged: Math.max(existing.damaged, sub.damaged || 0),
-							lost: Math.max(existing.lost, sub.lost || 0),
-							notes: sub.notes ?? existing.notes
-						}
-					})).id;
-				} else localSubjectId = (await tx.subject.create({ data: {
-					name: sub.name,
-					category: sub.category || "General",
-					openingCount: sub.openingCount || 0,
-					recovered: sub.recovered || 0,
-					issued: sub.issued || 0,
-					damaged: sub.damaged || 0,
-					lost: sub.lost || 0,
-					notes: sub.notes || null,
-					averageCondition: sub.averageCondition ?? 3,
-					degradationRate: sub.degradationRate ?? 0
-				} })).id;
-				if (typeof sub.id === "number") peerToLocalSubjectIdMap.set(sub.id, localSubjectId);
-				subjectsMerged++;
-			}
-		}
-		if (Array.isArray(p.checkouts)) for (const c of p.checkouts) {
-			let mappedSubjectId = null;
-			if (c.subjectId && peerToLocalSubjectIdMap.has(c.subjectId)) mappedSubjectId = peerToLocalSubjectIdMap.get(c.subjectId);
-			else if (c.subjectName) {
-				const s = await tx.subject.findUnique({ where: { name: c.subjectName } });
-				if (s) mappedSubjectId = s.id;
-			} else if (c.subjectId) mappedSubjectId = c.subjectId;
-			if (c.studentName && mappedSubjectId !== null) {
-				const parsedCheckoutDate = safeDate(c.checkoutDate);
-				const parsedDueDate = safeDate(c.dueDate);
-				const parsedReturnDate = c.returnDate ? safeDate(c.returnDate) : null;
-				const existing = await tx.checkout.findFirst({ where: {
-					studentName: c.studentName,
-					subjectId: mappedSubjectId,
-					checkoutDate: parsedCheckoutDate
+		if (Array.isArray(n.checkouts)) for (let r of n.checkouts) {
+			let n = null;
+			if (r.subjectId && t.has(r.subjectId)) n = t.get(r.subjectId);
+			else if (r.subjectName) {
+				let t = await e.subject.findUnique({ where: { name: r.subjectName } });
+				t && (n = t.id);
+			} else r.subjectId && (n = r.subjectId);
+			if (r.studentName && n !== null) {
+				let t = J(r.checkoutDate), i = J(r.dueDate), a = r.returnDate ? J(r.returnDate) : null, o = await e.checkout.findFirst({ where: {
+					studentName: r.studentName,
+					subjectId: n,
+					checkoutDate: t
 				} });
-				if (!existing) {
-					await tx.checkout.create({ data: {
-						subjectId: mappedSubjectId,
-						studentName: c.studentName,
-						studentClass: c.studentClass || null,
-						checkoutDate: parsedCheckoutDate,
-						dueDate: parsedDueDate,
-						returnDate: parsedReturnDate,
-						status: c.status || "ACTIVE",
-						conditionOut: c.conditionOut ?? 3,
-						conditionIn: c.conditionIn ?? null
-					} });
-					checkoutsMerged++;
-				} else if (existing.status !== "RETURNED" && c.status === "RETURNED") {
-					await tx.checkout.update({
-						where: { id: existing.id },
-						data: {
-							returnDate: parsedReturnDate || /* @__PURE__ */ new Date(),
-							status: "RETURNED",
-							conditionIn: c.conditionIn ?? existing.conditionIn ?? 3
-						}
-					});
-					checkoutsMerged++;
-				}
+				o ? o.status !== "RETURNED" && r.status === "RETURNED" && (await e.checkout.update({
+					where: { id: o.id },
+					data: {
+						returnDate: a || /* @__PURE__ */ new Date(),
+						status: "RETURNED",
+						conditionIn: r.conditionIn ?? o.conditionIn ?? 3
+					}
+				}), c++) : (await e.checkout.create({ data: {
+					subjectId: n,
+					studentName: r.studentName,
+					studentClass: r.studentClass || null,
+					checkoutDate: t,
+					dueDate: i,
+					returnDate: a,
+					status: r.status || "ACTIVE",
+					conditionOut: r.conditionOut ?? 3,
+					conditionIn: r.conditionIn ?? null
+				} }), c++);
 			}
 		}
-		if (Array.isArray(p.incidents)) for (const inc of p.incidents) {
-			let mappedSubjectId = null;
-			if (inc.subjectId && peerToLocalSubjectIdMap.has(inc.subjectId)) mappedSubjectId = peerToLocalSubjectIdMap.get(inc.subjectId);
-			else if (inc.subjectName) {
-				const s = await tx.subject.findUnique({ where: { name: inc.subjectName } });
-				if (s) mappedSubjectId = s.id;
+		if (Array.isArray(n.incidents)) for (let r of n.incidents) {
+			let n = null;
+			if (r.subjectId && t.has(r.subjectId)) n = t.get(r.subjectId);
+			else if (r.subjectName) {
+				let t = await e.subject.findUnique({ where: { name: r.subjectName } });
+				t && (n = t.id);
 			}
-			if (inc.bookTitle) {
-				const parsedDate = safeDate(inc.date);
-				if (!await tx.incident.findFirst({ where: {
-					bookTitle: inc.bookTitle,
-					date: parsedDate
-				} })) {
-					await tx.incident.create({ data: {
-						type: inc.type || "DAMAGED",
-						date: parsedDate,
-						subjectId: mappedSubjectId,
-						bookTitle: inc.bookTitle,
-						condition: inc.condition || null,
-						comment: inc.comment || null,
-						reportedBy: inc.reportedBy || null,
-						responsibleParty: inc.responsibleParty || null,
-						studentClass: inc.studentClass || null,
-						actionTaken: inc.actionTaken || null
-					} });
-					incidentsMerged++;
-				}
+			if (r.bookTitle) {
+				let t = J(r.date);
+				await e.incident.findFirst({ where: {
+					bookTitle: r.bookTitle,
+					date: t
+				} }) || (await e.incident.create({ data: {
+					type: r.type || "DAMAGED",
+					date: t,
+					subjectId: n,
+					bookTitle: r.bookTitle,
+					condition: r.condition || null,
+					comment: r.comment || null,
+					reportedBy: r.reportedBy || null,
+					responsibleParty: r.responsibleParty || null,
+					studentClass: r.studentClass || null,
+					actionTaken: r.actionTaken || null
+				} }), l++);
 			}
 		}
 	});
 	try {
-		await encryptTempDatabase();
+		await T();
 	} catch {}
 	return { mergedCounts: {
-		subjects: subjectsMerged,
-		checkouts: checkoutsMerged,
-		incidents: incidentsMerged,
-		rules: rulesMerged
+		subjects: s,
+		checkouts: c,
+		incidents: l,
+		rules: u
 	} };
 }
-var lanServer = null;
-var lanServerPort = 8085;
-var lanServerPasscode = "";
-function generateSecurePasscode() {
-	return crypto.randomBytes(8).toString("hex");
+var X = null, we = 8085, Z = "";
+function Te() {
+	return s.randomBytes(8).toString("hex");
 }
-function startLanSyncServer(port = 8085, passcode) {
-	stopLanSyncServer();
-	lanServerPort = port;
-	lanServerPasscode = passcode || generateSecurePasscode();
-	lanServer = http.createServer((req, res) => {
-		res.setHeader("Content-Type", "application/json");
-		if (req.method === "OPTIONS") {
-			res.writeHead(204);
-			res.end();
+function Ee(e = 8085, t) {
+	Q(), we = e, Z = t || Te(), X = l.createServer((t, n) => {
+		if (n.setHeader("Content-Type", "application/json"), t.method === "OPTIONS") {
+			n.writeHead(204), n.end();
 			return;
 		}
-		const url = new URL(req.url || "/", `http://localhost:${port}`);
-		if (req.method === "GET" && url.pathname === "/status") {
-			res.writeHead(200);
-			res.end(JSON.stringify({
+		let r = new URL(t.url || "/", `http://localhost:${e}`);
+		if (t.method === "GET" && r.pathname === "/status") {
+			n.writeHead(200), n.end(JSON.stringify({
 				status: "ok",
 				serverName: "QuantLib LAN Sync",
-				port: lanServerPort,
+				port: we,
 				timestamp: (/* @__PURE__ */ new Date()).toISOString()
 			}));
 			return;
 		}
-		if (req.method === "POST" && url.pathname === "/sync") {
-			let bodyStr = "";
-			let bodyLength = 0;
-			const MAX_PAYLOAD_BYTES = 10 * 1024 * 1024;
-			req.on("data", (chunk) => {
-				bodyLength += chunk.length;
-				if (bodyLength > MAX_PAYLOAD_BYTES) {
-					req.destroy();
-					res.writeHead(413);
-					res.end(JSON.stringify({
-						success: false,
+		if (t.method === "POST" && r.pathname === "/sync") {
+			let e = "", r = 0;
+			t.on("data", (i) => {
+				if (r += i.length, r > 10485760) {
+					t.destroy(), n.writeHead(413), n.end(JSON.stringify({
+						success: !1,
 						error: "Payload exceeds maximum allowed size of 10MB"
 					}));
 					return;
 				}
-				bodyStr += chunk;
-			});
-			req.on("end", async () => {
+				e += i;
+			}), t.on("end", async () => {
 				try {
-					const body = bodyStr ? JSON.parse(bodyStr) : {};
-					const headerPasscode = req.headers["x-sync-passcode"];
-					const providedPasscode = body.passcode || headerPasscode;
-					if (lanServerPasscode) {
-						const expectedBuf = Buffer.from(lanServerPasscode);
-						const providedBuf = Buffer.from(typeof providedPasscode === "string" ? providedPasscode : "");
-						if (!(expectedBuf.length === providedBuf.length && crypto.timingSafeEqual(expectedBuf, providedBuf))) {
-							res.writeHead(401);
-							res.end(JSON.stringify({
-								success: false,
+					let r = e ? JSON.parse(e) : {}, i = t.headers["x-sync-passcode"], a = r.passcode || i;
+					if (Z) {
+						let e = Buffer.from(Z), t = Buffer.from(typeof a == "string" ? a : "");
+						if (!(e.length === t.length && s.timingSafeEqual(e, t))) {
+							n.writeHead(401), n.end(JSON.stringify({
+								success: !1,
 								error: "Invalid sync passcode"
 							}));
 							return;
 						}
 					}
-					const prisma = getPrisma();
-					if (!prisma) {
-						res.writeHead(503);
-						res.end(JSON.stringify({
-							success: false,
+					let o = se();
+					if (!o) {
+						n.writeHead(503), n.end(JSON.stringify({
+							success: !1,
 							error: "Database is locked on server machine"
 						}));
 						return;
 					}
-					let mergedCounts = {};
-					if (body.payload) mergedCounts = (await mergeLanSyncPayload(prisma, body.payload)).mergedCounts;
-					const localPayload = await packageLanSyncPayload(prisma);
-					res.writeHead(200);
-					res.end(JSON.stringify({
-						success: true,
+					let c = {};
+					r.payload && (c = (await Y(o, r.payload)).mergedCounts);
+					let l = await q(o);
+					n.writeHead(200), n.end(JSON.stringify({
+						success: !0,
 						syncedAt: (/* @__PURE__ */ new Date()).toISOString(),
-						mergedCounts,
-						payload: localPayload
+						mergedCounts: c,
+						payload: l
 					}));
-				} catch (err) {
-					res.writeHead(500);
-					res.end(JSON.stringify({
-						success: false,
-						error: err instanceof Error ? err.message : String(err)
+				} catch (e) {
+					n.writeHead(500), n.end(JSON.stringify({
+						success: !1,
+						error: e instanceof Error ? e.message : String(e)
 					}));
 				}
 			});
 			return;
 		}
-		res.writeHead(404);
-		res.end(JSON.stringify({
-			success: false,
+		n.writeHead(404), n.end(JSON.stringify({
+			success: !1,
 			error: "Endpoint not found"
 		}));
-	});
-	lanServer.listen(port, () => {
-		console.log(`QuantLib LAN Sync server running on port ${port}`);
+	}), X.listen(e, () => {
+		console.log(`QuantLib LAN Sync server running on port ${e}`);
 	});
 }
-function stopLanSyncServer() {
-	if (lanServer) {
+function Q() {
+	if (X) {
 		try {
-			lanServer.close();
+			X.close();
 		} catch {}
-		lanServer = null;
+		X = null;
 	}
 }
-async function syncWithLanPeer(peerIp, peerPort = 8085, passcode) {
-	const prisma = ensureDb();
-	if (!peerIp || !peerIp.trim()) throw new Error("Peer IP address is required");
-	const localPayload = await packageLanSyncPayload(prisma);
-	const response = await fetch(`http://${peerIp.trim()}:${peerPort}/sync`, {
+async function De(e, t = 8085, n) {
+	let r = A();
+	if (!e || !e.trim()) throw Error("Peer IP address is required");
+	let i = await q(r), a = await fetch(`http://${e.trim()}:${t}/sync`, {
 		method: "POST",
 		headers: {
 			"Content-Type": "application/json",
-			"x-sync-passcode": passcode || ""
+			"x-sync-passcode": n || ""
 		},
 		body: JSON.stringify({
-			passcode: passcode || "",
-			payload: localPayload
+			passcode: n || "",
+			payload: i
 		})
 	});
-	if (!response.ok) {
-		const errorJson = await response.json().catch(() => ({}));
-		throw new Error(errorJson.error || `LAN Sync failed with HTTP status ${response.status}`);
+	if (!a.ok) {
+		let e = await a.json().catch(() => ({}));
+		throw Error(e.error || `LAN Sync failed with HTTP status ${a.status}`);
 	}
-	const data = await response.json();
-	if (data.payload) await mergeLanSyncPayload(prisma, data.payload);
-	return data;
+	let o = await a.json();
+	return o.payload && await Y(r, o.payload), o;
 }
 //#endregion
 //#region electron/ipc/backup-lan.ts
-function objectsToCsv(rows) {
-	if (!rows || rows.length === 0) return "";
-	const headers = Object.keys(rows[0]);
-	return [headers.map((h) => `"${String(h).replace(/"/g, "\"\"")}"`).join(","), ...rows.map((row) => {
-		return headers.map((header) => {
-			const val = row[header];
-			if (val === null || val === void 0) return "\"\"";
-			if (val instanceof Date) return `"${val.toISOString()}"`;
-			if (typeof val === "object") return `"${JSON.stringify(val).replace(/"/g, "\"\"")}"`;
-			return `"${String(val).replace(/"/g, "\"\"")}"`;
-		}).join(",");
-	})].join("\n");
+function Oe(e) {
+	if (!e || e.length === 0) return "";
+	let t = Object.keys(e[0]);
+	return [t.map((e) => `"${String(e).replace(/"/g, "\"\"")}"`).join(","), ...e.map((e) => t.map((t) => {
+		let n = e[t];
+		return n == null ? "\"\"" : n instanceof Date ? `"${n.toISOString()}"` : typeof n == "object" ? `"${JSON.stringify(n).replace(/"/g, "\"\"")}"` : `"${String(n).replace(/"/g, "\"\"")}"`;
+	}).join(","))].join("\n");
 }
-function registerBackupAndLanHandlers(getMainWindow) {
-	ipcMain.handle("export-entire-db-csv", async () => {
+function ke(e) {
+	r.handle("export-entire-db-csv", async () => {
 		try {
-			const prisma = ensureDb();
-			const win = getMainWindow();
-			if (!win) return {
-				success: false,
+			let t = A(), r = e();
+			if (!r) return {
+				success: !1,
 				error: "No active window available"
 			};
-			const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+			let { canceled: a, filePaths: o } = await n.showOpenDialog(r, {
 				title: "Select Folder for CSV Database Export",
 				properties: ["openDirectory", "createDirectory"]
 			});
-			if (canceled || !filePaths || filePaths.length === 0) return {
-				success: false,
+			if (a || !o || o.length === 0) return {
+				success: !1,
 				error: "Export cancelled"
 			};
-			const targetDir = filePaths[0];
-			const [subjects, checkouts, incidents, rules, audits, auditItems, auditLogs, schools] = await Promise.all([
-				prisma.subject.findMany({ orderBy: { id: "asc" } }),
-				prisma.checkout.findMany({
-					include: { subject: true },
+			let s = o[0], [l, u, d, f, p, m, h, g] = await Promise.all([
+				t.subject.findMany({ orderBy: { id: "asc" } }),
+				t.checkout.findMany({
+					include: { subject: !0 },
 					orderBy: { id: "asc" }
 				}),
-				prisma.incident.findMany({
-					include: { subject: true },
+				t.incident.findMany({
+					include: { subject: !0 },
 					orderBy: { id: "asc" }
 				}),
-				prisma.borrowingRule.findMany({ orderBy: { id: "asc" } }),
-				prisma.stockAudit.findMany({ orderBy: { id: "asc" } }),
-				prisma.stockAuditItem.findMany({
-					include: { subject: true },
+				t.borrowingRule.findMany({ orderBy: { id: "asc" } }),
+				t.stockAudit.findMany({ orderBy: { id: "asc" } }),
+				t.stockAuditItem.findMany({
+					include: { subject: !0 },
 					orderBy: { id: "asc" }
 				}),
-				prisma.auditLog.findMany({
-					include: { subject: true },
+				t.auditLog.findMany({
+					include: { subject: !0 },
 					orderBy: { id: "asc" }
 				}),
-				prisma.school.findMany({ orderBy: { id: "asc" } })
-			]);
-			const flatCheckouts = checkouts.map((c) => ({
-				id: c.id,
-				subjectId: c.subjectId,
-				subjectName: c.subject?.name || "",
-				studentName: c.studentName,
-				studentClass: c.studentClass || "",
-				checkoutDate: c.checkoutDate ? new Date(c.checkoutDate).toISOString() : "",
-				dueDate: c.dueDate ? new Date(c.dueDate).toISOString() : "",
-				returnDate: c.returnDate ? new Date(c.returnDate).toISOString() : "",
-				status: c.status,
-				conditionOut: c.conditionOut,
-				conditionIn: c.conditionIn !== null ? c.conditionIn : "",
-				createdAt: c.createdAt ? new Date(c.createdAt).toISOString() : "",
-				updatedAt: c.updatedAt ? new Date(c.updatedAt).toISOString() : ""
-			}));
-			const flatIncidents = incidents.map((i) => ({
-				id: i.id,
-				type: i.type,
-				date: i.date ? new Date(i.date).toISOString() : "",
-				subjectId: i.subjectId || "",
-				subjectName: i.subject?.name || "",
-				bookTitle: i.bookTitle,
-				condition: i.condition || "",
-				comment: i.comment || "",
-				reportedBy: i.reportedBy || "",
-				responsibleParty: i.responsibleParty || "",
-				studentClass: i.studentClass || "",
-				actionTaken: i.actionTaken || "",
-				createdAt: i.createdAt ? new Date(i.createdAt).toISOString() : ""
-			}));
-			const flatAuditItems = auditItems.map((item) => ({
-				id: item.id,
-				auditId: item.auditId,
-				subjectId: item.subjectId,
-				subjectName: item.subject?.name || "",
-				expectedCount: item.expectedCount,
-				actualCount: item.actualCount,
-				discrepancy: item.discrepancy,
-				notes: item.notes || ""
-			}));
-			const flatAuditLogs = auditLogs.map((l) => ({
-				id: l.id,
-				subjectId: l.subjectId,
-				subjectName: l.subject?.name || "",
-				field: l.field,
-				oldValue: l.oldValue,
-				newValue: l.newValue,
-				changedBy: l.changedBy || "",
-				changedAt: l.changedAt ? new Date(l.changedAt).toISOString() : ""
-			}));
-			const tables = [
+				t.school.findMany({ orderBy: { id: "asc" } })
+			]), _ = u.map((e) => ({
+				id: e.id,
+				subjectId: e.subjectId,
+				subjectName: e.subject?.name || "",
+				studentName: e.studentName,
+				studentClass: e.studentClass || "",
+				checkoutDate: e.checkoutDate ? new Date(e.checkoutDate).toISOString() : "",
+				dueDate: e.dueDate ? new Date(e.dueDate).toISOString() : "",
+				returnDate: e.returnDate ? new Date(e.returnDate).toISOString() : "",
+				status: e.status,
+				conditionOut: e.conditionOut,
+				conditionIn: e.conditionIn === null ? "" : e.conditionIn,
+				createdAt: e.createdAt ? new Date(e.createdAt).toISOString() : "",
+				updatedAt: e.updatedAt ? new Date(e.updatedAt).toISOString() : ""
+			})), v = d.map((e) => ({
+				id: e.id,
+				type: e.type,
+				date: e.date ? new Date(e.date).toISOString() : "",
+				subjectId: e.subjectId || "",
+				subjectName: e.subject?.name || "",
+				bookTitle: e.bookTitle,
+				condition: e.condition || "",
+				comment: e.comment || "",
+				reportedBy: e.reportedBy || "",
+				responsibleParty: e.responsibleParty || "",
+				studentClass: e.studentClass || "",
+				actionTaken: e.actionTaken || "",
+				createdAt: e.createdAt ? new Date(e.createdAt).toISOString() : ""
+			})), y = m.map((e) => ({
+				id: e.id,
+				auditId: e.auditId,
+				subjectId: e.subjectId,
+				subjectName: e.subject?.name || "",
+				expectedCount: e.expectedCount,
+				actualCount: e.actualCount,
+				discrepancy: e.discrepancy,
+				notes: e.notes || ""
+			})), b = h.map((e) => ({
+				id: e.id,
+				subjectId: e.subjectId,
+				subjectName: e.subject?.name || "",
+				field: e.field,
+				oldValue: e.oldValue,
+				newValue: e.newValue,
+				changedBy: e.changedBy || "",
+				changedAt: e.changedAt ? new Date(e.changedAt).toISOString() : ""
+			})), x = [
 				{
 					filename: "quantlib_subjects.csv",
-					data: subjects
+					data: l
 				},
 				{
 					filename: "quantlib_checkouts.csv",
-					data: flatCheckouts
+					data: _
 				},
 				{
 					filename: "quantlib_incidents.csv",
-					data: flatIncidents
+					data: v
 				},
 				{
 					filename: "quantlib_borrowing_rules.csv",
-					data: rules
+					data: f
 				},
 				{
 					filename: "quantlib_stock_audits.csv",
-					data: audits
+					data: p
 				},
 				{
 					filename: "quantlib_stock_audit_items.csv",
-					data: flatAuditItems
+					data: y
 				},
 				{
 					filename: "quantlib_audit_logs.csv",
-					data: flatAuditLogs
+					data: b
 				},
 				{
 					filename: "quantlib_school_info.csv",
-					data: schools
+					data: g
 				}
-			];
-			let exportedCount = 0;
-			for (const t of tables) {
-				const csvContent = objectsToCsv(t.data);
-				const outPath = path.join(targetDir, t.filename);
-				fs.writeFileSync(outPath, csvContent, "utf-8");
-				exportedCount++;
+			], S = 0;
+			for (let e of x) {
+				let t = Oe(e.data), n = i.join(s, e.filename);
+				c.writeFileSync(n, t, "utf-8"), S++;
 			}
 			return {
-				success: true,
+				success: !0,
 				data: {
-					targetDir,
-					exportedCount,
-					filenames: tables.map((t) => t.filename)
+					targetDir: s,
+					exportedCount: S,
+					filenames: x.map((e) => e.filename)
 				}
 			};
-		} catch (err) {
+		} catch (e) {
 			return {
-				success: false,
-				error: sanitizeError(err)
+				success: !1,
+				error: j(e)
 			};
 		}
-	});
-	ipcMain.handle("backup-database", async () => {
+	}), r.handle("backup-database", async () => {
 		try {
-			ensureDb();
-			const win = getMainWindow();
-			if (!win) return {
-				success: false,
+			A();
+			let t = e();
+			if (!t) return {
+				success: !1,
 				error: "No window available"
 			};
-			const { canceled, filePath } = await dialog.showSaveDialog(win, {
+			let { canceled: r, filePath: i } = await n.showSaveDialog(t, {
 				title: "Backup Database",
 				defaultPath: "quantlib_backup.db",
 				filters: [{
@@ -2363,178 +2009,160 @@ function registerBackupAndLanHandlers(getMainWindow) {
 					extensions: ["*"]
 				}]
 			});
-			if (canceled || !filePath) return {
-				success: false,
+			if (r || !i) return {
+				success: !1,
 				error: "Backup cancelled"
 			};
-			const sourceDb = getTempDbPath();
-			fs.copyFileSync(sourceDb, filePath);
-			return { success: true };
-		} catch (err) {
+			let a = x();
+			return c.copyFileSync(a, i), { success: !0 };
+		} catch (e) {
 			return {
-				success: false,
-				error: sanitizeError(err)
+				success: !1,
+				error: j(e)
 			};
 		}
-	});
-	ipcMain.handle("get-backup-config", async () => {
+	}), r.handle("get-backup-config", async () => {
 		try {
 			return {
-				success: true,
-				data: (await ensureDb().$queryRawUnsafe("SELECT autoBackupEnabled, autoBackupIntervalHours, autoBackupPath, lastAutoBackupAt FROM AppConfig WHERE id = 1"))[0] || {
-					autoBackupEnabled: false,
+				success: !0,
+				data: (await A().$queryRawUnsafe("SELECT autoBackupEnabled, autoBackupIntervalHours, autoBackupPath, lastAutoBackupAt FROM AppConfig WHERE id = 1"))[0] || {
+					autoBackupEnabled: !1,
 					autoBackupIntervalHours: 24,
 					autoBackupPath: null,
 					lastAutoBackupAt: null
 				}
 			};
-		} catch (err) {
+		} catch (e) {
 			return {
-				success: false,
-				error: sanitizeError(err)
+				success: !1,
+				error: j(e)
 			};
 		}
-	});
-	ipcMain.handle("save-backup-config", async (_, data) => {
+	}), r.handle("save-backup-config", async (e, t) => {
 		try {
-			const prisma = ensureDb();
-			const { autoBackupEnabled, autoBackupPath, autoBackupIntervalHours } = data || {};
-			await prisma.$executeRawUnsafe("UPDATE AppConfig SET autoBackupEnabled = ?, autoBackupPath = ?, autoBackupIntervalHours = ?, updatedAt = ? WHERE id = 1", autoBackupEnabled ? 1 : 0, typeof autoBackupPath === "string" ? autoBackupPath : null, typeof autoBackupIntervalHours === "number" ? autoBackupIntervalHours : 24, (/* @__PURE__ */ new Date()).toISOString());
-			if (autoBackupEnabled) startAutoBackupScheduler();
-			return { success: true };
-		} catch (err) {
+			let e = A(), { autoBackupEnabled: n, autoBackupPath: r, autoBackupIntervalHours: i } = t || {};
+			return await e.$executeRawUnsafe("UPDATE AppConfig SET autoBackupEnabled = ?, autoBackupPath = ?, autoBackupIntervalHours = ?, updatedAt = ? WHERE id = 1", +!!n, typeof r == "string" ? r : null, typeof i == "number" ? i : 24, (/* @__PURE__ */ new Date()).toISOString()), n && Se(), { success: !0 };
+		} catch (e) {
 			return {
-				success: false,
-				error: sanitizeError(err)
+				success: !1,
+				error: j(e)
 			};
 		}
-	});
-	ipcMain.handle("trigger-auto-backup", async (_, customPath) => {
+	}), r.handle("trigger-auto-backup", async (e, t) => {
 		try {
-			const prisma = ensureDb();
-			const configRes = await prisma.$queryRawUnsafe("SELECT autoBackupPath FROM AppConfig WHERE id = 1");
-			const result = performVaultBackup(customPath || configRes[0]?.autoBackupPath || "");
-			if (result.success) await prisma.$executeRawUnsafe("UPDATE AppConfig SET lastAutoBackupAt = ? WHERE id = 1", (/* @__PURE__ */ new Date()).toISOString());
-			return result;
-		} catch (err) {
+			let e = A(), n = await e.$queryRawUnsafe("SELECT autoBackupPath FROM AppConfig WHERE id = 1"), r = W(t || n[0]?.autoBackupPath || "");
+			return r.success && await e.$executeRawUnsafe("UPDATE AppConfig SET lastAutoBackupAt = ? WHERE id = 1", (/* @__PURE__ */ new Date()).toISOString()), r;
+		} catch (e) {
 			return {
-				success: false,
-				error: sanitizeError(err)
+				success: !1,
+				error: j(e)
 			};
 		}
-	});
-	ipcMain.handle("list-backups", async () => {
+	}), r.handle("list-backups", async () => {
 		try {
 			return {
-				success: true,
-				data: await listVaultBackups((await ensureDb().$queryRawUnsafe("SELECT autoBackupPath FROM AppConfig WHERE id = 1"))[0]?.autoBackupPath || void 0)
+				success: !0,
+				data: await be((await A().$queryRawUnsafe("SELECT autoBackupPath FROM AppConfig WHERE id = 1"))[0]?.autoBackupPath || void 0)
 			};
-		} catch (err) {
+		} catch (e) {
 			return {
-				success: false,
-				error: sanitizeError(err)
+				success: !1,
+				error: j(e)
 			};
 		}
-	});
-	ipcMain.handle("get-lan-sync-config", async () => {
+	}), r.handle("restore-backup", async (e, n) => {
+		try {
+			if (A(), !n || typeof n != "string") throw Error("Invalid backup path");
+			if (!c.existsSync(n)) throw Error("Selected backup file does not exist");
+			let e = `${n}.meta`;
+			if (!c.existsSync(e)) throw Error("Backup metadata file (.meta) is missing");
+			let r = t.getPath("userData"), a = i.join(r, "quantlib.enc"), o = i.join(r, "quantlib.meta");
+			return c.copyFileSync(n, a), c.copyFileSync(e, o), { success: !0 };
+		} catch (e) {
+			return {
+				success: !1,
+				error: j(e)
+			};
+		}
+	}), r.handle("get-lan-sync-config", async () => {
 		try {
 			return {
-				success: true,
-				data: (await ensureDb().$queryRawUnsafe("SELECT lanSyncEnabled, lanPort, lanPasscode, lastLanSyncAt FROM AppConfig WHERE id = 1"))[0] || {
-					lanSyncEnabled: false,
+				success: !0,
+				data: (await A().$queryRawUnsafe("SELECT lanSyncEnabled, lanPort, lanPasscode, lastLanSyncAt FROM AppConfig WHERE id = 1"))[0] || {
+					lanSyncEnabled: !1,
 					lanPort: 8085,
 					lanPasscode: "quantlib-sync",
 					lastLanSyncAt: null
 				}
 			};
-		} catch (err) {
+		} catch (e) {
 			return {
-				success: false,
-				error: sanitizeError(err)
+				success: !1,
+				error: j(e)
 			};
 		}
-	});
-	ipcMain.handle("save-lan-sync-config", async (_, data) => {
+	}), r.handle("save-lan-sync-config", async (e, t) => {
 		try {
-			const prisma = ensureDb();
-			const { lanSyncEnabled, lanPort, lanPasscode } = data || {};
-			const port = typeof lanPort === "number" ? lanPort : 8085;
-			const passcode = typeof lanPasscode === "string" ? lanPasscode : "quantlib-sync";
-			await prisma.$executeRawUnsafe("UPDATE AppConfig SET lanSyncEnabled = ?, lanPort = ?, lanPasscode = ?, updatedAt = ? WHERE id = 1", lanSyncEnabled ? 1 : 0, port, passcode, (/* @__PURE__ */ new Date()).toISOString());
-			if (lanSyncEnabled) startLanSyncServer(port, passcode);
-			else stopLanSyncServer();
-			return { success: true };
-		} catch (err) {
+			let e = A(), { lanSyncEnabled: n, lanPort: r, lanPasscode: i } = t || {}, a = typeof r == "number" ? r : 8085, o = typeof i == "string" ? i : "quantlib-sync";
+			return await e.$executeRawUnsafe("UPDATE AppConfig SET lanSyncEnabled = ?, lanPort = ?, lanPasscode = ?, updatedAt = ? WHERE id = 1", +!!n, a, o, (/* @__PURE__ */ new Date()).toISOString()), n ? Ee(a, o) : Q(), { success: !0 };
+		} catch (e) {
 			return {
-				success: false,
-				error: sanitizeError(err)
+				success: !1,
+				error: j(e)
 			};
 		}
-	});
-	ipcMain.handle("sync-with-lan-peer", async (_, { peerIp, peerPort, passcode }) => {
+	}), r.handle("sync-with-lan-peer", async (e, { peerIp: t, peerPort: n, passcode: r }) => {
 		try {
-			ensureDb();
-			return {
-				success: true,
-				data: await syncWithLanPeer(peerIp, peerPort, passcode)
+			return A(), {
+				success: !0,
+				data: await De(t, n, r)
 			};
-		} catch (err) {
+		} catch (e) {
 			return {
-				success: false,
-				error: sanitizeError(err)
+				success: !1,
+				error: j(e)
 			};
 		}
-	});
-	ipcMain.handle("get-lan-status", async () => {
+	}), r.handle("get-lan-status", async () => {
 		try {
-			ensureDb();
-			return {
-				success: true,
-				data: { localIp: getLocalIpAddress() }
+			return A(), {
+				success: !0,
+				data: { localIp: Ce() }
 			};
-		} catch (err) {
+		} catch (e) {
 			return {
-				success: false,
-				error: sanitizeError(err)
+				success: !1,
+				error: j(e)
 			};
 		}
-	});
-	ipcMain.handle("set-theme", (_, mode) => {
-		if (mode !== "light" && mode !== "dark") return {
-			success: false,
+	}), r.handle("set-theme", (t, n) => {
+		if (n !== "light" && n !== "dark") return {
+			success: !1,
 			error: "Invalid theme mode"
 		};
-		const win = getMainWindow();
-		if (win && typeof win.setTitleBarOverlay === "function") try {
-			win.setTitleBarOverlay({
-				color: mode === "dark" ? "#0f172a" : "#ffffff",
-				symbolColor: mode === "dark" ? "#ffffff" : "#0f172a",
+		let r = e();
+		if (r && typeof r.setTitleBarOverlay == "function") try {
+			r.setTitleBarOverlay({
+				color: n === "dark" ? "#0f172a" : "#ffffff",
+				symbolColor: n === "dark" ? "#ffffff" : "#0f172a",
 				height: 32
 			});
 		} catch {}
-		return { success: true };
+		return { success: !0 };
 	});
 }
 //#endregion
 //#region electron/main.ts
-var __dirname = path.dirname(fileURLToPath(import.meta.url));
-process.env.DIST = path.join(__dirname, "../dist");
-process.env.VITE_PUBLIC = app.isPackaged ? process.env.DIST : path.join(process.env.DIST, "../public");
-var win = null;
-if (!app.requestSingleInstanceLock()) {
-	app.quit();
-	process.exit(0);
-} else app.on("second-instance", () => {
-	if (win) {
-		if (win.isMinimized()) win.restore();
-		win.focus();
-	}
-});
-function createWindow() {
-	const publicDir = process.env.VITE_PUBLIC || "";
-	const distDir = process.env.DIST || "";
-	win = new BrowserWindow({
-		icon: path.join(publicDir, "icon.png"),
+var Ae = i.dirname(a(import.meta.url));
+process.env.DIST = i.join(Ae, "../dist"), process.env.VITE_PUBLIC = t.isPackaged ? process.env.DIST : i.join(process.env.DIST, "../public");
+var $ = null;
+t.requestSingleInstanceLock() ? t.on("second-instance", () => {
+	$ && ($.isMinimized() && $.restore(), $.focus());
+}) : (t.quit(), process.exit(0));
+function je() {
+	let t = process.env.VITE_PUBLIC || "", n = process.env.DIST || "";
+	$ = new e({
+		icon: i.join(t, "icon.png"),
 		width: 1200,
 		height: 800,
 		titleBarStyle: "hidden",
@@ -2544,72 +2172,39 @@ function createWindow() {
 			height: 32
 		},
 		webPreferences: {
-			preload: path.join(__dirname, "preload.mjs"),
-			contextIsolation: true,
-			nodeIntegration: false,
-			sandbox: true,
-			webSecurity: true
+			preload: i.join(Ae, "preload.mjs"),
+			contextIsolation: !0,
+			nodeIntegration: !1,
+			sandbox: !0,
+			webSecurity: !0
 		}
+	}), typeof $?.removeMenu == "function" && $.removeMenu(), typeof $?.webContents?.setWindowOpenHandler == "function" && $.webContents.setWindowOpenHandler(({ url: e }) => ((e.startsWith("https:") || e.startsWith("http:")) && import("electron").then(({ shell: t }) => t.openExternal(e)), { action: "deny" })), typeof $?.webContents?.on == "function" && $.webContents.on("will-navigate", (e, t) => {
+		let n = new URL(t), r = n.protocol === "file:", i = process.env.VITE_DEV_SERVER_URL, a = i && n.origin === new URL(i).origin;
+		!r && !a && e.preventDefault();
 	});
-	if (typeof win?.removeMenu === "function") win.removeMenu();
-	if (typeof win?.webContents?.setWindowOpenHandler === "function") win.webContents.setWindowOpenHandler(({ url }) => {
-		if (url.startsWith("https:") || url.startsWith("http:")) import("electron").then(({ shell }) => shell.openExternal(url));
-		return { action: "deny" };
-	});
-	if (typeof win?.webContents?.on === "function") win.webContents.on("will-navigate", (event, url) => {
-		const parsedUrl = new URL(url);
-		const isLocalFile = parsedUrl.protocol === "file:";
-		const VITE_DEV_SERVER_URL = process.env["VITE_DEV_SERVER_URL"];
-		const isDevServer = VITE_DEV_SERVER_URL && parsedUrl.origin === new URL(VITE_DEV_SERVER_URL).origin;
-		if (!isLocalFile && !isDevServer) event.preventDefault();
-	});
-	const VITE_DEV_SERVER_URL = process.env["VITE_DEV_SERVER_URL"];
-	if (VITE_DEV_SERVER_URL) {
-		if (typeof win?.loadURL === "function") win.loadURL(VITE_DEV_SERVER_URL);
-	} else if (typeof win?.loadFile === "function") win.loadFile(path.join(distDir, "index.html"));
-	if (typeof win?.on === "function") win.on("closed", () => {
-		stopAutoBackupScheduler();
-		win = null;
+	let r = process.env.VITE_DEV_SERVER_URL;
+	r ? typeof $?.loadURL == "function" && $.loadURL(r) : typeof $?.loadFile == "function" && $.loadFile(i.join(n, "index.html")), typeof $?.on == "function" && $.on("closed", () => {
+		K(), $ = null;
 	});
 }
-registerAuthHandlers();
-registerInventoryHandlers();
-registerCheckoutHandlers();
-registerAuditHandlers();
-registerAnalyticsHandlers();
-registerBackupAndLanHandlers(() => win);
-app.on("window-all-closed", async () => {
-	stopAutoBackupScheduler();
-	stopLanSyncServer();
-	await disconnectAndCleanupDatabase();
-	if (process.platform !== "darwin") {
-		app.quit();
-		win = null;
-	}
-});
-app.on("before-quit", (event) => {
-	stopAutoBackupScheduler();
-	stopLanSyncServer();
-	event.preventDefault();
-	disconnectAndCleanupDatabase().then(() => app.quit()).catch((err) => {
-		console.error("Database cleanup failed:", err);
-		app.quit();
+de(), pe(), me(), he(), ve(), ke(() => $), t.on("window-all-closed", async () => {
+	K(), Q(), await N(), process.platform !== "darwin" && (t.quit(), $ = null);
+}), t.on("before-quit", (e) => {
+	K(), Q(), e.preventDefault(), N().then(() => t.quit()).catch((e) => {
+		console.error("Database cleanup failed:", e), t.quit();
 	});
-});
-app.on("activate", () => {
-	if (BrowserWindow.getAllWindows().length === 0) createWindow();
-});
-app.whenReady().then(() => {
-	import("electron").then(({ session }) => {
-		session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-			const scriptSrc = process.env["VITE_DEV_SERVER_URL"] ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'" : "script-src 'self'";
-			callback({ responseHeaders: {
-				...details.responseHeaders,
-				"Content-Security-Policy": [`default-src 'self'; ${scriptSrc}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:;`]
+}), t.on("activate", () => {
+	e.getAllWindows().length === 0 && je();
+}), t.whenReady().then(() => {
+	import("electron").then(({ session: e }) => {
+		e.defaultSession.webRequest.onHeadersReceived((e, t) => {
+			let n = process.env.VITE_DEV_SERVER_URL ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'" : "script-src 'self'";
+			t({ responseHeaders: {
+				...e.responseHeaders,
+				"Content-Security-Policy": [`default-src 'self'; ${n}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:;`]
 			} });
 		});
-	});
-	createWindow();
+	}), je();
 });
 //#endregion
-export { aggregateCirculationTrends, calculateClearance, calculateConditionDecay, calculateReplacementCost, calculateStockAuditDiscrepancy, formatBackupTimestamp, getLocalIpAddress, getRuleForClass, isBackupDue, listVaultBackups, listVaultBackupsSync, mergeLanSyncPayload, packageLanSyncPayload, performVaultBackup, startAutoBackupScheduler, startLanSyncServer, stopAutoBackupScheduler, stopLanSyncServer, syncWithLanPeer };
+export { _e as aggregateCirculationTrends, R as calculateClearance, V as calculateConditionDecay, ge as calculateReplacementCost, z as calculateStockAuditDiscrepancy, H as formatBackupTimestamp, Ce as getLocalIpAddress, L as getRuleForClass, ye as isBackupDue, be as listVaultBackups, xe as listVaultBackupsSync, Y as mergeLanSyncPayload, q as packageLanSyncPayload, W as performVaultBackup, Se as startAutoBackupScheduler, Ee as startLanSyncServer, K as stopAutoBackupScheduler, Q as stopLanSyncServer, De as syncWithLanPeer };

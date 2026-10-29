@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, memo } from 'react'
-import { Save, Moon, Sun, ShieldCheck, Key, Copy, Printer, History, Database, Download, BookOpen, Plus, Trash2, Edit2, HardDrive, RefreshCw, Network, Wifi, CheckCircle2, AlertCircle, Clock, FileSpreadsheet } from 'lucide-react'
+import { Save, Moon, Sun, ShieldCheck, Key, Copy, Printer, History, Database, Download, BookOpen, Plus, Trash2, Edit2, HardDrive, RefreshCw, Network, Wifi, CheckCircle2, AlertCircle, Clock, FileSpreadsheet, RotateCcw } from 'lucide-react'
 import { useTheme } from '../hooks/ThemeContext'
 import { validateMasterPassword } from '../lib/utils'
 import { Button } from '../components/Button'
@@ -108,10 +108,14 @@ interface SchoolInfoSectionProps {
   schoolName: string
   motto: string
   academicYear: string
+  address: string
+  contactPhone: string
   schoolSaveSuccess?: string
   onSchoolNameChange: (val: string) => void
   onMottoChange: (val: string) => void
   onAcademicYearChange: (val: string) => void
+  onAddressChange: (val: string) => void
+  onContactPhoneChange: (val: string) => void
   onSaveSchoolInfo: () => void
 }
 
@@ -119,10 +123,14 @@ const SchoolInfoSection = memo(function SchoolInfoSection({
   schoolName,
   motto,
   academicYear,
+  address,
+  contactPhone,
   schoolSaveSuccess,
   onSchoolNameChange,
   onMottoChange,
   onAcademicYearChange,
+  onAddressChange,
+  onContactPhoneChange,
   onSaveSchoolInfo
 }: SchoolInfoSectionProps) {
   return (
@@ -140,10 +148,24 @@ const SchoolInfoSection = memo(function SchoolInfoSection({
           value={motto}
           onChange={(e) => onMottoChange(e.target.value)}
         />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <TextField 
+            label="Academic Year"
+            value={academicYear}
+            onChange={(e) => onAcademicYearChange(e.target.value)}
+          />
+          <TextField 
+            label="Library / School Phone"
+            placeholder="e.g. +256 700 000 000"
+            value={contactPhone}
+            onChange={(e) => onContactPhoneChange(e.target.value)}
+          />
+        </div>
         <TextField 
-          label="Academic Year"
-          value={academicYear}
-          onChange={(e) => onAcademicYearChange(e.target.value)}
+          label="Postal / Physical Address"
+          placeholder="e.g. P.O. Box 1234, Kampala"
+          value={address}
+          onChange={(e) => onAddressChange(e.target.value)}
         />
       </div>
 
@@ -280,11 +302,13 @@ interface VaultBackupSectionProps {
   backupSaveSuccess: string
   backupTriggerMessage: string
   isTriggeringBackup: boolean
+  restoringPath: string | null
   onToggleAutoBackup: (val: boolean) => void
   onAutoBackupPathChange: (val: string) => void
   onIntervalHoursChange: (val: number) => void
   onSaveBackupConfig: (e: React.FormEvent) => void
   onTriggerBackupNow: () => void
+  onRestoreBackup: (fullPath: string, filename: string) => void
   onRefreshConfig: () => void
 }
 
@@ -298,11 +322,13 @@ const VaultBackupSection = memo(function VaultBackupSection({
   backupSaveSuccess,
   backupTriggerMessage,
   isTriggeringBackup,
+  restoringPath,
   onToggleAutoBackup,
   onAutoBackupPathChange,
   onIntervalHoursChange,
   onSaveBackupConfig,
   onTriggerBackupNow,
+  onRestoreBackup,
   onRefreshConfig
 }: VaultBackupSectionProps) {
   return (
@@ -398,16 +424,28 @@ const VaultBackupSection = memo(function VaultBackupSection({
         {recentBackups.length === 0 ? (
           <p className="text-xs text-slate-500 dark:text-slate-400 italic text-center py-2">No backups found in target path.</p>
         ) : (
-          <div className="max-h-40 overflow-y-auto space-y-2 pr-1">
+          <div className="max-h-48 overflow-y-auto space-y-2 pr-1">
             {recentBackups.slice(0, 5).map((file) => (
-              <div key={file.fullPath} className="text-xs p-2 bg-slate-50 dark:bg-slate-900/40 rounded border border-slate-200 dark:border-slate-700 flex justify-between items-center">
-                <div>
-                  <p className="font-mono font-medium text-slate-800 dark:text-slate-200">{file.filename}</p>
+              <div key={file.fullPath} className="text-xs p-2.5 bg-slate-50 dark:bg-slate-900/40 rounded border border-slate-200 dark:border-slate-700 flex justify-between items-center gap-2">
+                <div className="min-w-0">
+                  <p className="font-mono font-medium text-slate-800 dark:text-slate-200 truncate">{file.filename}</p>
                   <p className="text-slate-400 truncate max-w-xs">{file.fullPath}</p>
                 </div>
-                <div className="text-right">
-                  <span className="text-slate-500 font-semibold">{Math.round(file.sizeBytes / 1024)} KB</span>
-                  <p className="text-slate-400">{new Date(file.createdAt).toLocaleDateString()}</p>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <div className="text-right">
+                    <span className="text-slate-500 font-semibold">{Math.max(1, Math.round(file.sizeBytes / 1024))} KB</span>
+                    <p className="text-slate-400">{new Date(file.createdAt).toLocaleDateString()}</p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    icon={<RotateCcw size={13} />}
+                    isLoading={restoringPath === file.fullPath}
+                    onClick={() => onRestoreBackup(file.fullPath, file.filename)}
+                    title="Restore this encrypted vault snapshot"
+                  >
+                    Restore
+                  </Button>
                 </div>
               </div>
             ))}
@@ -623,7 +661,6 @@ const DatabaseExportSection = memo(function DatabaseExportSection({
       </p>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-        {/* CSV Export Option */}
         <div className="p-4 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-slate-200/70 dark:border-slate-700/70 flex flex-col justify-between space-y-3">
           <div>
             <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center space-x-2">
@@ -658,7 +695,6 @@ const DatabaseExportSection = memo(function DatabaseExportSection({
           </div>
         </div>
 
-        {/* SQLite DB Export Option */}
         <div className="p-4 bg-slate-50 dark:bg-slate-900/40 rounded-xl border border-slate-200/70 dark:border-slate-700/70 flex flex-col justify-between space-y-3">
           <div>
             <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center space-x-2">
@@ -762,6 +798,8 @@ export default function Settings() {
   const [schoolName, setSchoolName] = useState('Mentor High School - Kitende')
   const [motto, setMotto] = useState('Education is the Key')
   const [academicYear, setAcademicYear] = useState('2026')
+  const [address, setAddress] = useState('')
+  const [contactPhone, setContactPhone] = useState('')
   const [schoolSaveSuccess, setSchoolSaveSuccess] = useState('')
   const schoolTimerRef = useRef<number | null>(null)
   const { theme, setTheme } = useTheme()
@@ -773,6 +811,8 @@ export default function Settings() {
           if (info.name) setSchoolName(info.name)
           if (info.motto) setMotto(info.motto)
           if (info.academicYear) setAcademicYear(info.academicYear)
+          if (info.address) setAddress(info.address)
+          if (info.contactPhone) setContactPhone(info.contactPhone)
         }
       })
       .catch((err) => console.error('Failed to load school info:', err))
@@ -789,7 +829,9 @@ export default function Settings() {
       await db.saveSchoolInfo({
         name: schoolName,
         motto,
-        academicYear
+        academicYear,
+        address,
+        contactPhone
       })
       setSchoolSaveSuccess('School information saved successfully!')
     } catch (err: unknown) {
@@ -797,7 +839,8 @@ export default function Settings() {
     }
     if (schoolTimerRef.current) window.clearTimeout(schoolTimerRef.current)
     schoolTimerRef.current = window.setTimeout(() => setSchoolSaveSuccess(''), 3000)
-  }, [schoolName, motto, academicYear])
+  }, [schoolName, motto, academicYear, address, contactPhone])
+
   // Password Change State
   const [oldPassword, setOldPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
@@ -908,6 +951,7 @@ export default function Settings() {
   const [backupSaveSuccess, setBackupSaveSuccess] = useState('')
   const [backupTriggerMessage, setBackupTriggerMessage] = useState('')
   const [isTriggeringBackup, setIsTriggeringBackup] = useState(false)
+  const [restoringPath, setRestoringPath] = useState<string | null>(null)
 
   // Multi-Desk LAN Sync State
   const [lanSyncEnabled, setLanSyncEnabled] = useState(false)
@@ -1006,6 +1050,28 @@ export default function Settings() {
     }
   }, [autoBackupPath, fetchBackupConfig])
 
+  const handleRestoreBackup = useCallback(async (fullPath: string, filename: string) => {
+    if (!window.confirm(`Are you sure you want to restore vault snapshot "${filename}"? The current vault will be replaced by this backup.`)) {
+      return
+    }
+    setRestoringPath(fullPath)
+    setBackupTriggerMessage('')
+    try {
+      const res = await db.restoreBackup(fullPath)
+      if (res && res.success) {
+        setBackupTriggerMessage(`Restored snapshot "${filename}". Unlock the vault again to load the restored data.`)
+        sessionStorage.removeItem('quantlib_unlocked')
+        window.location.reload()
+      } else {
+        alert('Restore failed: ' + (res?.error || 'Unknown error'))
+      }
+    } catch (err: unknown) {
+      alert('Restore error: ' + (err instanceof Error ? err.message : String(err)))
+    } finally {
+      setRestoringPath(null)
+    }
+  }, [])
+
   const handleSaveLanConfig = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
     setLanSaveSuccess('')
@@ -1043,6 +1109,8 @@ export default function Settings() {
         const summary = res.data?.message || `Synced successfully! (Merged: ${subjects} subjects, ${checkouts} checkouts)`
         setSyncStatusMsg(summary)
         fetchLanConfig()
+      } else {
+        setSyncErrorMsg(res?.error || 'Sync failed')
       }
     } catch (err: unknown) {
       setSyncErrorMsg(err instanceof Error ? err.message : 'Sync failed')
@@ -1149,10 +1217,14 @@ export default function Settings() {
             schoolName={schoolName}
             motto={motto}
             academicYear={academicYear}
+            address={address}
+            contactPhone={contactPhone}
             schoolSaveSuccess={schoolSaveSuccess}
             onSchoolNameChange={setSchoolName}
             onMottoChange={setMotto}
             onAcademicYearChange={setAcademicYear}
+            onAddressChange={setAddress}
+            onContactPhoneChange={setContactPhone}
             onSaveSchoolInfo={handleSaveSchoolInfo}
           />
 
@@ -1186,11 +1258,13 @@ export default function Settings() {
             backupSaveSuccess={backupSaveSuccess}
             backupTriggerMessage={backupTriggerMessage}
             isTriggeringBackup={isTriggeringBackup}
+            restoringPath={restoringPath}
             onToggleAutoBackup={setAutoBackupEnabled}
             onAutoBackupPathChange={setAutoBackupPath}
             onIntervalHoursChange={setAutoBackupIntervalHours}
             onSaveBackupConfig={handleSaveBackupConfig}
             onTriggerBackupNow={handleTriggerBackupNow}
+            onRestoreBackup={handleRestoreBackup}
             onRefreshConfig={fetchBackupConfig}
           />
 

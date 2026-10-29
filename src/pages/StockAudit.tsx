@@ -140,8 +140,8 @@ export default function StockAuditPage() {
   // Filtering & Audit Form State
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL')
-  const [auditorName] = useState('LIBRARIAN')
-  const [auditNotes] = useState('')
+  const [auditorName, setAuditorName] = useState('LIBRARIAN')
+  const [auditNotes, setAuditNotes] = useState('')
   const [itemEdits, setItemEdits] = useState<Record<number, { actualCount: number; notes: string }>>({})
   const [savingSubjectId, setSavingSubjectId] = useState<number | null>(null)
   const [completing, setCompleting] = useState(false)
@@ -167,6 +167,8 @@ export default function StockAuditPage() {
       }
     }
     setItemEdits(edits)
+    setAuditNotes(audit.notes || '')
+    if (audit.auditedBy) setAuditorName(audit.auditedBy)
   }, [])
 
   const loadData = useCallback(async () => {
@@ -202,7 +204,10 @@ export default function StockAuditPage() {
     try {
       setLoading(true)
       setError(null)
-      const newAudit = await db.createStockAudit({ auditedBy: auditorName, notes: auditNotes })
+      const newAudit = await db.createStockAudit({
+        auditedBy: auditorName.trim() || 'LIBRARIAN',
+        notes: auditNotes.trim() || undefined
+      })
       setSuccessMsg('New stock audit session started successfully.')
       await loadData()
       if (newAudit) {
@@ -270,7 +275,6 @@ export default function StockAuditPage() {
         notes
       })
 
-      // Update active audit in state locally
       setActiveAudit((prev) => {
         if (!prev) return null
         const existingItems = prev.items || []
@@ -296,17 +300,17 @@ export default function StockAuditPage() {
 
   const handleCompleteAudit = useCallback(async () => {
     if (!activeAudit) return
-    if (!window.confirm('Are you sure you want to complete and finalize this stock audit session?')) return
+    if (!window.confirm('Are you sure you want to complete and finalize this stock audit session? Missing copies will be written off as LOST and extra copies added as RECOVERED.')) return
 
     try {
       setCompleting(true)
       setError(null)
       const completed = await db.completeStockAudit({
         auditId: activeAudit.id,
-        notes: (auditNotes || activeAudit.notes) ?? undefined
+        notes: (auditNotes.trim() || activeAudit.notes) ?? undefined
       })
       setActiveAudit(completed)
-      setSuccessMsg('Stock audit session completed and finalized!')
+      setSuccessMsg('Stock audit session completed and inventory automatically reconciled!')
       await loadData()
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to complete audit')
@@ -315,7 +319,6 @@ export default function StockAuditPage() {
     }
   }, [activeAudit, auditNotes, loadData])
 
-  // Helper calculations for active session (Memoized)
   const categories = useMemo(
     () => Array.from(new Set(subjects.map((s) => s.category || 'General'))),
     [subjects]
@@ -331,7 +334,6 @@ export default function StockAuditPage() {
     [subjects, searchQuery, selectedCategory]
   )
 
-  // Summary Metrics (Memoized)
   const auditItemsMap = useMemo(() => {
     const map = new Map<number, StockAuditItem>()
     if (activeAudit?.items) {
@@ -386,7 +388,26 @@ export default function StockAuditPage() {
           </div>
         </div>
 
-        <div className="flex items-center space-x-3">
+        <div className="flex flex-wrap items-center gap-3">
+          {(!activeAudit || activeAudit.status === 'COMPLETED') && (
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                placeholder="Auditor Name (e.g. J. Okello)"
+                value={auditorName}
+                onChange={(e) => setAuditorName(e.target.value)}
+                className="px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 w-40"
+              />
+              <input
+                type="text"
+                placeholder="Session notes (e.g. Term 3 Audit)"
+                value={auditNotes}
+                onChange={(e) => setAuditNotes(e.target.value)}
+                className="px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 w-48"
+              />
+            </div>
+          )}
+
           <button
             onClick={() => setViewHistory(!viewHistory)}
             className="flex items-center space-x-2 px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition"
@@ -452,7 +473,7 @@ export default function StockAuditPage() {
               </span>
             </div>
 
-            <div className="flex items-center space-x-6 text-sm text-slate-300">
+            <div className="flex flex-wrap items-center gap-4 text-sm text-slate-300">
               <div className="flex items-center space-x-2">
                 <Calendar className="w-4 h-4 text-slate-400" />
                 <span>{new Date(activeAudit.auditDate).toLocaleDateString()}</span>
@@ -461,6 +482,15 @@ export default function StockAuditPage() {
                 <User className="w-4 h-4 text-slate-400" />
                 <span>Auditor: {activeAudit.auditedBy || 'LIBRARIAN'}</span>
               </div>
+              {activeAudit.status === 'IN_PROGRESS' && (
+                <input
+                  type="text"
+                  placeholder="Session summary notes before finalizing..."
+                  value={auditNotes}
+                  onChange={(e) => setAuditNotes(e.target.value)}
+                  className="px-3 py-1 text-xs rounded-lg bg-slate-800 border border-slate-700 text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 w-64"
+                />
+              )}
             </div>
           </div>
 
@@ -519,13 +549,14 @@ export default function StockAuditPage() {
                   <th className="p-4">Expected / Actual</th>
                   <th className="p-4">Discrepancy</th>
                   <th className="p-4">Missing / Extra</th>
+                  <th className="p-4">Notes</th>
                   <th className="p-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 dark:divide-slate-800 text-sm">
                 {audits.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="p-8 text-center text-slate-500 dark:text-slate-400">
+                    <td colSpan={9} className="p-8 text-center text-slate-500 dark:text-slate-400">
                       No stock audits recorded yet. Click "Start New Audit Session" to begin.
                     </td>
                   </tr>
@@ -576,6 +607,9 @@ export default function StockAuditPage() {
                           <span className="mx-1 text-slate-400">|</span>
                           <span className="text-amber-600 dark:text-amber-400 font-medium">+{sum.misplacedItems} extra</span>
                         </td>
+                        <td className="p-4 text-xs text-slate-500 dark:text-slate-400 max-w-xs truncate" title={a.notes || ''}>
+                          {a.notes || '-'}
+                        </td>
                         <td className="p-4 text-right">
                           <button
                             onClick={() => {
@@ -609,7 +643,6 @@ export default function StockAuditPage() {
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
-              {/* Search */}
               <div className="relative w-full sm:w-64">
                 <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
                 <input
@@ -621,7 +654,6 @@ export default function StockAuditPage() {
                 />
               </div>
 
-              {/* Category Filter */}
               <select
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}

@@ -12,13 +12,15 @@ import {
   ChevronLeft,
   ChevronRight,
   Sun,
-  Moon
+  Moon,
+  Lock
 } from 'lucide-react'
 
 import { ThemeProvider, useTheme } from './hooks/ThemeContext'
 import Login from './pages/Login'
 import { db } from './lib/ipc-client'
-function AppLayout() {
+
+function AppLayout({ onLock }: { onLock: () => void }) {
   const { theme, setTheme } = useTheme()
   const [isCollapsed, setIsCollapsed] = useState(() => {
     return localStorage.getItem('quantlib_sidebar_collapsed') === 'true'
@@ -115,7 +117,7 @@ function AppLayout() {
           })}
         </nav>
 
-        {/* Bottom Actions: Theme Toggle & Settings */}
+        {/* Bottom Actions: Theme Toggle, Settings & Lock Vault */}
         <div className="p-2 border-t border-slate-100 dark:border-slate-800/80 space-y-1">
           {/* Quick Theme Toggle */}
           <button
@@ -153,6 +155,19 @@ function AppLayout() {
             <SettingsIcon size={19} className="flex-shrink-0" />
             {!isCollapsed && <span className="ml-3 truncate">Settings</span>}
           </NavLink>
+
+          {/* Lock Vault Button */}
+          <button
+            type="button"
+            onClick={onLock}
+            title={isCollapsed ? "Lock Encrypted Vault" : undefined}
+            className={`w-full flex items-center ${
+              isCollapsed ? 'justify-center px-0 py-2.5' : 'px-3 py-2'
+            } rounded-xl text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors [webkit-app-region:no-drag] text-sm font-medium`}
+          >
+            <Lock size={18} className="flex-shrink-0" />
+            {!isCollapsed && <span className="ml-3 truncate">Lock Vault</span>}
+          </button>
         </div>
       </aside>
 
@@ -208,6 +223,16 @@ function App() {
     setIsUnlocked(true)
   }
 
+  const handleLock = async () => {
+    try {
+      await db.lockDb()
+    } catch {
+      // Ignore backend lock errors and enforce client lock screen
+    }
+    sessionStorage.removeItem('quantlib_unlocked')
+    setIsUnlocked(false)
+  }
+
   if (isCheckingAuth) {
     return (
       <div className="flex h-screen items-center justify-center bg-slate-950 text-slate-400">
@@ -226,7 +251,7 @@ function App() {
   }
   return (
     <ThemeProvider>
-      <AppLayout />
+      <AppLayout onLock={handleLock} />
     </ThemeProvider>
   )
 }

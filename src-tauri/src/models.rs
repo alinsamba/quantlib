@@ -60,12 +60,22 @@ pub struct Subject {
     pub available: Option<i64>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SubjectInput {
     pub name: Option<String>,
     pub category: Option<String>,
     pub opening_count: Option<i64>,
+    #[serde(default)]
+    pub recovered: Option<i64>,
+    #[serde(default)]
+    pub issued: Option<i64>,
+    #[serde(default)]
+    pub damaged: Option<i64>,
+    #[serde(default)]
+    pub lost: Option<i64>,
+    #[serde(default)]
+    pub notes: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -253,7 +263,11 @@ pub struct DashboardSummary {
 #[serde(rename_all = "camelCase")]
 pub struct ConditionDecayPoint {
     pub checkouts: i64,
+    pub future_checkouts: i64,
+    pub current_condition: f64,
     pub projected_condition: f64,
+    pub degradation_rate: f64,
+    pub remaining_checkouts: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -405,6 +419,16 @@ pub struct LanSyncResult {
     pub incidents_synced: Option<i64>,
     pub rules_synced: Option<i64>,
     pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LanSyncPayload {
+    pub subjects: Vec<Subject>,
+    pub checkouts: Vec<Checkout>,
+    pub incidents: Vec<Incident>,
+    pub borrowing_rules: Vec<BorrowingRule>,
+    pub school: Option<SchoolInfo>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
