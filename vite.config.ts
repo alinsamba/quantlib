@@ -7,37 +7,48 @@ import { fileURLToPath } from 'url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
+const isElectron = process.env.ELECTRON_ENABLE === 'true'
+
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
     tailwindcss(),
     react(),
-    electron({
-      main: {
-        entry: 'electron/main.ts',
-        vite: {
-          build: {
-            rolldownOptions: {
-              external: ['@prisma/client']
+    ...(isElectron
+      ? [
+          electron({
+            main: {
+              entry: 'electron/main.ts',
+              vite: {
+                build: {
+                  rolldownOptions: {
+                    external: ['@prisma/client']
+                  },
+                  rollupOptions: {
+                    external: ['@prisma/client']
+                  }
+                }
+              }
             },
-            rollupOptions: {
-              external: ['@prisma/client']
-            }
-          }
-        }
-      },
-      preload: {
-        input: 'electron/preload.ts',
-        onstart(options) {
-          options.reload()
-        },
-      },
-      renderer: {},
-    }),
+            preload: {
+              input: 'electron/preload.ts',
+              onstart(options) {
+                options.reload()
+              },
+            },
+            renderer: {},
+          }),
+        ]
+      : []),
   ],
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),
+    },
+  },
+  server: {
+    watch: {
+      ignored: ['**/src-tauri/**'],
     },
   },
   build: {
