@@ -9,6 +9,7 @@ pub use crypto::VaultManager;
 pub use db::Database;
 
 use std::sync::Arc;
+use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -30,6 +31,13 @@ pub fn run() {
         .manage(AppState {
             vault: Arc::clone(&vault),
             db: Arc::clone(&db),
+        })
+        .setup(|app| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+            Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             commands::check_db_status,
