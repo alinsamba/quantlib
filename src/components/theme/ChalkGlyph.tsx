@@ -1,5 +1,6 @@
 export type ChalkGlyphName =
   | 'desk'
+  | 'log'
   | 'students'
   | 'inventory'
   | 'overdue'
@@ -48,6 +49,16 @@ export function ChalkGlyph({ name, size = 20, className = '' }: ChalkGlyphProps)
           <path d="M7 14v-2a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2" fill={fill} />
           <path d="M10 10V6.5a2 2 0 1 1 4 0V10" />
           <path d="M7 17h4" stroke={accent} strokeWidth={2} />
+        </svg>
+      )
+    case 'log':
+      return (
+        <svg {...common}>
+          <rect x="4" y="3.5" width="16" height="17" rx="2" fill={fill} />
+          <path d="M8 3.5v17" />
+          <path d="M11 8h5.5" stroke={accent} strokeWidth={2} />
+          <path d="M11 12h5.5" />
+          <path d="M11 16h3.5" />
         </svg>
       )
     case 'students':

@@ -54,17 +54,21 @@ const StockAuditRow = memo(function StockAuditRow({
 
   return (
     <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
-      <td className="p-4 font-medium text-slate-900 dark:text-slate-100 flex items-center space-x-3">
-        <BookOpen className="w-4 h-4 text-blue-500 flex-shrink-0" />
-        <span>{subject.name}</span>
+      <td className="px-4 py-3 align-middle font-semibold chalk-ink text-slate-900 dark:text-slate-100">
+        <div className="flex items-center gap-2.5 min-w-[170px]">
+          <BookOpen className="w-4 h-4 chalk-slate text-[#1F6F54] dark:text-[#3FB08A] shrink-0" />
+          <span className="leading-snug">{subject.name}</span>
+        </div>
       </td>
-      <td className="p-4 text-slate-500 dark:text-slate-400">
-        <span className="px-2 py-1 bg-slate-100 dark:bg-[#191F1E] text-xs rounded-md">
+      <td className="px-3 py-3 align-middle whitespace-nowrap chalk-muted text-slate-500 dark:text-slate-400">
+        <span className="chalk-badge inline-flex items-center px-2.5 py-1 bg-slate-100 dark:bg-[#191F1E] text-xs font-medium rounded-md whitespace-nowrap">
           {subject.category || 'General'}
         </span>
       </td>
-      <td className="p-4 text-center font-semibold text-slate-700 dark:text-slate-300">{expected}</td>
-      <td className="p-4 text-center">
+      <td className="px-3 py-3 align-middle text-center font-semibold tabular-nums whitespace-nowrap chalk-ink text-slate-700 dark:text-slate-300">
+        {expected}
+      </td>
+      <td className="px-3 py-3 align-middle text-center whitespace-nowrap">
         <input
           type="number"
           min="0"
@@ -74,55 +78,56 @@ const StockAuditRow = memo(function StockAuditRow({
             const val = parseInt(e.target.value, 10)
             onActualCountChange(subject.id, isNaN(val) ? 0 : val)
           }}
-          className="w-20 px-2 py-1 text-center font-bold bg-white dark:bg-[#191F1E] border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-[#2E9472]/40 focus:outline-none disabled:opacity-60"
+          className="chalk-input w-20 px-2 py-1 text-center font-bold tabular-nums bg-white dark:bg-[#191F1E] border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-[#2E9472]/40 focus:outline-none disabled:opacity-60"
         />
       </td>
-      <td className="p-4 text-center">
+      <td className="px-3 py-3 align-middle text-center whitespace-nowrap">
         <span
-          className={`font-bold px-2.5 py-1 text-xs rounded-md ${
+          className={`inline-flex items-center justify-center min-w-[2.25rem] font-bold px-2 py-1 text-xs rounded-md tabular-nums whitespace-nowrap ${
             discrepancy === 0
-              ? 'bg-slate-100 text-slate-700 dark:bg-[#191F1E] dark:text-slate-300'
+              ? 'chalk-badge bg-slate-100 text-slate-700 dark:bg-[#191F1E] dark:text-slate-300'
               : discrepancy < 0
-              ? 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300'
-              : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+              ? 'chalk-badge-danger bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300'
+              : 'chalk-badge-warning bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
           }`}
         >
           {discrepancy > 0 ? `+${discrepancy}` : discrepancy}
         </span>
       </td>
-      <td className="p-4">
+      <td className="px-3 py-3 align-middle whitespace-nowrap">
         {discrepancy === 0 ? (
-          <span className="flex items-center space-x-1 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
-            <CheckCircle className="w-4 h-4" />
+          <span className="chalk-status-success inline-flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-semibold whitespace-nowrap">
+            <CheckCircle className="w-4 h-4 shrink-0" />
             <span>Verified Match</span>
           </span>
         ) : discrepancy < 0 ? (
-          <span className="flex items-center space-x-1 text-xs text-red-600 dark:text-red-400 font-medium">
-            <AlertTriangle className="w-4 h-4" />
+          <span className="chalk-status-danger inline-flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400 font-semibold whitespace-nowrap">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
             <span>Missing ({Math.abs(discrepancy)})</span>
           </span>
         ) : (
-          <span className="flex items-center space-x-1 text-xs text-amber-600 dark:text-amber-400 font-medium">
-            <AlertTriangle className="w-4 h-4" />
-            <span>Misplaced / Extra (+{discrepancy})</span>
+          <span className="chalk-status-warning inline-flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 font-semibold whitespace-nowrap">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span>Extra (+{discrepancy})</span>
           </span>
         )}
       </td>
-      <td className="p-4">
+      <td className="px-3 py-3 align-middle min-w-[170px]">
         <input
           type="text"
           placeholder="Add shelf notes..."
           disabled={isReadOnly}
           value={currentEdit.notes}
           onChange={(e) => onNotesChange(subject.id, e.target.value)}
-          className="w-full px-2.5 py-1 text-xs bg-slate-50 dark:bg-[#191F1E] border border-[#E3E6DE] dark:border-[#27302E] rounded-md focus:outline-none focus:ring-1 focus:ring-[#2E9472]/40 disabled:opacity-60 text-slate-700 dark:text-slate-300"
+          className="chalk-input w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-[#191F1E] border border-[#E3E6DE] dark:border-[#27302E] rounded-md focus:outline-none focus:ring-1 focus:ring-[#2E9472]/40 disabled:opacity-60 text-slate-700 dark:text-slate-300"
         />
       </td>
-      <td className="p-4 text-right">
+      <td className="px-4 py-3 align-middle text-right whitespace-nowrap">
         <button
+          type="button"
           onClick={() => onSaveItem(subject.id)}
           disabled={isReadOnly || savingSubjectId === subject.id}
-          className="px-3 py-1.5 bg-[#1F6F54] dark:bg-[#2E9472] hover:bg-[#195C45] dark:hover:bg-[#267D60] text-white text-xs font-medium rounded-lg transition disabled:opacity-50"
+          className="chalk-btn-primary px-3 py-1.5 bg-[#1F6F54] dark:bg-[#2E9472] hover:bg-[#195C45] dark:hover:bg-[#267D60] text-white text-xs font-semibold rounded-lg transition disabled:opacity-50 whitespace-nowrap cursor-pointer disabled:cursor-not-allowed"
         >
           {savingSubjectId === subject.id ? 'Saving...' : 'Save'}
         </button>
@@ -644,17 +649,17 @@ export default function StockAuditPage() {
         </div>
       ) : (
         /* Inventory Verification Table View */
-        <div className="chalk-card overflow-hidden space-y-4">
+        <div className="chalk-card overflow-hidden">
           {/* Controls Header */}
-          <div className="p-6 border-b border-[#E3E6DE] dark:border-[#27302E] flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Shelf Verification Table</h2>
-              <p className="text-sm text-slate-500 dark:text-slate-400">
+          <div className="p-6 border-b chalk-divider border-[#E3E6DE] dark:border-[#27302E] flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div className="min-w-0">
+              <h2 className="text-lg font-bold chalk-ink text-slate-900 dark:text-slate-100">Shelf Verification Table</h2>
+              <p className="text-sm chalk-muted text-slate-500 dark:text-slate-400">
                 Scan or select subject titles, enter physical actual stock count, and save variance records
               </p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
               <div className="relative w-full sm:w-64">
                 <Search className="w-4 h-4 absolute left-3 top-2.5 text-[#4a5c55]" />
                 <input
@@ -681,17 +686,17 @@ export default function StockAuditPage() {
 
           {/* Verification Table */}
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+            <table className="w-full min-w-[920px] text-left border-collapse">
               <thead>
-                <tr className="bg-slate-50 dark:bg-[#191F1E]/80 text-slate-600 dark:text-slate-400 text-xs font-semibold uppercase">
-                  <th className="p-4">Subject Title</th>
-                  <th className="p-4">Category</th>
-                  <th className="p-4 text-center">System Expected</th>
-                  <th className="p-4 text-center">Actual Physical Count</th>
-                  <th className="p-4 text-center">Variance</th>
-                  <th className="p-4">Status Flag</th>
-                  <th className="p-4">Auditor Notes</th>
-                  <th className="p-4 text-right">Action</th>
+                <tr className="bg-slate-50 dark:bg-[#191F1E]/80 text-slate-600 dark:text-slate-400 text-xs font-semibold uppercase tracking-wide">
+                  <th className="px-4 py-3 whitespace-nowrap">Subject Title</th>
+                  <th className="px-3 py-3 whitespace-nowrap">Category</th>
+                  <th className="px-3 py-3 text-center whitespace-nowrap">Expected</th>
+                  <th className="px-3 py-3 text-center whitespace-nowrap">Actual Count</th>
+                  <th className="px-3 py-3 text-center whitespace-nowrap">Variance</th>
+                  <th className="px-3 py-3 whitespace-nowrap">Status</th>
+                  <th className="px-3 py-3 whitespace-nowrap">Auditor Notes</th>
+                  <th className="px-4 py-3 text-right whitespace-nowrap">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 dark:divide-slate-800 text-sm">

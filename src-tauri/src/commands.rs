@@ -364,6 +364,17 @@ pub fn get_active_checkouts(
 }
 
 #[tauri::command]
+pub fn get_circulation_logs(
+    state: State<'_, AppState>,
+    limit: Option<i64>,
+) -> ApiResponse<Vec<CirculationLog>> {
+    match state.db.get_circulation_logs(limit) {
+        Ok(data) => ApiResponse::ok(data),
+        Err(e) => ApiResponse::err(e),
+    }
+}
+
+#[tauri::command]
 pub fn record_fine_payment(
     state: State<'_, AppState>,
     student_name: String,

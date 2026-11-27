@@ -23,6 +23,7 @@ function AppLayout({ onLock }: { onLock: () => void }) {
 
   const dailyNavItems: { to: string; label: string; glyph: ChalkGlyphName; end?: boolean }[] = [
     { to: '/', label: 'Circulation Desk', glyph: 'desk', end: true },
+    { to: '/log', label: 'Borrow & Return Log', glyph: 'log' },
     { to: '/students', label: 'Students & Staff', glyph: 'students' },
     { to: '/inventory', label: 'Inventory', glyph: 'inventory' },
     { to: '/overdue', label: 'Overdue Books', glyph: 'overdue' },

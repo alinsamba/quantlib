@@ -3,6 +3,7 @@ import type {
   Subject,
   Incident,
   AuditLog,
+  CirculationLog,
   Checkout,
   BorrowingRule,
   ClearanceRecord,
@@ -102,6 +103,8 @@ export const db = {
     }),
   getActiveCheckouts: (subjectId?: number) =>
     invoke<Checkout[]>('get_active_checkouts', { subjectId }),
+  getCirculationLogs: (limit?: number) =>
+    invoke<CirculationLog[]>('get_circulation_logs', limit !== undefined ? { limit } : undefined),
   recordFinePayment: (data: { studentName: string; studentClass?: string; amount: number; paymentMethod: string; notes?: string }) =>
     direct<{ success: boolean; data?: ClearanceRecord; error?: string }>('record_fine_payment', data),
   waiveFine: (data: { studentName: string; studentClass?: string; reason: string; approvedBy?: string }) =>

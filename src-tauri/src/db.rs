@@ -169,12 +169,53 @@ impl Database {
                 lastLanSyncAt TEXT,
                 updatedAt TEXT NOT NULL DEFAULT (datetime('now'))
             );
+
+            CREATE TABLE IF NOT EXISTS CirculationLog (
+                id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                checkoutId INTEGER,
+                subjectId INTEGER,
+                subjectName TEXT NOT NULL,
+                studentName TEXT NOT NULL,
+                studentClass TEXT,
+                action TEXT NOT NULL,
+                condition INTEGER,
+                dueDate TEXT,
+                notes TEXT,
+                loggedAt TEXT NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY (checkoutId) REFERENCES Checkout (id) ON DELETE SET NULL ON UPDATE CASCADE,
+                FOREIGN KEY (subjectId) REFERENCES Subject (id) ON DELETE SET NULL ON UPDATE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_circulationlog_loggedAt ON CirculationLog(loggedAt);
+            CREATE INDEX IF NOT EXISTS idx_circulationlog_action ON CirculationLog(action);
+            CREATE INDEX IF NOT EXISTS idx_circulationlog_student ON CirculationLog(studentName);
             "#,
         )
         .map_err(|e| format!("Failed to create database schema: {}", e))?;
 
         // Safe migration for existing databases lacking Checkout.bookNote
         let _ = conn.execute("ALTER TABLE Checkout ADD COLUMN bookNote TEXT", []);
+
+        // Backfill CirculationLog once from existing Checkout history if empty
+        let circ_log_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM CirculationLog", [], |r| r.get(0))
+            .unwrap_or(0);
+        if circ_log_count == 0 {
+            let _ = conn.execute(
+                r#"INSERT INTO CirculationLog (checkoutId, subjectId, subjectName, studentName, studentClass, action, condition, dueDate, notes, loggedAt)
+                   SELECT c.id, c.subjectId, COALESCE(s.name, 'Unknown Subject'), c.studentName, c.studentClass, 'BORROW', c.conditionOut, c.dueDate, c.bookNote, c.checkoutDate
+                   FROM Checkout c
+                   LEFT JOIN Subject s ON c.subjectId = s.id"#,
+                [],
+            );
+            let _ = conn.execute(
+                r#"INSERT INTO CirculationLog (checkoutId, subjectId, subjectName, studentName, studentClass, action, condition, dueDate, notes, loggedAt)
+                   SELECT c.id, c.subjectId, COALESCE(s.name, 'Unknown Subject'), c.studentName, c.studentClass, 'RETURN', COALESCE(c.conditionIn, c.conditionOut), c.dueDate, c.bookNote, c.returnDate
+                   FROM Checkout c
+                   LEFT JOIN Subject s ON c.subjectId = s.id
+                   WHERE c.status = 'RETURNED' AND c.returnDate IS NOT NULL"#,
+                [],
+            );
+        }
 
         // Initialize default AppConfig if empty
         let count: i64 = conn
@@ -1125,6 +1166,22 @@ impl Database {
             params![subject_id, subject.issued.to_string(), (subject.issued + 1).to_string(), now_str],
         );
 
+        let _ = conn.execute(
+            r#"INSERT INTO CirculationLog (checkoutId, subjectId, subjectName, studentName, studentClass, action, condition, dueDate, notes, loggedAt)
+               VALUES (?, ?, ?, ?, ?, 'BORROW', ?, ?, ?, ?)"#,
+            params![
+                id,
+                subject_id,
+                subject.name,
+                name,
+                student_class,
+                cond_out,
+                calculated_due,
+                cleaned_note,
+                now_str
+            ],
+        );
+
         Ok(Checkout {
             id,
             subject_id,
@@ -1221,6 +1278,11 @@ impl Database {
             .optional()
             .unwrap_or(None);
 
+        let subject_name_for_log = subject
+            .as_ref()
+            .map(|s| s.name.clone())
+            .unwrap_or_else(|| "Unknown Subject".to_string());
+
         if let Some(sub) = subject {
             let total_books = sub.opening_count + sub.recovered - sub.lost - sub.damaged;
             let condition_loss = (existing.condition_out - cond_in) as f64;
@@ -1261,6 +1323,22 @@ impl Database {
                 params![sub.id, sub.issued.to_string(), new_issued.to_string(), now],
             );
         }
+
+        let _ = conn.execute(
+            r#"INSERT INTO CirculationLog (checkoutId, subjectId, subjectName, studentName, studentClass, action, condition, dueDate, notes, loggedAt)
+               VALUES (?, ?, ?, ?, ?, 'RETURN', ?, ?, ?, ?)"#,
+            params![
+                id,
+                existing.subject_id,
+                subject_name_for_log,
+                existing.student_name,
+                existing.student_class,
+                cond_in,
+                existing.due_date,
+                existing.book_note,
+                now
+            ],
+        );
 
         Ok(Checkout {
             id,
@@ -1338,11 +1416,72 @@ impl Database {
         )
         .map_err(|e| e.to_string())?;
 
+        let subject_name: String = conn
+            .query_row(
+                "SELECT name FROM Subject WHERE id = ?",
+                params![existing.subject_id],
+                |r| r.get(0),
+            )
+            .unwrap_or_else(|_| "Unknown Subject".to_string());
+
+        let _ = conn.execute(
+            r#"INSERT INTO CirculationLog (checkoutId, subjectId, subjectName, studentName, studentClass, action, condition, dueDate, notes, loggedAt)
+               VALUES (?, ?, ?, ?, ?, 'RENEW', ?, ?, ?, ?)"#,
+            params![
+                id,
+                existing.subject_id,
+                subject_name,
+                existing.student_name,
+                existing.student_class,
+                existing.condition_out,
+                target_due,
+                existing.book_note,
+                now_str
+            ],
+        );
+
         Ok(Checkout {
             due_date: target_due,
             updated_at: Some(now_str),
             ..existing
         })
+    }
+
+    pub fn get_circulation_logs(&self, limit: Option<i64>) -> Result<Vec<CirculationLog>, String> {
+        let lock = self.conn.lock();
+        let conn = lock.as_ref().ok_or("Database is locked.")?;
+        let max_rows = limit.unwrap_or(1000).clamp(1, 10000);
+        let mut stmt = conn
+            .prepare(
+                r#"SELECT id, checkoutId, subjectId, subjectName, studentName, studentClass, action, condition, dueDate, notes, loggedAt
+                   FROM CirculationLog
+                   ORDER BY loggedAt DESC, id DESC
+                   LIMIT ?"#,
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = stmt
+            .query_map(params![max_rows], |row| {
+                Ok(CirculationLog {
+                    id: row.get(0)?,
+                    checkout_id: row.get(1)?,
+                    subject_id: row.get(2)?,
+                    subject_name: row.get(3)?,
+                    student_name: row.get(4)?,
+                    student_class: row.get(5)?,
+                    action: row.get(6)?,
+                    condition: row.get(7)?,
+                    due_date: row.get(8)?,
+                    notes: row.get(9)?,
+                    logged_at: row.get(10)?,
+                })
+            })
+            .map_err(|e| e.to_string())?;
+
+        let mut logs = Vec::new();
+        for log in rows.flatten() {
+            logs.push(log);
+        }
+        Ok(logs)
     }
 
     pub fn get_active_checkouts(&self, subject_id: Option<i64>) -> Result<Vec<Checkout>, String> {

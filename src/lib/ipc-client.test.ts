@@ -170,4 +170,30 @@ describe('Tauri IPC Client (db)', () => {
     })
     expect(restoreRes.success).toBe(true)
   })
+
+  it('should fetch circulation logs via get_circulation_logs', async () => {
+    const mockLogs = [
+      {
+        id: 1,
+        checkoutId: 42,
+        subjectId: 1,
+        subjectName: 'Physics S.4',
+        studentName: 'John Doe',
+        studentClass: 'S.4A',
+        action: 'BORROW',
+        condition: 3,
+        dueDate: '2026-09-01T00:00:00Z',
+        notes: null,
+        loggedAt: '2026-08-18T10:00:00Z'
+      }
+    ]
+    vi.mocked(invoke).mockResolvedValueOnce({
+      success: true,
+      data: mockLogs
+    })
+
+    const logs = await db.getCirculationLogs()
+    expect(invoke).toHaveBeenCalledWith('get_circulation_logs', undefined)
+    expect(logs).toEqual(mockLogs)
+  })
 })

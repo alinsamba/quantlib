@@ -59,6 +59,22 @@ export interface AuditLog {
   changedAt: Date;
 }
 
+export type CirculationLogAction = 'BORROW' | 'RETURN' | 'RENEW';
+
+export interface CirculationLog {
+  id: number;
+  checkoutId: number | null;
+  subjectId: number | null;
+  subjectName: string;
+  studentName: string;
+  studentClass: string | null;
+  action: CirculationLogAction | string;
+  condition: number | null;
+  dueDate: string | null;
+  notes: string | null;
+  loggedAt: string;
+}
+
 export interface Checkout {
   id: number;
   subjectId: number;

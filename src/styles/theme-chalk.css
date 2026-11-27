@@ -315,6 +315,41 @@
   background-color: #eee4cf !important;
 }
 
+/* Table Badges & Semantic Status Helpers */
+[data-theme="chalk"] .chalk-badge {
+  background-color: #e9dcc0 !important;
+  color: #2b3a35 !important;
+  border: 1px solid #b9ad95 !important;
+}
+
+[data-theme="chalk"] .chalk-badge-danger {
+  background-color: rgba(168, 44, 29, 0.12) !important;
+  color: #a6291b !important;
+  border: 1px solid rgba(168, 44, 29, 0.4) !important;
+}
+
+[data-theme="chalk"] .chalk-badge-warning {
+  background-color: rgba(180, 105, 14, 0.14) !important;
+  color: #7c4d08 !important;
+  border: 1px solid rgba(180, 105, 14, 0.4) !important;
+}
+
+[data-theme="chalk"] .chalk-status-success {
+  color: #1d5c43 !important;
+}
+
+[data-theme="chalk"] .chalk-status-danger {
+  color: #a6291b !important;
+}
+
+[data-theme="chalk"] .chalk-status-warning {
+  color: #7c4d08 !important;
+}
+
+[data-theme="chalk"] .chalk-divider {
+  border-color: #c8bca3 !important;
+}
+
 /* Secondary & Muted Text Helpers */
 [data-theme="chalk"] .chalk-ink {
   color: #2b3a35 !important;

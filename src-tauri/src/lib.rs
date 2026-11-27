@@ -60,6 +60,7 @@ pub fn run() {
             commands::return_checkout,
             commands::renew_checkout,
             commands::get_active_checkouts,
+            commands::get_circulation_logs,
             commands::record_fine_payment,
             commands::waive_fine,
             commands::get_overdue_checkouts,
@@ -229,6 +230,12 @@ mod tests {
         assert_eq!(math_after.issued, 0);
         assert_eq!(math_after.available, Some(50));
         assert!(math_after.average_condition < 3.0);
+
+        // Verify circulation log recorded BORROW, RENEW, and RETURN
+        let circ_logs = db.get_circulation_logs(None).expect("Failed to get circulation logs");
+        assert!(circ_logs.iter().any(|l| l.checkout_id == Some(checkout.id) && l.action == "BORROW"));
+        assert!(circ_logs.iter().any(|l| l.checkout_id == Some(checkout.id) && l.action == "RENEW"));
+        assert!(circ_logs.iter().any(|l| l.checkout_id == Some(checkout.id) && l.action == "RETURN"));
 
         // 4. Incident tracking, resolution, and audit log
         let incident = db

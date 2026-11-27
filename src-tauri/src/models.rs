@@ -130,6 +130,22 @@ pub struct AuditLog {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CirculationLog {
+    pub id: i64,
+    pub checkout_id: Option<i64>,
+    pub subject_id: Option<i64>,
+    pub subject_name: String,
+    pub student_name: String,
+    pub student_class: Option<String>,
+    pub action: String,
+    pub condition: Option<i64>,
+    pub due_date: Option<String>,
+    pub notes: Option<String>,
+    pub logged_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Checkout {
     pub id: i64,
     pub subject_id: i64,
