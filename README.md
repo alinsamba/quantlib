@@ -1,162 +1,266 @@
-# QuantLib v2.0
+<div align="center">
 
-**Version:** `2.0.0`
+<img src="public/quantlib.svg" alt="QuantLib Logo" width="80" />
 
-**QuantLib** is an offline-first School Library Inventory & Analytics desktop application built with Tauri v2, React, TypeScript, and Rust. It modernizes spreadsheet-based book tracking into a secure, encrypted desktop system tailored for school librarians, featuring circulation management, student/staff directories, incident logging, stock audits, clearance tracking, and analytics.
+# QuantLib
 
-![QuantLib v2.0 Circulation Desk](docs/screenshot.png)
+**School Library Inventory & Analytics System**
 
----
+[![Version](https://img.shields.io/badge/version-2.0.0-4CAF50?style=for-the-badge&logo=git&logoColor=white)](https://github.com/alinsamba/quantlib/releases)
+[![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)](LICENSE)
+[![Tauri](https://img.shields.io/badge/Tauri-v2-FFC131?style=for-the-badge&logo=tauri&logoColor=white)](https://tauri.app)
+[![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev)
+[![Rust](https://img.shields.io/badge/Rust-stable-CE422B?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org)
+[![CI](https://img.shields.io/github/actions/workflow/status/alinsamba/quantlib/node.js.yml?branch=main&style=for-the-badge&label=CI&logo=github)](https://github.com/alinsamba/quantlib/actions)
 
-## Key Features
+<br/>
 
-- **Zero-Trust Encrypted Storage**: Offline SQLite database encrypted at rest using AES-256-GCM with PBKDF2-HMAC-SHA256 key derivation (600,000 iterations), emergency recovery key support, and secure memory/temp-file wipe on shutdown.
-- **Circulation Desk & Borrow/Return Log**: Issue, renew, and return books with configurable borrowing rules, custom due dates, condition tracking, and a dedicated Borrow & Return Log with CSV export.
-- **Students & Staff Directory**: Manage borrower records, track active loans, and perform end-of-term/year student promotions.
-- **Inventory & Stock Tracking**: Real-time stock calculation per subject (`Available = Opening + Recovered - Issued - Damaged - Lost`) with Excel (`.xlsx`) and CSV import/export.
-- **Overdue Management & Clearance**: Monitor overdue books, record or waive fines, check borrower clearance status, and generate clearance slips.
-- **Incident Logging & Stock Audits**: Log damaged, lost, or recovered books with automated counter updates, run physical stock audits, and maintain an immutable audit trail.
-- **Dashboard & Analytics**: Interactive Recharts visualizations for stock distribution, book condition health, depreciation, circulation insights, and low-stock warnings.
-- **Backups, LAN Sync & School Branding**: Automated/manual encrypted database backups, full CSV database export, peer-to-peer LAN sync over TCP, custom school branding, and the **Chalk & Ledger** theme with a custom frameless window.
+> A beautiful, encrypted, offline-first desktop app that replaces spreadsheet chaos with a purpose-built library management system — built for school librarians.
 
----
+<br/>
 
-## Tech Stack
+![QuantLib v2.0 — Circulation Desk](docs/screenshot.png)
 
-- **Desktop Framework**: [Tauri v2](https://tauri.app/) (Rust Core + IPC Command System)
-- **UI Framework**: [React 19](https://react.dev/) + [TypeScript](https://www.typescriptlang.org/) + [Vite 8](https://vitejs.dev/)
-- **Styling**: [Tailwind CSS v4](https://tailwindcss.com/) + [Lucide React](https://lucide.dev/)
-- **Charts & Spreadsheets**: [Recharts](https://recharts.org/) + [SheetJS (`xlsx`)](https://sheetjs.com/)
-- **Database**: [SQLite](https://www.sqlite.org/) via [`rusqlite`](https://github.com/rusqlite/rusqlite) (bundled)
-- **Security & Crypto**: Pure Rust cryptography (`aes-gcm`, `pbkdf2`, `hmac`, `sha2`, `rand`)
-- **LAN Sync**: Pure Rust TCP server/client (`std::net`) with passcode header authentication
-- **Testing & Linting**: [Vitest](https://vitest.dev/) (frontend), `cargo test` (Rust backend), and [Oxlint](https://oxc.rs/)
+<br/>
+
+[📦 Download Installer](#-download--install) · [🚀 Getting Started](#-getting-started) · [✨ Features](#-features) · [🔐 Security](#-security--encryption-architecture) · [🛠️ Tech Stack](#%EF%B8%8F-tech-stack)
+
+</div>
 
 ---
 
-## Security & Encryption Architecture
+## 📦 Download & Install
 
-QuantLib operates on an offline vault security model:
-1. **Master Key Derivation**: User passwords derive cryptographic keys using **PBKDF2-HMAC-SHA256** with **600,000 iterations** and a 16-byte random salt.
-2. **Dual-Key Wrapping**: A 256-bit random Master Key is encrypted using **AES-256-GCM** under both the Master Password and an emergency **Recovery Key**.
-3. **Database Encryption**: The SQLite database file is encrypted at rest using AES-256-GCM with 12-byte distinct IVs and 16-byte authentication tags.
-4. **Secure In-Memory Session**: During execution, the decrypted working database is maintained in local application data storage and re-encrypted on write.
-5. **Secure Memory Wipe**: Upon locking or closing the app, the temporary database file is overwritten with zero-bytes (`fsync`) and deleted, and key buffers in memory are wiped.
+The latest pre-built installers are published on the [**GitHub Releases**](https://github.com/alinsamba/quantlib/releases) page. Pick the installer for your platform:
+
+| Platform | Installer | Notes |
+| :--- | :--- | :--- |
+| 🪟 **Windows** | `.msi` or `-setup.exe` | Windows 10 / 11 (x64) |
+| 🐧 **Linux** | `.deb`, `.rpm`, or `.AppImage` | Ubuntu/Fedora/Any distro |
+| 🍎 **macOS** | Universal `.dmg` | Apple Silicon + Intel |
 
 ---
 
-## Project Structure
+## ✨ Features
+
+### 📚 Circulation Desk
+The command centre for daily library operations. Issue books to students or staff in seconds with the **Quick Issue** form, track due dates with one-click presets (Today / 3d / 7d / 14d / 30d), monitor overdue notices at a glance, and return or renew books from the **Quick Return & Active Loans** panel.
+
+### 📋 Borrow & Return Log
+A full timestamped history of every borrow, return, and renewal action across all subjects. Filter by student, class, or date range, and export to CSV for term-end reporting.
+
+### 👩‍🎓 Students & Staff Directory
+Manage your complete roster of borrowers — students and teachers. Add, edit, or remove records; view each person's active loans and borrowing history; and run **end-of-term student promotions** in one click (S1 → S2, S2 → S3, etc.).
+
+### 📦 Inventory Management
+Track your full subject-level book stock with the formula:
+
+$$\text{Available} = \text{Opening} + \text{Recovered} - \text{Issued} - \text{Damaged} - \text{Lost}$$
+
+Import bulk stock from Excel (`.xlsx`) or CSV, export reports, and see real-time availability per subject.
+
+### ⚠️ Overdue Books
+A dedicated view of every overdue checkout with the number of days past due, borrower details, and accumulated fine amounts. Record fine payments, waive fines, or bulk-action overdue returns with condition tracking.
+
+### 🏅 Clearance
+Check if a student or staff member is **clear to leave** (no active loans, no outstanding fines). Generate and print an official **Clearance Slip** per borrower with school branding, stamp area, and date.
+
+### 📊 Dashboard & Analytics
+- **Dashboard**: Summary cards for active loans, overdue count, low-stock subjects, and pending incidents, plus an interactive stock distribution pie chart.
+- **Analytics**: Deeper visualisations — book condition health trends, depreciation estimates per checkout cycle, circulation frequency, and subject popularity.
+
+### 🚨 Incident Log
+Report and track damaged, lost, or recovered books. Each incident automatically adjusts the relevant stock counter and appends an entry to the audit trail.
+
+### 🔎 Stock Audit
+Run a **physical reconciliation audit** — scan or enter physical counts shelf-by-shelf, compare against system stock, and complete the audit to lock in discrepancies. All completed audits are stored and browsable.
+
+### ⚙️ Settings
+Customise school branding (name, motto, logo), configure **borrowing rules** per grade/role (maximum books, loan duration, fine per day), manage encrypted **database backups** (manual or automated schedule), set up **LAN sync** for peer-to-peer data sharing across library computers, and export the full database as CSV.
+
+---
+
+## 🔐 Security & Encryption Architecture
+
+QuantLib operates on an **offline vault** security model — data never leaves your device unless you explicitly export it.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      USER PASSWORD                          │
+│                           │                                 │
+│              PBKDF2-HMAC-SHA256 (600,000 iters)             │
+│                           │                                 │
+│                    Derived Key (256-bit)                     │
+│                           │                                 │
+│         ┌─────────────────┴──────────────────┐              │
+│         ▼                                    ▼              │
+│   AES-256-GCM encrypts             AES-256-GCM encrypts     │
+│   Master Key                       Master Key               │
+│   (password wrap)                  (recovery key wrap)      │
+│         └─────────────────┬──────────────────┘              │
+│                           ▼                                 │
+│               Encrypted SQLite database                      │
+│               (AES-256-GCM, 12-byte IVs)                    │
+│                           │                                 │
+│         Decrypted to temp file only during session          │
+│         Zero-wiped + deleted on lock/close (fsync)          │
+└─────────────────────────────────────────────────────────────┘
+```
+
+| Layer | Detail |
+| :--- | :--- |
+| 🔑 **Key Derivation** | PBKDF2-HMAC-SHA256, 600,000 iterations, 16-byte random salt |
+| 🔒 **Encryption** | AES-256-GCM with 12-byte distinct IVs and 16-byte authentication tags |
+| 🛡️ **Dual Key Wrapping** | Master Key wrapped under both password AND a 16-char emergency Recovery Key |
+| 🧹 **Secure Wipe** | Temp DB overwritten with zero-bytes (`fsync`) and deleted on every lock/close |
+| 📴 **Offline First** | Zero network calls; LAN sync is opt-in and passcode-protected |
+
+---
+
+## 🛠️ Tech Stack
+
+<div align="center">
+
+| Layer | Technology |
+| :--- | :--- |
+| 🖥️ Desktop Shell | [Tauri v2](https://tauri.app/) — Rust core + IPC command system + frameless window |
+| ⚛️ UI | [React 19](https://react.dev/) + [TypeScript](https://www.typescriptlang.org/) + [Vite 8](https://vitejs.dev/) |
+| 🎨 Styling | [Tailwind CSS v4](https://tailwindcss.com/) · [Lucide React](https://lucide.dev/) · Custom *Chalk & Ledger* theme |
+| 📈 Charts | [Recharts](https://recharts.org/) |
+| 📊 Spreadsheets | [SheetJS (`xlsx`)](https://sheetjs.com/) — Excel import/export |
+| 🗄️ Database | [SQLite](https://www.sqlite.org/) via [`rusqlite`](https://github.com/rusqlite/rusqlite) (bundled, WAL mode) |
+| 🔐 Crypto | Pure Rust — `aes-gcm` · `pbkdf2` · `hmac` · `sha2` · `rand` |
+| 🌐 LAN Sync | Pure Rust TCP (`std::net`) with `X-QuantLib-Passcode` header auth |
+| 🧪 Testing | [Vitest](https://vitest.dev/) (frontend) · `cargo test` (Rust) · [Oxlint](https://oxc.rs/) |
+| 📦 Packaging | [Tauri CLI](https://tauri.app/reference/cli/) — `.msi`, `.exe`, `.deb`, `.rpm`, `.AppImage`, `.dmg` |
+
+</div>
+
+---
+
+## 📁 Project Structure
 
 ```text
 quantlib/
-├── src-tauri/                  # Tauri v2 Rust Core
+├── .github/workflows/
+│   ├── node.js.yml          # CI — lint, test, build (Node 20 & 22 + Rust)
+│   └── release.yml          # Release — cross-platform Tauri installers
+├── src-tauri/               # Tauri v2 Rust Core
 │   ├── src/
-│   │   ├── main.rs             # Application binary entry point
-│   │   ├── lib.rs              # Tauri builder, state setup & command registration
-│   │   ├── commands.rs         # Tauri IPC command handlers
-│   │   ├── db.rs               # SQLite schema, queries & CRUD logic
-│   │   ├── crypto.rs           # AES-256-GCM vault encryption & PBKDF2 manager
-│   │   ├── models.rs           # Rust domain structs & Serde models
-│   │   └── services.rs         # Analytics, backup scheduler & LAN sync services
-│   ├── Cargo.toml              # Rust crate manifest & dependencies (v2.0.0)
-│   └── tauri.conf.json         # Tauri application configuration (v2.0.0)
+│   │   ├── main.rs          # Binary entry point
+│   │   ├── lib.rs           # Tauri builder, state & command registration
+│   │   ├── commands.rs      # Tauri IPC command handlers (~50 commands)
+│   │   ├── db.rs            # SQLite schema, queries & CRUD
+│   │   ├── crypto.rs        # AES-256-GCM vault & PBKDF2 manager
+│   │   ├── models.rs        # Rust domain structs & Serde models
+│   │   └── services.rs      # Backup scheduler & LAN sync TCP server
+│   ├── Cargo.toml           # Rust manifest (v2.0.0)
+│   └── tauri.conf.json      # Tauri app config (v2.0.0)
 ├── src/
-│   ├── components/             # Reusable UI components (TitleBar, Modals, Cards)
-│   ├── hooks/                  # React context providers & hooks (Theme, Toast, useAsync)
-│   ├── lib/                    # Utilities, types, export helpers & Tauri IPC client
-│   ├── pages/                  # Views (CirculationDesk, CirculationLog, Students,
-│   │                           # Inventory, Overdue, Clearance, Dashboard,
-│   │                           # Incidents, StockAudit, Analytics, Settings, Login)
-│   ├── styles/                 # Chalk & Ledger theme styles (`theme-chalk.css`)
-│   ├── App.tsx                 # Main layout & navigation shell
-│   ├── routes.tsx              # Lazy-loaded route exports
-│   └── index.css               # Tailwind CSS entry file
-├── package.json                # Node/Bun manifest & scripts (v2.0.0)
-└── vite.config.ts              # Vite frontend configuration
+│   ├── components/          # TitleBar, Modals, Cards, Buttons, Forms
+│   ├── hooks/               # ThemeContext, ToastContext, useAsync
+│   ├── lib/                 # ipc-client.ts, types.ts, utils.ts, exportUtils.ts
+│   ├── pages/               # CirculationDesk, CirculationLog, Students,
+│   │                        # Inventory, Overdue, Clearance, Dashboard,
+│   │                        # Incidents, StockAudit, Analytics, Settings, Login
+│   ├── styles/              # theme-chalk.css (Chalk & Ledger theme)
+│   ├── App.tsx              # Layout shell & auth gate
+│   └── routes.tsx           # Lazy-loaded page exports
+├── docs/
+│   └── screenshot.png       # App screenshot (Circulation Desk)
+├── public/                  # Static assets & icons
+├── package.json             # Node manifest & scripts (v2.0.0)
+└── LICENSE                  # MIT License
 ```
 
 ---
 
-## Getting Started
+## 🚀 Getting Started
 
 ### Prerequisites
-- **Node.js** (v18+) or **Bun**
-- **Rust** toolchain (`rustc` & `cargo`) and Tauri v2 system prerequisites
+
+| Requirement | Version |
+| :--- | :--- |
+| [Bun](https://bun.sh) | v1.0+ (or Node.js v18+) |
+| [Rust](https://rustup.rs/) | stable (via `rustup`) |
+| Tauri v2 system deps | [See Tauri prerequisites](https://tauri.app/start/prerequisites/) |
 
 ### Installation
 
-1. Navigate to the repository directory:
-   ```bash
-   cd quantlib
-   ```
-2. Install dependencies:
-   ```bash
-   npm install
-   # or: bun install
-   ```
+```bash
+# 1 — Clone the repository
+git clone https://github.com/alinsamba/quantlib.git
+cd quantlib
+
+# 2 — Install frontend dependencies
+bun install          # or: npm install
+
+# 3 — Run in development mode (Vite + Tauri desktop)
+bun run dev          # or: npm run dev
+```
+
+> **First launch**: QuantLib will prompt you to create a **Master Password** and show you a one-time **Recovery Key** — save it somewhere safe.
 
 ---
 
-## Development & Building
+## 💻 Development
 
-### Running the App Locally
+### Run the Vite dev server standalone (browser preview)
 
-Start the Tauri desktop application in development mode (automatically starts the Vite frontend dev server):
 ```bash
-npm run dev
-# or: bun run dev
+bun run dev:vite
 ```
 
-To run the Vite web dev server independently (without the Tauri desktop shell):
-```bash
-npm run dev:vite
-```
+### Run all tests
 
-### Running Tests & Linting
-
-Run frontend unit tests with Vitest:
 ```bash
-npm run test
-```
+# Frontend (Vitest)
+bun run test
 
-Run Rust backend tests:
-```bash
+# Rust backend
 cargo test --manifest-path src-tauri/Cargo.toml
+
+# Lint
+bun run lint
 ```
 
-Run Oxlint:
+### Package for production
+
 ```bash
-npm run lint
+bun run tauri:build
 ```
 
-### Packaging for Production
-
-Build the production desktop binary and installers:
-```bash
-npm run tauri:build
-```
-The packaged app installers and standalone executables are output to `src-tauri/target/release/`.
+Installers output to `src-tauri/target/release/bundle/`.
 
 ---
 
-## Available Scripts
+## 📜 Available Scripts
 
 | Command | Description |
 | :--- | :--- |
-| `npm run dev` | Runs Tauri desktop app in development mode (`tauri dev`) |
-| `npm run dev:vite` | Starts the Vite frontend development server standalone |
-| `npm run build` | Type-checks with TypeScript and builds Vite frontend distribution |
-| `npm run tauri:dev` | Alias for `tauri dev` |
-| `npm run tauri:build` | Compiles and packages the production Tauri desktop app |
-| `npm run test` | Runs frontend unit tests using Vitest |
-| `npm run lint` | Runs Oxlint to check frontend code quality |
-| `npm run preview` | Previews the built Vite frontend |
-| `npm run generate-icon` | Generates application PNG icon |
+| `bun run dev` | Runs full Tauri desktop app in dev mode |
+| `bun run dev:vite` | Starts the Vite frontend server standalone |
+| `bun run build` | Type-checks & builds Vite frontend distribution |
+| `bun run tauri:build` | Compiles & packages production Tauri app |
+| `bun run test` | Runs frontend unit tests (Vitest) |
+| `bun run lint` | Runs Oxlint on all frontend source files |
+| `bun run preview` | Previews the built Vite frontend |
+| `bun run generate-icon` | Regenerates the app PNG icon |
 
 ---
 
-## License & Credits
+## 📄 License & Credits
 
 Licensed under the [MIT License](LICENSE).
 
-Developed for **Mentor High School Library Book Tracking**. Replaces legacy Excel-based management workflows.
+Developed for **Mentor High School Library Book Tracking**, Uganda. Replaces legacy Excel-based management workflows.
+
+---
+
+<div align="center">
+
+Made with ❤️ for school librarians
+
+⭐ Star this repo if it helps your school!
+
+</div>
