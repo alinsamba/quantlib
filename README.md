@@ -12,10 +12,14 @@
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev)
 [![Rust](https://img.shields.io/badge/Rust-stable-CE422B?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org)
 [![CI](https://img.shields.io/github/actions/workflow/status/alinsamba/quantlib/node.js.yml?branch=main&style=for-the-badge&label=CI&logo=github)](https://github.com/alinsamba/quantlib/actions)
+[![Status](https://img.shields.io/badge/status-BETA-orange?style=for-the-badge&logo=statuspage&logoColor=white)](#)
 
 <br/>
 
 > A beautiful, encrypted, offline-first desktop app that replaces spreadsheet chaos with a purpose-built library management system — built for school librarians.
+
+> [!WARNING]
+> **QuantLib v2.0 is currently in beta.** Features are mostly stable but you may encounter bugs or rough edges. Please [open an issue](https://github.com/alinsamba/quantlib/issues) if you run into anything unexpected. Back up your database regularly using the built-in backup feature.
 
 <br/>
 
