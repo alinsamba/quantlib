@@ -31,7 +31,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+    - name: Install Linux dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          libgtk-3-dev \
+          libwebkit2gtk-4.1-dev \
+          librsvg2-dev \
+          libayatana-appindicator3-dev \
+          libssl-dev \
+          patchelf \
+          pkg-config
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@stable
+    - name: Rust cache
+      uses: swatinem/rust-cache@v2
+      with:
+        workspaces: src-tauri
+    - name: Ensure frontend dist directory exists
+      run: mkdir -p dist
     - name: Run Cargo Tests
       run: cargo test --manifest-path src-tauri/Cargo.toml
