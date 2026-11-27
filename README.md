@@ -4,6 +4,8 @@
 
 **QuantLib** is an offline-first School Library Inventory & Analytics desktop application built with Tauri v2, React, TypeScript, and Rust. It modernizes spreadsheet-based book tracking into a secure, encrypted desktop system tailored for school librarians, featuring circulation management, student/staff directories, incident logging, stock audits, clearance tracking, and analytics.
 
+![QuantLib v2.0 Circulation Desk](docs/screenshot.png)
+
 ---
 
 ## Key Features
@@ -154,5 +156,7 @@ The packaged app installers and standalone executables are output to `src-tauri/
 ---
 
 ## License & Credits
+
+Licensed under the [MIT License](LICENSE).
 
 Developed for **Mentor High School Library Book Tracking**. Replaces legacy Excel-based management workflows.

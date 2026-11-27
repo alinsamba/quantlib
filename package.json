@@ -2,6 +2,7 @@
   "name": "quantlib",
   "description": "Library Management Tracker",
   "author": "Mentor High School",
+  "license": "MIT",
   "private": true,
   "version": "2.0.0",
   "type": "module",

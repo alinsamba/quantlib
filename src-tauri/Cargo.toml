@@ -3,6 +3,7 @@ name = "quantlib"
 version = "2.0.0"
 description = "QuantLib - School Library Inventory & Analytics"
 authors = ["Mentor High School"]
+license = "MIT"
 edition = "2021"
 
 [lib]
