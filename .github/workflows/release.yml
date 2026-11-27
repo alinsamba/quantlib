@@ -71,8 +71,19 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: v__VERSION__
-          releaseName: QuantLib v__VERSION__
-          releaseBody: 'See the assets below to download and install QuantLib for Windows, Linux, or macOS.'
+          releaseName: "QuantLib v__VERSION__ (Beta)"
+          releaseBody: |
+            > ⚠️ **This is a beta release.** Features are mostly stable but you may encounter bugs or rough edges. Please [open an issue](https://github.com/alinsamba/quantlib/issues) if anything feels off, and back up your database regularly using the built-in backup feature.
+
+            ---
+
+            See the assets below to download and install QuantLib for your platform:
+
+            | Platform | File(s) |
+            | :--- | :--- |
+            | 🪟 Windows | `.msi` or `-setup.exe` |
+            | 🐧 Linux | `.deb`, `.rpm`, or `.AppImage` |
+            | 🍎 macOS | Universal `.dmg` (Apple Silicon + Intel) |
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
