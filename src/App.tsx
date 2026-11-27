@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 
 import { ThemeProvider, useTheme } from './hooks/ThemeContext'
+import { ToastProvider } from './hooks/ToastContext'
 import Login from './pages/Login'
 import { db } from './lib/ipc-client'
 
@@ -173,13 +174,7 @@ function AppLayout({ onLock }: { onLock: () => void }) {
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col overflow-hidden">
-        {/* Draggable Top Bar for frameless window */}
-        <div className="h-8 bg-white dark:bg-slate-950 border-b border-slate-200/50 dark:border-slate-800/50 [webkit-app-region:drag] w-full flex-shrink-0 transition-colors duration-200 print:hidden flex items-center justify-between px-4">
-          <div className="text-[11px] font-semibold text-slate-400 dark:text-slate-600 uppercase tracking-widest pointer-events-none select-none">
-            QuantLib &bull; School Library Tracker
-          </div>
-        </div>
-        <div className="flex-1 overflow-auto p-8 pt-6">
+        <div className="flex-1 overflow-auto p-6 sm:p-8">
           <Outlet />
         </div>
       </main>
@@ -244,14 +239,17 @@ function App() {
   if (!isUnlocked) {
     return (
       <ThemeProvider>
-        <div className="absolute top-0 left-0 w-full h-8 [webkit-app-region:drag] z-50"></div>
-        <Login onUnlock={handleUnlock} />
+        <ToastProvider>
+          <Login onUnlock={handleUnlock} />
+        </ToastProvider>
       </ThemeProvider>
     )
   }
   return (
     <ThemeProvider>
-      <AppLayout onLock={handleLock} />
+      <ToastProvider>
+        <AppLayout onLock={handleLock} />
+      </ToastProvider>
     </ThemeProvider>
   )
 }

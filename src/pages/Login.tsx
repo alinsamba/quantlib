@@ -1,11 +1,13 @@
 import { useState, useEffect, type FormEvent } from 'react'
 import { db } from '../lib/ipc-client'
-import { Lock, ShieldCheck, Key } from 'lucide-react'
+import { Lock, ShieldCheck, Key, Copy, Check, Eye, EyeOff } from 'lucide-react'
 import { validateMasterPassword } from '../lib/utils'
 
 export default function Login({ onUnlock }: { onUnlock: () => void }) {
   const [status, setStatus] = useState<'LOADING' | 'SETUP' | 'LOCKED'>('LOADING')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [copiedKey, setCopiedKey] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [recoveryKey, setRecoveryKey] = useState<string | null>(null)
@@ -63,6 +65,17 @@ export default function Login({ onUnlock }: { onUnlock: () => void }) {
     }
   }
 
+  const handleCopyRecoveryKey = async () => {
+    if (!recoveryKey) return
+    try {
+      await navigator.clipboard.writeText(recoveryKey)
+      setCopiedKey(true)
+      window.setTimeout(() => setCopiedKey(false), 2500)
+    } catch {
+      // Clipboard API may be unavailable in restricted contexts
+    }
+  }
+
   if (status === 'LOADING') return null
 
   if (recoveryKey) {
@@ -73,11 +86,20 @@ export default function Login({ onUnlock }: { onUnlock: () => void }) {
             <ShieldCheck size={32} />
           </div>
           <h2 className="text-2xl font-bold text-slate-800 dark:text-white mb-2">Setup Complete</h2>
-          <p className="text-slate-500 dark:text-slate-400 mb-8">Your database is now encrypted. Please save this recovery key in a safe place. You can use it if you forget your password.</p>
+          <p className="text-slate-500 dark:text-slate-400 mb-6">Your database is now encrypted. Please save this recovery key in a safe place. You can use it if you forget your password.</p>
           
-          <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 mb-8">
-            <code className="text-xl font-mono font-bold text-slate-800 dark:text-white tracking-widest">{recoveryKey}</code>
+          <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 mb-4">
+            <code className="text-base sm:text-lg font-mono font-bold text-slate-800 dark:text-white tracking-wider break-all select-all">{recoveryKey}</code>
           </div>
+
+          <button
+            type="button"
+            onClick={handleCopyRecoveryKey}
+            className="w-full mb-3 flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors text-sm font-medium"
+          >
+            {copiedKey ? <Check size={16} className="text-emerald-500" /> : <Copy size={16} />}
+            <span>{copiedKey ? 'Copied to Clipboard!' : 'Copy Recovery Key'}</span>
+          </button>
 
           <button 
             onClick={onUnlock}
@@ -98,10 +120,10 @@ export default function Login({ onUnlock }: { onUnlock: () => void }) {
           <h1 className="text-2xl font-bold text-slate-800 dark:text-white">
             {status === 'SETUP' ? 'Create Master Password' : (isRecoveryMode ? 'Enter Recovery Key' : 'Unlock QuantLib')}
           </h1>
-          <p className="text-slate-500 dark:text-slate-400 mt-2">
+          <p className="text-slate-500 dark:text-slate-400 mt-2 text-sm">
             {status === 'SETUP' 
-              ? 'This password will be used to encrypt your database.' 
-              : (isRecoveryMode ? 'Use the 16-character key provided during setup.' : 'Enter your master password to access your data.')}
+              ? 'This password will be used to encrypt your database. Use 12+ characters with upper, lower, number, and symbol.' 
+              : (isRecoveryMode ? 'Enter the recovery key provided during setup (XXXX-XXXX-...).' : 'Enter your master password to access your data.')}
           </p>
         </div>
 
@@ -112,19 +134,29 @@ export default function Login({ onUnlock }: { onUnlock: () => void }) {
                 {isRecoveryMode ? <Key className="text-slate-400" size={20} /> : <Lock className="text-slate-400" size={20} />}
               </div>
               <input
-                type={isRecoveryMode ? 'text' : 'password'}
+                type={isRecoveryMode || showPassword ? 'text' : 'password'}
                 required
+                placeholder={isRecoveryMode ? 'XXXX-XXXX-XXXX-...' : 'Enter master password'}
                 minLength={status === 'SETUP' && !isRecoveryMode ? 12 : undefined}
-                pattern={status === 'SETUP' && !isRecoveryMode ? '(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[!@#$%^&*()_+\\-=\\[\\]{};\':"\\\\|,.<>\\/?]).{12,}' : undefined}
                 title={status === 'SETUP' && !isRecoveryMode ? 'Use at least 12 characters with uppercase, lowercase, a number, and a special character.' : undefined}
-                className="w-full pl-11 pr-4 py-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 dark:text-white transition-all text-lg tracking-wider"
+                className="w-full pl-11 pr-11 py-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 dark:text-white transition-all text-base tracking-wide"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
               />
+              {!isRecoveryMode && (
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(v => !v)}
+                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              )}
             </div>
           </div>
 
-          {error && <div className="text-red-500 text-sm text-center font-medium bg-red-50 dark:bg-red-900/20 py-2 rounded-lg">{error}</div>}
+          {error && <div className="text-red-500 text-sm text-center font-medium bg-red-50 dark:bg-red-900/20 py-2 px-3 rounded-lg">{error}</div>}
 
           <button
             type="submit"

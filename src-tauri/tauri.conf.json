@@ -6,7 +6,7 @@
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
-    "beforeDevCommand": "bun run dev:vite",
+    "beforeDevCommand": "npm run dev:vite",
     "beforeBuildCommand": "tsc -b && vite build"
   },
   "app": {

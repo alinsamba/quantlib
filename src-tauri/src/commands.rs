@@ -595,7 +595,13 @@ pub fn trigger_auto_backup(
     };
 
     let target_dir = custom_path
-        .or(cfg.auto_backup_path)
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .or_else(|| {
+            cfg.auto_backup_path
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+        })
         .map(PathBuf::from)
         .unwrap_or_else(|| {
             dirs::document_dir()
@@ -633,6 +639,8 @@ pub fn list_backups(state: State<'_, AppState>) -> ApiResponse<Vec<BackupFileRec
 
     let target_dir = cfg
         .auto_backup_path
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
         .map(PathBuf::from)
         .unwrap_or_else(|| {
             dirs::document_dir()

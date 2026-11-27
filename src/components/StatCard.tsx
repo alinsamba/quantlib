@@ -72,12 +72,12 @@ export function StatCard({
       } ${className}`}
     >
       {/* Top Row: 40x40 Icon Backdrop & Badge */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-transform ${isClickable ? 'group-hover:scale-105' : ''} ${currentVariant.iconBg}`}>
           {icon}
         </div>
         {badgeText && (
-          <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wider ${currentVariant.badge}`}>
+          <span className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full uppercase tracking-wider whitespace-nowrap ${currentVariant.badge}`}>
             {badgeText}
           </span>
         )}
@@ -89,19 +89,19 @@ export function StatCard({
           {value}
         </div>
         {/* Bottom: Sub-label (12px, uppercase/muted) */}
-        <div className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mt-1 truncate">
+        <div className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mt-1 truncate" title={label}>
           {label}
         </div>
       </div>
 
       {/* Optional Subtext or Drilldown Footer */}
       {(subtext || drillDownLabel) && (
-        <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-700/60 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-          <div className="truncate font-medium">
+        <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-700/60 flex items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
+          <div className="truncate font-medium min-w-0">
             {subtext}
           </div>
           {drillDownLabel && (
-            <div className="flex items-center space-x-1 font-semibold text-blue-600 dark:text-blue-400 group-hover:translate-x-0.5 transition-transform flex-shrink-0">
+            <div className="flex items-center space-x-1 font-semibold text-blue-600 dark:text-blue-400 group-hover:translate-x-0.5 transition-transform flex-shrink-0 whitespace-nowrap">
               <span>{drillDownLabel}</span>
               <ArrowRight size={12} />
             </div>

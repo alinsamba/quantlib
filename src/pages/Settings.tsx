@@ -8,6 +8,8 @@ import { useAsync } from '../hooks/useAsync'
 import { db } from '../lib/ipc-client'
 import type { AuditLog, BorrowingRule, BackupFileRecord } from '../lib/types'
 import { Modal } from '../components/Modal'
+import { ConfirmModal } from '../components/ConfirmModal'
+import { useToast } from '../hooks/ToastContext'
 
 // --- Sub-components wrapped with React.memo ---
 
@@ -795,6 +797,9 @@ const AuditLogsSection = memo(function AuditLogsSection({ auditLogs, logsLoading
 // --- Main Settings Component ---
 
 export default function Settings() {
+  const { showToast } = useToast()
+  const [confirmRestore, setConfirmRestore] = useState<{ fullPath: string; filename: string } | null>(null)
+  const [confirmDeleteRule, setConfirmDeleteRule] = useState<{ id: number; roleOrGrade: string } | null>(null)
   const [schoolName, setSchoolName] = useState('Mentor High School - Kitende')
   const [motto, setMotto] = useState('Education is the Key')
   const [academicYear, setAcademicYear] = useState('2026')
@@ -835,11 +840,11 @@ export default function Settings() {
       })
       setSchoolSaveSuccess('School information saved successfully!')
     } catch (err: unknown) {
-      alert('Failed to save school info: ' + (err instanceof Error ? err.message : String(err)))
+      showToast('Failed to save school info: ' + (err instanceof Error ? err.message : String(err)), 'error')
     }
     if (schoolTimerRef.current) window.clearTimeout(schoolTimerRef.current)
     schoolTimerRef.current = window.setTimeout(() => setSchoolSaveSuccess(''), 3000)
-  }, [schoolName, motto, academicYear, address, contactPhone])
+  }, [schoolName, motto, academicYear, address, contactPhone, showToast])
 
   // Password Change State
   const [oldPassword, setOldPassword] = useState('')
@@ -1020,40 +1025,47 @@ export default function Settings() {
     try {
       const res = await db.saveBackupConfig({
         autoBackupEnabled,
-        autoBackupPath,
+        autoBackupPath: autoBackupPath.trim() || undefined,
         autoBackupIntervalHours: Number(autoBackupIntervalHours)
       })
       if (res.success) {
         setBackupSaveSuccess('Backup settings saved successfully!')
         fetchBackupConfig()
+      } else {
+        showToast('Failed to save backup config: ' + (res.error || 'Unknown error'), 'error')
       }
     } catch (err: unknown) {
-      alert('Failed to save backup config: ' + (err instanceof Error ? err.message : String(err)))
+      showToast('Failed to save backup config: ' + (err instanceof Error ? err.message : String(err)), 'error')
     }
-  }, [autoBackupEnabled, autoBackupPath, autoBackupIntervalHours, fetchBackupConfig])
+  }, [autoBackupEnabled, autoBackupPath, autoBackupIntervalHours, fetchBackupConfig, showToast])
 
   const handleTriggerBackupNow = useCallback(async () => {
     setIsTriggeringBackup(true)
     setBackupTriggerMessage('')
     try {
-      const res = await db.triggerAutoBackup(autoBackupPath || undefined)
+      const res = await db.triggerAutoBackup(autoBackupPath.trim() || undefined)
       if (res.success) {
         setBackupTriggerMessage(`Backup saved: ${res.filename || res.backupPath}`)
+        showToast(`Backup saved: ${res.filename || 'Success'}`, 'success')
         fetchBackupConfig()
       } else {
-        alert('Backup failed: ' + res.error)
+        showToast('Backup failed: ' + (res.error || 'Unknown error'), 'error')
       }
     } catch (err: unknown) {
-      alert('Backup error: ' + (err instanceof Error ? err.message : String(err)))
+      showToast('Backup error: ' + (err instanceof Error ? err.message : String(err)), 'error')
     } finally {
       setIsTriggeringBackup(false)
     }
-  }, [autoBackupPath, fetchBackupConfig])
+  }, [autoBackupPath, fetchBackupConfig, showToast])
 
-  const handleRestoreBackup = useCallback(async (fullPath: string, filename: string) => {
-    if (!window.confirm(`Are you sure you want to restore vault snapshot "${filename}"? The current vault will be replaced by this backup.`)) {
-      return
-    }
+  const handleRestoreBackup = useCallback((fullPath: string, filename: string) => {
+    setConfirmRestore({ fullPath, filename })
+  }, [])
+
+  const executeRestoreBackup = useCallback(async () => {
+    if (!confirmRestore) return
+    const { fullPath, filename } = confirmRestore
+    setConfirmRestore(null)
     setRestoringPath(fullPath)
     setBackupTriggerMessage('')
     try {
@@ -1063,14 +1075,14 @@ export default function Settings() {
         sessionStorage.removeItem('quantlib_unlocked')
         window.location.reload()
       } else {
-        alert('Restore failed: ' + (res?.error || 'Unknown error'))
+        showToast('Restore failed: ' + (res?.error || 'Unknown error'), 'error')
       }
     } catch (err: unknown) {
-      alert('Restore error: ' + (err instanceof Error ? err.message : String(err)))
+      showToast('Restore error: ' + (err instanceof Error ? err.message : String(err)), 'error')
     } finally {
       setRestoringPath(null)
     }
-  }, [])
+  }, [confirmRestore, showToast])
 
   const handleSaveLanConfig = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
@@ -1084,11 +1096,13 @@ export default function Settings() {
       if (res.success) {
         setLanSaveSuccess('LAN sync settings saved!')
         fetchLanConfig()
+      } else {
+        showToast('Failed to save LAN config: ' + (res.error || 'Unknown error'), 'error')
       }
     } catch (err: unknown) {
-      alert('Failed to save LAN config: ' + (err instanceof Error ? err.message : String(err)))
+      showToast('Failed to save LAN config: ' + (err instanceof Error ? err.message : String(err)), 'error')
     }
-  }, [lanSyncEnabled, lanPort, lanPasscode, fetchLanConfig])
+  }, [lanSyncEnabled, lanPort, lanPasscode, fetchLanConfig, showToast])
 
   const handleSyncWithPeer = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
@@ -1178,19 +1192,26 @@ export default function Settings() {
     }
   }, [ruleFormData, fetchRules])
 
-  const handleDeleteRule = useCallback(async (id: number, roleOrGrade: string) => {
+  const handleDeleteRule = useCallback((id: number, roleOrGrade: string) => {
     if (roleOrGrade === 'DEFAULT') {
-      alert('Cannot delete the DEFAULT borrowing rule.')
+      showToast('Cannot delete the DEFAULT borrowing rule.', 'warning')
       return
     }
-    if (!confirm(`Are you sure you want to delete borrowing rule for "${roleOrGrade}"?`)) return
+    setConfirmDeleteRule({ id, roleOrGrade })
+  }, [showToast])
+
+  const executeDeleteRule = useCallback(async () => {
+    if (!confirmDeleteRule) return
+    const { id, roleOrGrade } = confirmDeleteRule
+    setConfirmDeleteRule(null)
     try {
       await db.deleteBorrowingRule(id)
       fetchRules()
+      showToast(`Deleted borrowing rule "${roleOrGrade}".`, 'success')
     } catch (err: unknown) {
-      alert('Failed to delete rule: ' + (err instanceof Error ? err.message : String(err)))
+      showToast('Failed to delete rule: ' + (err instanceof Error ? err.message : String(err)), 'error')
     }
-  }, [fetchRules])
+  }, [confirmDeleteRule, fetchRules, showToast])
 
   const handleRefreshAuditLogs = useCallback(() => {
     fetchLogs(() => db.getAuditLogs())
@@ -1327,7 +1348,7 @@ export default function Settings() {
             icon={<Copy size={18} />}
             onClick={() => {
               navigator.clipboard.writeText(newRecoveryKey)
-              alert("Recovery key copied to clipboard!")
+              showToast('Recovery key copied to clipboard!', 'success')
             }}
           >
             Copy
@@ -1388,6 +1409,26 @@ export default function Settings() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmModal
+        isOpen={!!confirmRestore}
+        title="Restore Vault Backup"
+        message={confirmRestore ? `Are you sure you want to restore vault snapshot "${confirmRestore.filename}"? The current vault will be replaced by this backup.` : ''}
+        confirmLabel="Restore Snapshot"
+        variant="danger"
+        onConfirm={executeRestoreBackup}
+        onCancel={() => setConfirmRestore(null)}
+      />
+
+      <ConfirmModal
+        isOpen={!!confirmDeleteRule}
+        title="Delete Borrowing Rule"
+        message={confirmDeleteRule ? `Are you sure you want to delete borrowing rule for "${confirmDeleteRule.roleOrGrade}"?` : ''}
+        confirmLabel="Delete Rule"
+        variant="danger"
+        onConfirm={executeDeleteRule}
+        onCancel={() => setConfirmDeleteRule(null)}
+      />
     </div>
   )
 }

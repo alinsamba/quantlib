@@ -128,13 +128,13 @@ export default function Dashboard() {
   return (
     <div className="space-y-8 animate-fade-in max-w-7xl mx-auto pb-12">
       {/* 1. Header & Primary Action Hierarchy */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800/80 pb-6">
-        <div>
-          <div className="flex items-center space-x-2.5">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800/80 pb-6">
+        <div className="min-w-0">
+          <div className="flex items-center flex-wrap gap-2.5">
             <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
               Dashboard Overview
             </h1>
-            <span className="bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 text-xs font-semibold px-2.5 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+            <span className="bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 text-xs font-semibold px-2.5 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800 whitespace-nowrap">
               Live Vault
             </span>
           </div>
@@ -144,13 +144,13 @@ export default function Dashboard() {
         </div>
 
         {/* Global Action Button Hierarchy */}
-        <div className="flex flex-wrap items-center gap-3 print:hidden">
+        <div className="flex flex-wrap items-center gap-2.5 print:hidden flex-shrink-0">
           <Button
             variant="primary"
             icon={<PlusCircle size={17} />}
             onClick={() => navigate('/inventory', { state: { openAdd: true } })}
           >
-            + Add Book
+            Add Book
           </Button>
 
           <Button
@@ -174,6 +174,7 @@ export default function Dashboard() {
             icon={<Printer size={18} />}
             onClick={() => window.print()}
             title="Print Dashboard Report"
+            aria-label="Print Dashboard Report"
           />
         </div>
       </div>
@@ -204,7 +205,7 @@ export default function Dashboard() {
       )}
 
       {/* 2. Standardized KPI Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5 gap-4">
         <StatCard
           label="Total Books"
           value={summaryData.totalBooks.toLocaleString()}
@@ -271,7 +272,7 @@ export default function Dashboard() {
               icon={<PlusCircle size={17} />}
               onClick={() => navigate('/inventory', { state: { openAdd: true } })}
             >
-              + Add First Book
+              Add First Book
             </Button>
             <Button
               variant="secondary"

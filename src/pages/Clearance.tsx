@@ -3,11 +3,13 @@ import { Search, CheckCircle, AlertOctagon, Printer, BookOpen, AlertTriangle, Do
 import { Button } from '../components/Button'
 import { TextField, SelectField } from '../components/TextField'
 import { Modal } from '../components/Modal'
+import { useToast } from '../hooks/ToastContext'
 import { db } from '../lib/ipc-client'
 import { roundCurrency } from '../lib/utils'
 import type { ClearanceRecord, Checkout } from '../lib/types'
 
 export default function Clearance() {
+  const { showToast } = useToast()
   const [studentName, setStudentName] = useState('')
   const [studentClass, setStudentClass] = useState('')
   const [loading, setLoading] = useState(false)
@@ -79,14 +81,14 @@ export default function Clearance() {
         setSlipData(res.data)
         setIsSlipModalOpen(true)
       } else {
-        alert('Failed to generate clearance slip: ' + (res?.error || 'Unknown error'))
+        showToast('Failed to generate clearance slip: ' + (res?.error || 'Unknown error'), 'error')
       }
     } catch (err: unknown) {
-      alert('Error generating clearance slip: ' + (err instanceof Error ? err.message : String(err)))
+      showToast('Error generating clearance slip: ' + (err instanceof Error ? err.message : String(err)), 'error')
     } finally {
       setSlipLoading(false)
     }
-  }, [clearanceData])
+  }, [clearanceData, showToast])
 
   const handleOpenPaymentModal = useCallback(() => {
     if (!clearanceData) return
@@ -330,27 +332,37 @@ export default function Clearance() {
             </div>
 
             <div className="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col justify-between space-y-2">
-              <div className="flex items-center space-x-4">
-                <div className="p-3 bg-rose-100 dark:bg-rose-900/30 text-rose-600 rounded-lg">
-                  <DollarSign size={24} />
-                </div>
-                <div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 uppercase font-bold">Replacement / Fine Charges</p>
-                  <p className="text-2xl font-bold text-slate-800 dark:text-white">${clearanceData.totalReplacementCharges.toFixed(2)}</p>
-                  <span className="text-[10px] text-slate-400">Overdue fines capped at max $15.00/book</span>
-                </div>
-              </div>
+              {(() => {
+                const totalDue = roundCurrency(
+                  clearanceData.totalAmountDue ??
+                    ((clearanceData.totalReplacementCharges || 0) + (clearanceData.totalOverdueFines || 0))
+                )
+                return (
+                  <>
+                    <div className="flex items-center space-x-4">
+                      <div className="p-3 bg-rose-100 dark:bg-rose-900/30 text-rose-600 rounded-lg flex-shrink-0">
+                        <DollarSign size={24} />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs text-slate-500 dark:text-slate-400 uppercase font-bold">Replacement / Fine Charges</p>
+                        <p className="text-2xl font-bold text-slate-800 dark:text-white">${totalDue.toFixed(2)}</p>
+                        <span className="text-[10px] text-slate-400">Overdue fines capped at max $15.00/book</span>
+                      </div>
+                    </div>
 
-              {(clearanceData.totalReplacementCharges > 0 || clearanceData.unresolvedIncidents.length > 0) && (
-                <div className="flex space-x-2 pt-2 border-t border-slate-100 dark:border-slate-700">
-                  <Button size="sm" variant="primary" icon={<CreditCard size={14} />} onClick={handleOpenPaymentModal} className="flex-1 text-xs py-1">
-                    Accept Payment
-                  </Button>
-                  <Button size="sm" variant="secondary" icon={<ShieldCheck size={14} />} onClick={handleOpenWaiverModal} className="flex-1 text-xs py-1">
-                    Waive Fine
-                  </Button>
-                </div>
-              )}
+                    {(totalDue > 0 || clearanceData.unresolvedIncidents.length > 0) && (
+                      <div className="flex gap-2 pt-2 border-t border-slate-100 dark:border-slate-700">
+                        <Button size="sm" variant="primary" icon={<CreditCard size={14} />} onClick={handleOpenPaymentModal} className="flex-1 text-xs py-1.5 whitespace-nowrap">
+                          Accept Payment
+                        </Button>
+                        <Button size="sm" variant="secondary" icon={<ShieldCheck size={14} />} onClick={handleOpenWaiverModal} className="flex-1 text-xs py-1.5 whitespace-nowrap">
+                          Waive Fine
+                        </Button>
+                      </div>
+                    )}
+                  </>
+                )
+              })()}
             </div>
           </div>
 
@@ -690,7 +702,7 @@ export default function Clearance() {
                       setClearanceData(res.data)
                     }
                   } catch (err: unknown) {
-                    alert('Failed to return book: ' + (err instanceof Error ? err.message : String(err)))
+                    showToast('Failed to return book: ' + (err instanceof Error ? err.message : String(err)), 'error')
                   } finally {
                     setReturnSubmitting(false)
                   }

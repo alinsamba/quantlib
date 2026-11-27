@@ -218,17 +218,17 @@ export default function Incidents() {
           ) : (
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 text-sm border-b border-slate-100 dark:border-slate-700">
-                  <th className="p-4 font-medium">Date</th>
-                  <th className="p-4 font-medium">Type</th>
-                  <th className="p-4 font-medium">Subject</th>
-                  <th className="p-4 font-medium">Book Title</th>
-                  <th className="p-4 font-medium">Responsible</th>
-                  <th className="p-4 font-medium">Class</th>
-                  <th className="p-4 font-medium">Condition</th>
-                  <th className="p-4 font-medium">Action / Status</th>
-                  <th className="p-4 font-medium">Notes</th>
-                  <th className="p-4 font-medium text-right print:hidden">Resolve</th>
+                <tr className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wider border-b border-slate-100 dark:border-slate-700">
+                  <th className="px-3 py-3 font-semibold whitespace-nowrap">Date</th>
+                  <th className="px-3 py-3 font-semibold whitespace-nowrap">Type</th>
+                  <th className="px-3 py-3 font-semibold">Subject</th>
+                  <th className="px-3 py-3 font-semibold">Book Title</th>
+                  <th className="px-3 py-3 font-semibold">Responsible</th>
+                  <th className="px-3 py-3 font-semibold whitespace-nowrap">Class</th>
+                  <th className="px-3 py-3 font-semibold">Condition</th>
+                  <th className="px-3 py-3 font-semibold whitespace-nowrap">Status</th>
+                  <th className="px-3 py-3 font-semibold">Notes</th>
+                  <th className="px-3 py-3 font-semibold text-right print:hidden whitespace-nowrap">Action</th>
                 </tr>
               </thead>
               <tbody className="text-slate-700 dark:text-slate-300 text-sm">
@@ -244,10 +244,10 @@ export default function Incidents() {
 
                   return (
                     <tr key={inc.id} className="border-b border-slate-50 dark:border-slate-700/50 hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
-                      <td className="p-4 whitespace-nowrap">{new Date(inc.date).toLocaleDateString()}</td>
-                      <td className="p-4 whitespace-nowrap">
+                      <td className="px-3 py-3 whitespace-nowrap text-xs">{new Date(inc.date).toLocaleDateString()}</td>
+                      <td className="px-3 py-3 whitespace-nowrap">
                         <span
-                          className={`px-2 py-1 rounded-full text-xs font-semibold ${
+                          className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
                             inc.type === 'DAMAGED'
                               ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
                               : inc.type === 'LOST'
@@ -260,12 +260,12 @@ export default function Incidents() {
                           {inc.type}
                         </span>
                       </td>
-                      <td className="p-4">{inc.subject?.name || '-'}</td>
-                      <td className="p-4 font-medium dark:text-white">{inc.bookTitle}</td>
-                      <td className="p-4">{inc.responsibleParty || '-'}</td>
-                      <td className="p-4">{inc.studentClass || '-'}</td>
-                      <td className="p-4 text-slate-500 dark:text-slate-400">{inc.condition || '-'}</td>
-                      <td className="p-4">
+                      <td className="px-3 py-3 text-xs">{inc.subject?.name || '-'}</td>
+                      <td className="px-3 py-3 font-medium dark:text-white">{inc.bookTitle}</td>
+                      <td className="px-3 py-3">{inc.responsibleParty || '-'}</td>
+                      <td className="px-3 py-3 whitespace-nowrap">{inc.studentClass || '-'}</td>
+                      <td className="px-3 py-3 text-slate-500 dark:text-slate-400 text-xs">{inc.condition || '-'}</td>
+                      <td className="px-3 py-3 whitespace-nowrap">
                         <span
                           className={`px-2 py-0.5 rounded-md text-xs font-medium ${
                             isResolved
@@ -276,10 +276,10 @@ export default function Incidents() {
                           {inc.actionTaken || 'PENDING'}
                         </span>
                       </td>
-                      <td className="p-4 text-xs text-slate-500 dark:text-slate-400 max-w-xs truncate" title={inc.comment || ''}>
+                      <td className="px-3 py-3 text-xs text-slate-500 dark:text-slate-400 max-w-[140px] truncate" title={inc.comment || ''}>
                         {inc.comment || '-'}
                       </td>
-                      <td className="p-4 text-right print:hidden">
+                      <td className="px-3 py-3 text-right print:hidden whitespace-nowrap">
                         {canResolve ? (
                           <Button
                             size="sm"

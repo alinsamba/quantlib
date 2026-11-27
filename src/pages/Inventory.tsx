@@ -7,10 +7,13 @@ import { calculateAvailable } from '../lib/utils'
 import { Button } from '../components/Button'
 import { TextField, SelectField, TextAreaField } from '../components/TextField'
 import { Modal } from '../components/Modal'
+import { ConfirmModal } from '../components/ConfirmModal'
+import { useToast } from '../hooks/ToastContext'
 import { useAsync } from '../hooks/useAsync'
 import type { Subject, BorrowingRule, Checkout } from '../lib/types'
 
 export default function Inventory() {
+  const { showToast } = useToast()
   const location = useLocation()
   const [searchTerm, setSearchTerm] = useState('')
   const [lowStockOnly, setLowStockOnly] = useState(false)
@@ -18,6 +21,7 @@ export default function Inventory() {
   const [borrowingRules, setBorrowingRules] = useState<BorrowingRule[]>([])
   const [allActiveCheckouts, setAllActiveCheckouts] = useState<Checkout[]>([])
   const [isIssuing, setIsIssuing] = useState(false)
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
   const [importNotice, setImportNotice] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -146,9 +150,9 @@ export default function Inventory() {
       })
     } catch (err: unknown) {
       console.error('Error adding subject', err)
-      alert('Failed to add subject: ' + (err instanceof Error ? err.message : String(err)))
+      showToast('Failed to add subject: ' + (err instanceof Error ? err.message : String(err)), 'error')
     }
-  }, [newSubject, fetchSubjects])
+  }, [newSubject, fetchSubjects, showToast])
 
   // Memoize filtered subjects
   const filtered = useMemo(() =>
@@ -228,13 +232,13 @@ export default function Inventory() {
       const subject = subjectsMap.get(issueData.subjectId)
 
       if (!subject || calculateAvailable(subject) <= 0) {
-        alert('No available books for this subject.')
+        showToast('No available books for this subject.', 'warning')
         return
       }
 
       const avgCond = subject.averageCondition ?? 3.0
       if (avgCond <= 1.5) {
-        alert(`Cannot checkout "${subject.name}": Book average condition is too poor (${avgCond.toFixed(1)}/3.0 <= 1.5). Subject requires replenishment or maintenance.`)
+        showToast(`Cannot checkout "${subject.name}": Book average condition is too poor (${avgCond.toFixed(1)}/3.0 <= 1.5). Subject requires replenishment or maintenance.`, 'warning')
         return
       }
 
@@ -251,14 +255,14 @@ export default function Inventory() {
           const maxAllowed = activeRule?.maxBooksAllowed ?? 2
           const roleLabel = activeRule?.roleOrGrade ?? 'DEFAULT'
           if (activeCheckouts.length >= maxAllowed) {
-            alert(`Borrowing limit reached: ${issueData.studentName.trim()} already has ${activeCheckouts.length} active book(s) checked out (max allowed for ${roleLabel}: ${maxAllowed}).`)
+            showToast(`Borrowing limit reached: ${issueData.studentName.trim()} already has ${activeCheckouts.length} active book(s) checked out (max allowed for ${roleLabel}: ${maxAllowed}).`, 'warning')
             return
           }
 
           const now = new Date()
           const hasOverdue = activeCheckouts.some((c: Checkout) => new Date(c.dueDate) < now)
           if (hasOverdue) {
-            alert(`Borrowing restricted: ${issueData.studentName.trim()} has active overdue checkout(s). Overdue books must be returned before issuing new items.`)
+            showToast(`Borrowing restricted: ${issueData.studentName.trim()} has active overdue checkout(s). Overdue books must be returned before issuing new items.`, 'warning')
             return
           }
         }
@@ -279,13 +283,14 @@ export default function Inventory() {
       setIssueData({ subjectId: 0, studentName: '', studentClass: '', conditionOut: 3 })
       fetchSubjects(() => db.getSubjects())
       loadActiveCheckouts()
+      showToast('Book issued successfully.', 'success')
     } catch (err: unknown) {
       console.error('Error issuing book', err)
-      alert('Failed to issue book: ' + (err instanceof Error ? err.message : String(err)))
+      showToast('Failed to issue book: ' + (err instanceof Error ? err.message : String(err)), 'error')
     } finally {
       setIsIssuing(false)
     }
-  }, [subjectsMap, issueData, activeRule, fetchSubjects, loadActiveCheckouts, isIssuing])
+  }, [subjectsMap, issueData, activeRule, fetchSubjects, loadActiveCheckouts, isIssuing, showToast])
 
   const openIssueModal = useCallback((sub: Subject) => {
     setIssueData({ subjectId: sub.id, studentName: '', studentClass: '', conditionOut: 3 })
@@ -328,13 +333,14 @@ export default function Inventory() {
       setIsReturnModalOpen(false)
       fetchSubjects(() => db.getSubjects())
       loadActiveCheckouts()
+      showToast('Book returned successfully.', 'success')
     } catch (err: unknown) {
       console.error('Error returning checkout', err)
       setReturnModalError(err instanceof Error ? err.message : 'Failed to return book.')
     } finally {
       setReturnModalSubmitting(false)
     }
-  }, [selectedCheckoutIdToReturn, returnConditionIn, fetchSubjects, loadActiveCheckouts])
+  }, [selectedCheckoutIdToReturn, returnConditionIn, fetchSubjects, loadActiveCheckouts, showToast])
 
   const handleEditSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
@@ -351,23 +357,31 @@ export default function Inventory() {
         
       setIsEditModalOpen(false)
       fetchSubjects(() => db.getSubjects())
+      showToast('Subject updated successfully.', 'success')
     } catch (err: unknown) {
       console.error('Error editing subject', err)
-      alert('Failed to edit subject: ' + (err instanceof Error ? err.message : String(err)))
+      showToast('Failed to edit subject: ' + (err instanceof Error ? err.message : String(err)), 'error')
     }
-  }, [editSubject, fetchSubjects])
+  }, [editSubject, fetchSubjects, showToast])
 
-  const handleDeleteSubject = useCallback(async () => {
+  const handleDeleteSubject = useCallback(() => {
     if (!editSubject.id) return
-    if (!window.confirm(`Are you sure you want to delete "${editSubject.name}"? This cannot be undone.`)) return
+    setIsDeleteConfirmOpen(true)
+  }, [editSubject.id])
+
+  const executeDeleteSubject = useCallback(async () => {
+    if (!editSubject.id) return
     try {
       await db.deleteSubject(editSubject.id)
+      setIsDeleteConfirmOpen(false)
       setIsEditModalOpen(false)
       fetchSubjects(() => db.getSubjects())
+      showToast(`Deleted "${editSubject.name}".`, 'success')
     } catch (err: unknown) {
-      alert('Cannot delete subject: ' + (err instanceof Error ? err.message : String(err)))
+      setIsDeleteConfirmOpen(false)
+      showToast('Cannot delete subject: ' + (err instanceof Error ? err.message : String(err)), 'error')
     }
-  }, [editSubject, fetchSubjects])
+  }, [editSubject, fetchSubjects, showToast])
 
   const openEditModal = useCallback((sub: Subject) => {
     setEditSubject({
@@ -388,8 +402,9 @@ export default function Inventory() {
     try {
       await db.renewCheckout({ id: checkoutId, extraDays: 7 })
       await loadActiveCheckouts()
+      showToast('Loan extended by 7 days.', 'success')
     } catch (err: unknown) {
-      alert('Failed to renew loan: ' + (err instanceof Error ? err.message : String(err)))
+      showToast('Failed to renew loan: ' + (err instanceof Error ? err.message : String(err)), 'error')
     } finally {
       setRenewingId(null)
     }
@@ -400,8 +415,9 @@ export default function Inventory() {
       await db.returnCheckout(checkoutId, 3)
       await loadActiveCheckouts()
       fetchSubjects(() => db.getSubjects())
+      showToast('Book marked as returned.', 'success')
     } catch (err: unknown) {
-      alert('Failed to return book: ' + (err instanceof Error ? err.message : String(err)))
+      showToast('Failed to return book: ' + (err instanceof Error ? err.message : String(err)), 'error')
     }
   }
 
@@ -462,40 +478,41 @@ export default function Inventory() {
       {filtered.map((sub) => {
         const available = calculateAvailable(sub)
         const isLowStock = available < 5
+        const wearRate = sub.degradationRate && sub.degradationRate > 0 ? `-${sub.degradationRate.toFixed(2)}` : '0.00'
         return (
           <tr key={sub.id} className="border-b border-slate-50 dark:border-slate-700/50 hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
-            <td className="p-4">
-              <div className="flex items-center space-x-2">
-                <span className="font-medium text-slate-900 dark:text-slate-100">{sub.name}</span>
+            <td className="px-3 py-3">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">{sub.name}</span>
                 {isLowStock && (
-                  <span className="px-1.5 py-0.5 text-[10px] font-bold uppercase rounded bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                  <span className="px-1.5 py-0.5 text-[10px] font-bold uppercase rounded bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 whitespace-nowrap">
                     Low Stock
                   </span>
                 )}
               </div>
               {sub.notes && (
-                <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5 truncate max-w-xs" title={sub.notes}>
+                <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5 truncate max-w-[180px]" title={sub.notes}>
                   {sub.notes}
                 </p>
               )}
             </td>
-            <td className="p-4 text-slate-500 dark:text-slate-400">{sub.category}</td>
-            <td className="p-4 text-right">{sub.openingCount}</td>
-            <td className="p-4 text-right text-blue-600">{sub.recovered}</td>
-            <td className="p-4 text-right text-amber-600">{sub.issued}</td>
-            <td className="p-4 text-right text-red-500">{sub.damaged}</td>
-            <td className="p-4 text-right text-red-500">{sub.lost}</td>
-            <td className="p-4 text-right font-bold text-green-600">{available}</td>
-            <td className="p-4 text-right">
+            <td className="px-2.5 py-3 text-slate-500 dark:text-slate-400 text-xs whitespace-nowrap">{sub.category}</td>
+            <td className="px-2 py-3 text-right tabular-nums">{sub.openingCount}</td>
+            <td className="px-2 py-3 text-right tabular-nums text-blue-600 dark:text-blue-400">{sub.recovered}</td>
+            <td className="px-2 py-3 text-right tabular-nums text-amber-600 dark:text-amber-400">{sub.issued}</td>
+            <td className="px-2 py-3 text-right tabular-nums text-red-500">{sub.damaged}</td>
+            <td className="px-2 py-3 text-right tabular-nums text-red-500">{sub.lost}</td>
+            <td className="px-2 py-3 text-right tabular-nums font-bold text-green-600 dark:text-emerald-400">{available}</td>
+            <td className="px-2.5 py-3 text-right tabular-nums whitespace-nowrap text-xs">
               {sub.averageCondition ? sub.averageCondition.toFixed(1) : '3.0'}/3.0
               {(sub.averageCondition ?? 3.0) < 2.0 && <span className="text-red-500 ml-1 font-bold" title="Replacement Warning">!</span>}
             </td>
-            <td className="p-4 text-right text-slate-500">
-              -{sub.degradationRate ? sub.degradationRate.toFixed(2) : '0.00'}
+            <td className="px-2.5 py-3 text-right tabular-nums text-slate-500 dark:text-slate-400 text-xs whitespace-nowrap">
+              {wearRate}
             </td>
-            <td className="p-4 text-center print:hidden">
-              <div className="flex justify-center space-x-2">
-                <button onClick={() => openIssueModal(sub)} className="text-blue-600 hover:bg-blue-50 px-2 py-1 rounded transition-colors text-xs font-medium border border-blue-200">Issue</button>
+            <td className="px-2.5 py-3 text-center print:hidden whitespace-nowrap">
+              <div className="flex justify-center gap-1.5">
+                <button onClick={() => openIssueModal(sub)} className="text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/30 px-2 py-1 rounded transition-colors text-xs font-medium border border-blue-200 dark:border-blue-800">Issue</button>
                 <button onClick={() => openReturnModal(sub)} className="text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-900/30 px-2 py-1 rounded transition-colors text-xs font-medium border border-emerald-200 dark:border-emerald-800">Return</button>
                 <button onClick={() => openEditModal(sub)} className="text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700 px-2 py-1 rounded transition-colors text-xs font-medium">Edit</button>
               </div>
@@ -605,18 +622,18 @@ export default function Inventory() {
           ) : (
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 text-sm border-b border-slate-100 dark:border-slate-700">
-                  <th className="p-4 font-medium">Subject</th>
-                  <th className="p-4 font-medium">Category</th>
-                  <th className="p-4 font-medium text-right">Opening</th>
-                  <th className="p-4 font-medium text-right">Recovered</th>
-                  <th className="p-4 font-medium text-right">Issued</th>
-                  <th className="p-4 font-medium text-right text-red-500">Damaged</th>
-                  <th className="p-4 font-medium text-right text-red-500">Lost</th>
-                  <th className="p-4 font-medium text-right text-green-600">Available</th>
-                  <th className="p-4 font-medium text-right" title="Average Condition (1=Damaged, 2=Normal, 3=Good)">Condition</th>
-                  <th className="p-4 font-medium text-right" title="Condition points lost per checkout">Wear Rate</th>
-                  <th className="p-4 font-medium text-center print:hidden">Actions</th>
+                <tr className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wider border-b border-slate-100 dark:border-slate-700">
+                  <th className="px-3 py-3 font-semibold">Subject</th>
+                  <th className="px-2.5 py-3 font-semibold">Category</th>
+                  <th className="px-2 py-3 font-semibold text-right whitespace-nowrap">Open</th>
+                  <th className="px-2 py-3 font-semibold text-right whitespace-nowrap">Rec.</th>
+                  <th className="px-2 py-3 font-semibold text-right whitespace-nowrap">Issued</th>
+                  <th className="px-2 py-3 font-semibold text-right text-red-500 whitespace-nowrap">Dmg</th>
+                  <th className="px-2 py-3 font-semibold text-right text-red-500 whitespace-nowrap">Lost</th>
+                  <th className="px-2 py-3 font-semibold text-right text-green-600 dark:text-emerald-400 whitespace-nowrap">Avail</th>
+                  <th className="px-2.5 py-3 font-semibold text-right whitespace-nowrap" title="Average Condition (1=Damaged, 2=Normal, 3=Good)">Cond.</th>
+                  <th className="px-2.5 py-3 font-semibold text-right whitespace-nowrap" title="Condition points lost per checkout">Wear</th>
+                  <th className="px-2.5 py-3 font-semibold text-center print:hidden whitespace-nowrap">Actions</th>
                 </tr>
               </thead>
               <tbody className="text-slate-700 dark:text-slate-300 text-sm">
@@ -903,6 +920,16 @@ export default function Inventory() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmModal
+        isOpen={isDeleteConfirmOpen}
+        title="Delete Subject"
+        message={`Are you sure you want to delete "${editSubject.name}"? This cannot be undone.`}
+        confirmLabel="Delete Subject"
+        variant="danger"
+        onConfirm={executeDeleteSubject}
+        onCancel={() => setIsDeleteConfirmOpen(false)}
+      />
     </div>
   )
 }

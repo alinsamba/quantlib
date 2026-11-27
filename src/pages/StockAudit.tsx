@@ -13,6 +13,7 @@ import {
   ShieldAlert
 } from 'lucide-react'
 import { db } from '../lib/ipc-client'
+import { ConfirmModal } from '../components/ConfirmModal'
 import type { StockAudit, StockAuditItem, Subject } from '../lib/types'
 
 interface StockAuditRowProps {
@@ -298,10 +299,15 @@ export default function StockAuditPage() {
     }
   }, [activeAudit, itemEdits, subjects])
 
-  const handleCompleteAudit = useCallback(async () => {
-    if (!activeAudit) return
-    if (!window.confirm('Are you sure you want to complete and finalize this stock audit session? Missing copies will be written off as LOST and extra copies added as RECOVERED.')) return
+  const [isCompleteConfirmOpen, setIsCompleteConfirmOpen] = useState(false)
 
+  const handleCompleteAudit = useCallback(() => {
+    if (!activeAudit) return
+    setIsCompleteConfirmOpen(true)
+  }, [activeAudit])
+
+  const executeCompleteAudit = useCallback(async () => {
+    if (!activeAudit) return
     try {
       setCompleting(true)
       setError(null)
@@ -310,6 +316,7 @@ export default function StockAuditPage() {
         notes: (auditNotes.trim() || activeAudit.notes) ?? undefined
       })
       setActiveAudit(completed)
+      setIsCompleteConfirmOpen(false)
       setSuccessMsg('Stock audit session completed and inventory automatically reconciled!')
       await loadData()
     } catch (err: unknown) {
@@ -711,6 +718,17 @@ export default function StockAuditPage() {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={isCompleteConfirmOpen}
+        title="Finalize Stock Audit"
+        message="Are you sure you want to complete and finalize this stock audit session? Missing copies will be written off as LOST and extra copies added as RECOVERED."
+        confirmLabel="Complete & Reconcile"
+        variant="primary"
+        isLoading={completing}
+        onConfirm={executeCompleteAudit}
+        onCancel={() => setIsCompleteConfirmOpen(false)}
+      />
     </div>
   )
 }
