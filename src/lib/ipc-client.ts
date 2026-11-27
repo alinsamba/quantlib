@@ -17,7 +17,10 @@ import type {
   LanSyncResult,
   DashboardSummary,
   DatabaseExportResult,
-  SchoolInfo
+  SchoolInfo,
+  Student,
+  StudentInput,
+  PromoteStudentsResult
 } from './types'
 
 export interface ApiResponse<T> {
@@ -79,13 +82,15 @@ export const db = {
     studentClass?: string | null
     dueDate?: string
     conditionOut?: number
+    bookNote?: string | null
   }) =>
     invoke<Checkout>('add_checkout', {
       subjectId: data.subjectId,
       studentName: data.studentName,
       studentClass: data.studentClass,
       dueDate: data.dueDate,
-      conditionOut: data.conditionOut
+      conditionOut: data.conditionOut,
+      ...(data.bookNote !== undefined ? { bookNote: data.bookNote } : {})
     }),
   returnCheckout: (id: number, conditionIn: number) =>
     invoke<Checkout>('return_checkout', { id, conditionIn }),
@@ -148,5 +153,14 @@ export const db = {
   getLanStatus: () => direct<{ success: boolean; data?: LanStatusResponse; error?: string }>('get_lan_status'),
   exportEntireDbCsv: () => direct<{ success: boolean; data?: DatabaseExportResult; error?: string }>('export_entire_db_csv'),
   getSchoolInfo: () => invoke<SchoolInfo>('get_school_info'),
-  saveSchoolInfo: (data: SchoolInfo) => invoke<SchoolInfo>('save_school_info', { data })
+  saveSchoolInfo: (data: SchoolInfo) => invoke<SchoolInfo>('save_school_info', { data }),
+  getStudents: () => invoke<Student[]>('get_students'),
+  addStudent: (data: StudentInput) => invoke<Student>('add_student', { data }),
+  updateStudent: (id: number, data: StudentInput) => invoke<Student>('update_student', { id, data }),
+  deleteStudent: (id: number) => invoke<void>('delete_student', { id }),
+  promoteStudents: (options: { graduateS4: boolean; graduateS6: boolean }) =>
+    invoke<PromoteStudentsResult>('promote_students', {
+      graduateS4: options.graduateS4,
+      graduateS6: options.graduateS6
+    })
 }

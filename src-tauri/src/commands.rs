@@ -303,11 +303,16 @@ pub fn add_checkout(
     student_class: Option<String>,
     due_date: Option<String>,
     condition_out: Option<i64>,
+    book_note: Option<String>,
 ) -> ApiResponse<Checkout> {
-    match state
-        .db
-        .add_checkout(subject_id, student_name, student_class, due_date, condition_out)
-    {
+    match state.db.add_checkout(
+        subject_id,
+        student_name,
+        student_class,
+        due_date,
+        condition_out,
+        book_note,
+    ) {
         Ok(c) => {
             let _ = state.sync_vault();
             ApiResponse::ok(c)
@@ -760,6 +765,69 @@ pub fn export_entire_db_csv(state: State<'_, AppState>) -> ApiResponse<DatabaseE
 
     match services::export_entire_db_csv(&state.db, &default_export_dir) {
         Ok(result) => ApiResponse::ok(result),
+        Err(e) => ApiResponse::err(e),
+    }
+}
+
+#[tauri::command]
+pub fn get_students(state: State<'_, AppState>) -> ApiResponse<Vec<Student>> {
+    match state.db.get_students() {
+        Ok(data) => ApiResponse::ok(data),
+        Err(e) => ApiResponse::err(e),
+    }
+}
+
+#[tauri::command]
+pub fn add_student(state: State<'_, AppState>, data: StudentInput) -> ApiResponse<Student> {
+    match state.db.add_student(data) {
+        Ok(s) => {
+            let _ = state.sync_vault();
+            ApiResponse::ok(s)
+        }
+        Err(e) => ApiResponse::err(e),
+    }
+}
+
+#[tauri::command]
+pub fn update_student(
+    state: State<'_, AppState>,
+    id: i64,
+    data: StudentInput,
+) -> ApiResponse<Student> {
+    match state.db.update_student(id, data) {
+        Ok(s) => {
+            let _ = state.sync_vault();
+            ApiResponse::ok(s)
+        }
+        Err(e) => ApiResponse::err(e),
+    }
+}
+
+#[tauri::command]
+pub fn delete_student(state: State<'_, AppState>, id: i64) -> ApiResponse<()> {
+    match state.db.delete_student(id) {
+        Ok(()) => {
+            let _ = state.sync_vault();
+            ApiResponse::ok(())
+        }
+        Err(e) => ApiResponse::err(e),
+    }
+}
+
+#[tauri::command]
+pub fn promote_students(
+    state: State<'_, AppState>,
+    graduate_s4: Option<bool>,
+    graduate_s6: Option<bool>,
+) -> ApiResponse<PromoteStudentsResult> {
+    match state
+        .db
+        .promote_students(graduate_s4.unwrap_or(false), graduate_s6.unwrap_or(true))
+    {
+        Ok(res) => {
+            let _ = state.sync_vault();
+            ApiResponse::ok(res)
+        }
         Err(e) => ApiResponse::err(e),
     }
 }

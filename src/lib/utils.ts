@@ -54,24 +54,8 @@ export function roundCurrency(amount: number): number {
  * @returns Error message string if invalid, or empty string if valid
  */
 export function validateMasterPassword(password: string): string {
-  if (password.length < 12) {
-    return 'Password must be at least 12 characters long'
-  }
-
-  if (!/[a-z]/.test(password)) {
-    return 'Password must include at least one lowercase letter'
-  }
-
-  if (!/[A-Z]/.test(password)) {
-    return 'Password must include at least one uppercase letter'
-  }
-
-  if (!/\d/.test(password)) {
-    return 'Password must include at least one number'
-  }
-
-  if (!/[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(password)) {
-    return 'Password must include at least one special character'
+  if (password.trim().length < 4) {
+    return 'PIN or password must be at least 4 characters long'
   }
 
   return ''

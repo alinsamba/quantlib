@@ -95,6 +95,7 @@ impl Database {
                 status TEXT NOT NULL DEFAULT 'ACTIVE',
                 conditionOut INTEGER NOT NULL,
                 conditionIn INTEGER,
+                bookNote TEXT,
                 createdAt TEXT NOT NULL DEFAULT (datetime('now')),
                 updatedAt TEXT NOT NULL DEFAULT (datetime('now')),
                 FOREIGN KEY (subjectId) REFERENCES Subject (id) ON DELETE RESTRICT ON UPDATE CASCADE
@@ -141,6 +142,21 @@ impl Database {
             CREATE INDEX IF NOT EXISTS idx_stockaudititem_auditId ON StockAuditItem(auditId);
             CREATE INDEX IF NOT EXISTS idx_stockaudititem_subjectId ON StockAuditItem(subjectId);
 
+            CREATE TABLE IF NOT EXISTS Student (
+                id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                studentClass TEXT NOT NULL,
+                sex TEXT,
+                section TEXT,
+                house TEXT,
+                combination TEXT,
+                createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+                updatedAt TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE (name, studentClass)
+            );
+            CREATE INDEX IF NOT EXISTS idx_student_class ON Student(studentClass);
+            CREATE INDEX IF NOT EXISTS idx_student_name ON Student(name);
+
             CREATE TABLE IF NOT EXISTS AppConfig (
                 id INTEGER NOT NULL PRIMARY KEY DEFAULT 1,
                 autoBackupEnabled INTEGER NOT NULL DEFAULT 0,
@@ -156,6 +172,9 @@ impl Database {
             "#,
         )
         .map_err(|e| format!("Failed to create database schema: {}", e))?;
+
+        // Safe migration for existing databases lacking Checkout.bookNote
+        let _ = conn.execute("ALTER TABLE Checkout ADD COLUMN bookNote TEXT", []);
 
         // Initialize default AppConfig if empty
         let count: i64 = conn
@@ -1000,6 +1019,7 @@ impl Database {
         student_class: Option<String>,
         due_date: Option<String>,
         condition_out: Option<i64>,
+        book_note: Option<String>,
     ) -> Result<Checkout, String> {
         let name = student_name.trim();
         if name.is_empty() {
@@ -1073,10 +1093,13 @@ impl Database {
             _ => (now + chrono::Duration::days(rule.borrow_duration_days)).to_rfc3339(),
         };
         let cond_out = condition_out.unwrap_or(3);
+        let cleaned_note = book_note
+            .map(|n| n.trim().to_string())
+            .filter(|n| !n.is_empty());
 
         conn.execute(
-            r#"INSERT INTO Checkout (subjectId, studentName, studentClass, checkoutDate, dueDate, status, conditionOut, createdAt, updatedAt)
-               VALUES (?, ?, ?, ?, ?, 'ACTIVE', ?, ?, ?)"#,
+            r#"INSERT INTO Checkout (subjectId, studentName, studentClass, checkoutDate, dueDate, status, conditionOut, bookNote, createdAt, updatedAt)
+               VALUES (?, ?, ?, ?, ?, 'ACTIVE', ?, ?, ?, ?)"#,
             params![
                 subject_id,
                 name,
@@ -1084,6 +1107,7 @@ impl Database {
                 now_str,
                 calculated_due,
                 cond_out,
+                cleaned_note,
                 now_str,
                 now_str
             ],
@@ -1112,6 +1136,7 @@ impl Database {
             status: "ACTIVE".to_string(),
             condition_out: cond_out,
             condition_in: None,
+            book_note: cleaned_note,
             created_at: Some(now_str.clone()),
             updated_at: Some(now_str),
             subject: Some(subject),
@@ -1124,7 +1149,7 @@ impl Database {
 
         let existing: Checkout = conn
             .query_row(
-                "SELECT id, subjectId, studentName, studentClass, checkoutDate, dueDate, returnDate, status, conditionOut, conditionIn, createdAt, updatedAt FROM Checkout WHERE id = ?",
+                "SELECT id, subjectId, studentName, studentClass, checkoutDate, dueDate, returnDate, status, conditionOut, conditionIn, bookNote, createdAt, updatedAt FROM Checkout WHERE id = ?",
                 params![id],
                 |r| {
                     Ok(Checkout {
@@ -1138,8 +1163,9 @@ impl Database {
                         status: r.get(7)?,
                         condition_out: r.get(8)?,
                         condition_in: r.get(9)?,
-                        created_at: r.get(10)?,
-                        updated_at: r.get(11)?,
+                        book_note: r.get(10)?,
+                        created_at: r.get(11)?,
+                        updated_at: r.get(12)?,
                         subject: None,
                     })
                 },
@@ -1247,6 +1273,7 @@ impl Database {
             status: "RETURNED".to_string(),
             condition_out: existing.condition_out,
             condition_in: Some(cond_in),
+            book_note: existing.book_note,
             created_at: existing.created_at,
             updated_at: Some(now),
             subject: None,
@@ -1264,7 +1291,7 @@ impl Database {
 
         let existing: Checkout = conn
             .query_row(
-                "SELECT id, subjectId, studentName, studentClass, checkoutDate, dueDate, returnDate, status, conditionOut, conditionIn, createdAt, updatedAt FROM Checkout WHERE id = ?",
+                "SELECT id, subjectId, studentName, studentClass, checkoutDate, dueDate, returnDate, status, conditionOut, conditionIn, bookNote, createdAt, updatedAt FROM Checkout WHERE id = ?",
                 params![id],
                 |r| {
                     Ok(Checkout {
@@ -1278,8 +1305,9 @@ impl Database {
                         status: r.get(7)?,
                         condition_out: r.get(8)?,
                         condition_in: r.get(9)?,
-                        created_at: r.get(10)?,
-                        updated_at: r.get(11)?,
+                        book_note: r.get(10)?,
+                        created_at: r.get(11)?,
+                        updated_at: r.get(12)?,
                         subject: None,
                     })
                 },
@@ -1324,7 +1352,7 @@ impl Database {
         let (sql, params_vec): (&str, Vec<rusqlite::types::Value>) = if let Some(sid) = subject_id {
             (
                 r#"SELECT c.id, c.subjectId, c.studentName, c.studentClass, c.checkoutDate, c.dueDate, c.returnDate, c.status, c.conditionOut, c.conditionIn, c.createdAt, c.updatedAt,
-                          s.name, s.category, s.openingCount, s.recovered, s.issued, s.damaged, s.lost, s.notes, s.averageCondition, s.degradationRate, s.createdAt, s.updatedAt
+                          s.name, s.category, s.openingCount, s.recovered, s.issued, s.damaged, s.lost, s.notes, s.averageCondition, s.degradationRate, s.createdAt, s.updatedAt, c.bookNote
                    FROM Checkout c
                    LEFT JOIN Subject s ON c.subjectId = s.id
                    WHERE c.status = 'ACTIVE' AND c.subjectId = ?
@@ -1334,7 +1362,7 @@ impl Database {
         } else {
             (
                 r#"SELECT c.id, c.subjectId, c.studentName, c.studentClass, c.checkoutDate, c.dueDate, c.returnDate, c.status, c.conditionOut, c.conditionIn, c.createdAt, c.updatedAt,
-                          s.name, s.category, s.openingCount, s.recovered, s.issued, s.damaged, s.lost, s.notes, s.averageCondition, s.degradationRate, s.createdAt, s.updatedAt
+                          s.name, s.category, s.openingCount, s.recovered, s.issued, s.damaged, s.lost, s.notes, s.averageCondition, s.degradationRate, s.createdAt, s.updatedAt, c.bookNote
                    FROM Checkout c
                    LEFT JOIN Subject s ON c.subjectId = s.id
                    WHERE c.status = 'ACTIVE'
@@ -1383,6 +1411,7 @@ impl Database {
                     status: row.get(7)?,
                     condition_out: row.get(8)?,
                     condition_in: row.get(9)?,
+                    book_note: row.get(24).unwrap_or(None),
                     created_at: row.get(10)?,
                     updated_at: row.get(11)?,
                     subject,
@@ -1404,7 +1433,7 @@ impl Database {
         let mut stmt = conn
             .prepare(
                 r#"SELECT c.id, c.subjectId, c.studentName, c.studentClass, c.checkoutDate, c.dueDate, c.returnDate, c.status, c.conditionOut, c.conditionIn, c.createdAt, c.updatedAt,
-                          s.name, s.category, s.openingCount, s.recovered, s.issued, s.damaged, s.lost, s.notes, s.averageCondition, s.degradationRate, s.createdAt, s.updatedAt
+                          s.name, s.category, s.openingCount, s.recovered, s.issued, s.damaged, s.lost, s.notes, s.averageCondition, s.degradationRate, s.createdAt, s.updatedAt, c.bookNote
                    FROM Checkout c
                    LEFT JOIN Subject s ON c.subjectId = s.id
                    WHERE c.status = 'ACTIVE' AND datetime(c.dueDate) < datetime('now')
@@ -1451,6 +1480,7 @@ impl Database {
                     status: row.get(7)?,
                     condition_out: row.get(8)?,
                     condition_in: row.get(9)?,
+                    book_note: row.get(24).unwrap_or(None),
                     created_at: row.get(10)?,
                     updated_at: row.get(11)?,
                     subject,
@@ -2253,7 +2283,7 @@ impl Database {
         let mut stmt = conn
             .prepare(
                 r#"SELECT c.id, c.subjectId, c.studentName, c.studentClass, c.checkoutDate, c.dueDate, c.returnDate, c.status, c.conditionOut, c.conditionIn, c.createdAt, c.updatedAt,
-                          s.name, s.category, s.openingCount, s.recovered, s.issued, s.damaged, s.lost, s.notes, s.averageCondition, s.degradationRate, s.createdAt, s.updatedAt
+                          s.name, s.category, s.openingCount, s.recovered, s.issued, s.damaged, s.lost, s.notes, s.averageCondition, s.degradationRate, s.createdAt, s.updatedAt, c.bookNote
                    FROM Checkout c
                    LEFT JOIN Subject s ON c.subjectId = s.id
                    ORDER BY c.id ASC"#,
@@ -2299,6 +2329,7 @@ impl Database {
                     status: row.get(7)?,
                     condition_out: row.get(8)?,
                     condition_in: row.get(9)?,
+                    book_note: row.get(24).unwrap_or(None),
                     created_at: row.get(10)?,
                     updated_at: row.get(11)?,
                     subject,
@@ -2640,5 +2671,200 @@ impl Database {
 
         let _ = self.set_last_lan_sync_at(&now);
         Ok((subjects_synced, checkouts_synced, incidents_synced, rules_synced))
+    }
+
+    pub fn get_students(&self) -> Result<Vec<Student>, String> {
+        let lock = self.conn.lock();
+        let conn = lock.as_ref().ok_or("Database is locked.")?;
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, name, studentClass, sex, section, house, combination, createdAt, updatedAt FROM Student ORDER BY studentClass ASC, name ASC",
+            )
+            .map_err(|e| e.to_string())?;
+
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(Student {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    student_class: row.get(2)?,
+                    sex: row.get(3)?,
+                    section: row.get(4)?,
+                    house: row.get(5)?,
+                    combination: row.get(6)?,
+                    created_at: row.get(7)?,
+                    updated_at: row.get(8)?,
+                })
+            })
+            .map_err(|e| e.to_string())?;
+
+        let mut list = Vec::new();
+        for r in rows {
+            list.push(r.map_err(|e| e.to_string())?);
+        }
+        Ok(list)
+    }
+
+    pub fn add_student(&self, data: StudentInput) -> Result<Student, String> {
+        let name = data
+            .name
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .ok_or("Student name is required")?;
+        let student_class = data
+            .student_class
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .ok_or("Student class is required")?;
+        let sex = data.sex.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+        let section = data.section.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+        let house = data.house.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+        let combination = data
+            .combination
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let now = Utc::now().to_rfc3339();
+
+        let lock = self.conn.lock();
+        let conn = lock.as_ref().ok_or("Database is locked.")?;
+
+        conn.execute(
+            "INSERT INTO Student (name, studentClass, sex, section, house, combination, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            params![name, student_class, sex, section, house, combination, now, now],
+        )
+        .map_err(|e| e.to_string())?;
+
+        let id = conn.last_insert_rowid();
+        Ok(Student {
+            id,
+            name,
+            student_class,
+            sex,
+            section,
+            house,
+            combination,
+            created_at: Some(now.clone()),
+            updated_at: Some(now),
+        })
+    }
+
+    pub fn update_student(&self, id: i64, data: StudentInput) -> Result<Student, String> {
+        let name = data
+            .name
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .ok_or("Student name is required")?;
+        let student_class = data
+            .student_class
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .ok_or("Student class is required")?;
+        let sex = data.sex.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+        let section = data.section.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+        let house = data.house.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+        let combination = data
+            .combination
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let now = Utc::now().to_rfc3339();
+
+        let lock = self.conn.lock();
+        let conn = lock.as_ref().ok_or("Database is locked.")?;
+
+        let updated = conn
+            .execute(
+                "UPDATE Student SET name = ?, studentClass = ?, sex = ?, section = ?, house = ?, combination = ?, updatedAt = ? WHERE id = ?",
+                params![name, student_class, sex, section, house, combination, now, id],
+            )
+            .map_err(|e| e.to_string())?;
+
+        if updated == 0 {
+            return Err(format!("Student with ID {} not found", id));
+        }
+
+        let created_at: Option<String> = conn
+            .query_row(
+                "SELECT createdAt FROM Student WHERE id = ?",
+                params![id],
+                |r| r.get(0),
+            )
+            .optional()
+            .unwrap_or(None);
+
+        Ok(Student {
+            id,
+            name,
+            student_class,
+            sex,
+            section,
+            house,
+            combination,
+            created_at,
+            updated_at: Some(now),
+        })
+    }
+
+    pub fn delete_student(&self, id: i64) -> Result<(), String> {
+        let lock = self.conn.lock();
+        let conn = lock.as_ref().ok_or("Database is locked.")?;
+
+        let deleted = conn
+            .execute("DELETE FROM Student WHERE id = ?", params![id])
+            .map_err(|e| e.to_string())?;
+
+        if deleted == 0 {
+            return Err(format!("Student with ID {} not found", id));
+        }
+        Ok(())
+    }
+
+    pub fn promote_students(
+        &self,
+        graduate_s4: bool,
+        graduate_s6: bool,
+    ) -> Result<PromoteStudentsResult, String> {
+        let now = Utc::now().to_rfc3339();
+        let lock = self.conn.lock();
+        let conn = lock.as_ref().ok_or("Database is locked.")?;
+
+        let mut graduated: i64 = 0;
+        let mut promoted: i64 = 0;
+
+        if graduate_s6 {
+            let n = conn
+                .execute("DELETE FROM Student WHERE UPPER(TRIM(studentClass)) IN ('S6', 'S.6')", [])
+                .map_err(|e| e.to_string())?;
+            graduated += n as i64;
+        }
+        if graduate_s4 {
+            let n = conn
+                .execute("DELETE FROM Student WHERE UPPER(TRIM(studentClass)) IN ('S4', 'S.4')", [])
+                .map_err(|e| e.to_string())?;
+            graduated += n as i64;
+        }
+
+        // Promote from highest class downwards to avoid unique collisions
+        let transitions = [
+            ("S5", "S.5", "S6"),
+            ("S3", "S.3", "S4"),
+            ("S2", "S.2", "S3"),
+            ("S1", "S.1", "S2"),
+        ];
+
+        for (from_a, from_b, to_cls) in transitions {
+            let n = conn
+                .execute(
+                    "UPDATE OR IGNORE Student SET studentClass = ?, updatedAt = ? WHERE UPPER(TRIM(studentClass)) IN (?, ?)",
+                    params![to_cls, now, from_a, from_b],
+                )
+                .map_err(|e| e.to_string())?;
+            promoted += n as i64;
+        }
+
+        Ok(PromoteStudentsResult {
+            promoted,
+            graduated,
+        })
     }
 }

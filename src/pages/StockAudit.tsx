@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import { db } from '../lib/ipc-client'
 import { ConfirmModal } from '../components/ConfirmModal'
+import { SelectField } from '../components/TextField'
 import type { StockAudit, StockAuditItem, Subject } from '../lib/types'
 
 interface StockAuditRowProps {
@@ -58,7 +59,7 @@ const StockAuditRow = memo(function StockAuditRow({
         <span>{subject.name}</span>
       </td>
       <td className="p-4 text-slate-500 dark:text-slate-400">
-        <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 text-xs rounded-md">
+        <span className="px-2 py-1 bg-slate-100 dark:bg-[#191F1E] text-xs rounded-md">
           {subject.category || 'General'}
         </span>
       </td>
@@ -73,14 +74,14 @@ const StockAuditRow = memo(function StockAuditRow({
             const val = parseInt(e.target.value, 10)
             onActualCountChange(subject.id, isNaN(val) ? 0 : val)
           }}
-          className="w-20 px-2 py-1 text-center font-bold bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none disabled:opacity-60"
+          className="w-20 px-2 py-1 text-center font-bold bg-white dark:bg-[#191F1E] border border-slate-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-[#2E9472]/40 focus:outline-none disabled:opacity-60"
         />
       </td>
       <td className="p-4 text-center">
         <span
           className={`font-bold px-2.5 py-1 text-xs rounded-md ${
             discrepancy === 0
-              ? 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+              ? 'bg-slate-100 text-slate-700 dark:bg-[#191F1E] dark:text-slate-300'
               : discrepancy < 0
               ? 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300'
               : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
@@ -114,14 +115,14 @@ const StockAuditRow = memo(function StockAuditRow({
           disabled={isReadOnly}
           value={currentEdit.notes}
           onChange={(e) => onNotesChange(subject.id, e.target.value)}
-          className="w-full px-2.5 py-1 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-60 text-slate-700 dark:text-slate-300"
+          className="w-full px-2.5 py-1 text-xs bg-slate-50 dark:bg-[#191F1E] border border-[#E3E6DE] dark:border-[#27302E] rounded-md focus:outline-none focus:ring-1 focus:ring-[#2E9472]/40 disabled:opacity-60 text-slate-700 dark:text-slate-300"
         />
       </td>
       <td className="p-4 text-right">
         <button
           onClick={() => onSaveItem(subject.id)}
           disabled={isReadOnly || savingSubjectId === subject.id}
-          className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg transition disabled:opacity-50"
+          className="px-3 py-1.5 bg-[#1F6F54] dark:bg-[#2E9472] hover:bg-[#195C45] dark:hover:bg-[#267D60] text-white text-xs font-medium rounded-lg transition disabled:opacity-50"
         >
           {savingSubjectId === subject.id ? 'Saving...' : 'Save'}
         </button>
@@ -380,15 +381,15 @@ export default function StockAuditPage() {
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 chalk-card p-6">
         <div>
           <div className="flex items-center space-x-3">
-            <div className="p-3 bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400 rounded-lg">
+            <div className="p-3 bg-[#e9dcc0] border-[1.5px] border-[#2b3a35] text-[#2f5749] rounded-xl">
               <ClipboardCheck className="w-6 h-6" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Physical Stock Audit Mode</h1>
-              <p className="text-sm text-slate-500 dark:text-slate-400">
+              <h1 className="chalk-ink text-2xl font-extrabold text-[#2b3a35]">Physical Stock Audit Mode</h1>
+              <p className="chalk-muted text-sm text-[#4a5c55]">
                 Shelf-by-shelf inventory verification, count variance tracking & discrepancy management
               </p>
             </div>
@@ -397,27 +398,28 @@ export default function StockAuditPage() {
 
         <div className="flex flex-wrap items-center gap-3">
           {(!activeAudit || activeAudit.status === 'COMPLETED') && (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <input
                 type="text"
                 placeholder="Auditor Name (e.g. J. Okello)"
                 value={auditorName}
                 onChange={(e) => setAuditorName(e.target.value)}
-                className="px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 w-40"
+                className="chalk-input px-3 py-2 text-xs w-40"
               />
               <input
                 type="text"
                 placeholder="Session notes (e.g. Term 3 Audit)"
                 value={auditNotes}
                 onChange={(e) => setAuditNotes(e.target.value)}
-                className="px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 w-48"
+                className="chalk-input px-3 py-2 text-xs w-48"
               />
             </div>
           )}
 
           <button
+            type="button"
             onClick={() => setViewHistory(!viewHistory)}
-            className="flex items-center space-x-2 px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition"
+            className="chalk-btn-secondary flex items-center gap-2 px-4 py-2 text-sm font-semibold transition cursor-pointer"
           >
             <FileText className="w-4 h-4" />
             <span>{viewHistory ? 'Active Audit View' : 'Audit History'}</span>
@@ -425,9 +427,10 @@ export default function StockAuditPage() {
 
           {(!activeAudit || activeAudit.status === 'COMPLETED') && (
             <button
+              type="button"
               onClick={handleStartNewAudit}
               disabled={loading}
-              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
+              className="chalk-btn-primary flex items-center gap-2 px-4 py-2 text-sm font-semibold transition disabled:opacity-50 cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               <span>Start New Audit Session</span>
@@ -436,9 +439,10 @@ export default function StockAuditPage() {
 
           {activeAudit && activeAudit.status === 'IN_PROGRESS' && (
             <button
+              type="button"
               onClick={handleCompleteAudit}
               disabled={completing}
-              className="flex items-center space-x-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition disabled:opacity-50 font-medium"
+              className="chalk-btn-primary flex items-center gap-2 px-4 py-2 text-sm font-semibold transition disabled:opacity-50 cursor-pointer"
             >
               <CheckCircle className="w-4 h-4" />
               <span>{completing ? 'Finalizing...' : 'Complete Audit'}</span>
@@ -495,7 +499,7 @@ export default function StockAuditPage() {
                   placeholder="Session summary notes before finalizing..."
                   value={auditNotes}
                   onChange={(e) => setAuditNotes(e.target.value)}
-                  className="px-3 py-1 text-xs rounded-lg bg-slate-800 border border-slate-700 text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 w-64"
+                  className="px-3 py-1 text-xs rounded-lg bg-slate-800 border border-slate-700 text-slate-200 focus:outline-none focus:ring-1 focus:ring-[#2E9472]/40 w-64"
                 />
               )}
             </div>
@@ -539,8 +543,8 @@ export default function StockAuditPage() {
 
       {/* History View */}
       {viewHistory ? (
-        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-          <div className="p-6 border-b border-slate-200 dark:border-slate-800">
+        <div className="chalk-card overflow-hidden">
+          <div className="p-6 border-b border-[#E3E6DE] dark:border-[#27302E]">
             <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Audit History & Records</h2>
             <p className="text-sm text-slate-500 dark:text-slate-400">Past shelf-by-shelf inventory verification sessions</p>
           </div>
@@ -548,7 +552,7 @@ export default function StockAuditPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 text-xs font-semibold uppercase">
+                <tr className="bg-slate-50 dark:bg-[#191F1E]/80 text-slate-600 dark:text-slate-400 text-xs font-semibold uppercase">
                   <th className="p-4">Audit ID</th>
                   <th className="p-4">Date</th>
                   <th className="p-4">Auditor</th>
@@ -579,7 +583,7 @@ export default function StockAuditPage() {
 
                     return (
                       <tr key={a.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                        <td className="p-4 font-mono font-medium text-blue-600 dark:text-blue-400">#{a.id}</td>
+                        <td className="p-4 font-mono font-medium text-[#1F6F54] dark:text-[#3FB08A]">#{a.id}</td>
                         <td className="p-4 text-slate-700 dark:text-slate-300">{new Date(a.auditDate).toLocaleDateString()}</td>
                         <td className="p-4 text-slate-700 dark:text-slate-300">{a.auditedBy || 'LIBRARIAN'}</td>
                         <td className="p-4">
@@ -619,12 +623,13 @@ export default function StockAuditPage() {
                         </td>
                         <td className="p-4 text-right">
                           <button
+                            type="button"
                             onClick={() => {
                               setActiveAudit(a)
                               initItemEdits(a)
                               setViewHistory(false)
                             }}
-                            className="px-3 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-medium rounded transition"
+                            className="chalk-btn-secondary px-3 py-1 text-xs font-semibold transition cursor-pointer"
                           >
                             Inspect
                           </button>
@@ -639,9 +644,9 @@ export default function StockAuditPage() {
         </div>
       ) : (
         /* Inventory Verification Table View */
-        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden space-y-4">
+        <div className="chalk-card overflow-hidden space-y-4">
           {/* Controls Header */}
-          <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="p-6 border-b border-[#E3E6DE] dark:border-[#27302E] flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Shelf Verification Table</h2>
               <p className="text-sm text-slate-500 dark:text-slate-400">
@@ -651,28 +656,26 @@ export default function StockAuditPage() {
 
             <div className="flex flex-wrap items-center gap-3">
               <div className="relative w-full sm:w-64">
-                <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+                <Search className="w-4 h-4 absolute left-3 top-2.5 text-[#4a5c55]" />
                 <input
                   type="text"
                   placeholder="Search subject or code..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="chalk-input w-full pl-9 pr-4 py-2 text-sm"
                 />
               </div>
 
-              <select
-                value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
-                className="py-2 px-3 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700 dark:text-slate-300"
-              >
-                <option value="ALL">All Categories</option>
-                {categories.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
+              <div className="min-w-[170px]">
+                <SelectField
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value)}
+                  options={[
+                    { value: 'ALL', label: 'All Categories' },
+                    ...categories.map((c) => ({ value: c, label: c }))
+                  ]}
+                />
+              </div>
             </div>
           </div>
 
@@ -680,7 +683,7 @@ export default function StockAuditPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 text-xs font-semibold uppercase">
+                <tr className="bg-slate-50 dark:bg-[#191F1E]/80 text-slate-600 dark:text-slate-400 text-xs font-semibold uppercase">
                   <th className="p-4">Subject Title</th>
                   <th className="p-4">Category</th>
                   <th className="p-4 text-center">System Expected</th>

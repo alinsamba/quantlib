@@ -13,15 +13,19 @@ import {
   Overdue,
   Clearance,
   StockAudit,
-  Analytics
+  Analytics,
+  Students,
+  CirculationDesk
 } from './routes'
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<ErrorBoundary><App /></ErrorBoundary>}>
-          <Route index element={<ErrorBoundary><Suspense fallback={<LoadingFallback />}><Dashboard /></Suspense></ErrorBoundary>} />
+          <Route index element={<ErrorBoundary><Suspense fallback={<LoadingFallback />}><CirculationDesk /></Suspense></ErrorBoundary>} />
+          <Route path="dashboard" element={<ErrorBoundary><Suspense fallback={<LoadingFallback />}><Dashboard /></Suspense></ErrorBoundary>} />
           <Route path="inventory" element={<ErrorBoundary><Suspense fallback={<LoadingFallback />}><Inventory /></Suspense></ErrorBoundary>} />
+          <Route path="students" element={<ErrorBoundary><Suspense fallback={<LoadingFallback />}><Students /></Suspense></ErrorBoundary>} />
           <Route path="audit" element={<ErrorBoundary><Suspense fallback={<LoadingFallback />}><StockAudit /></Suspense></ErrorBoundary>} />
           <Route path="analytics" element={<ErrorBoundary><Suspense fallback={<LoadingFallback />}><Analytics /></Suspense></ErrorBoundary>} />
           <Route path="incidents" element={<ErrorBoundary><Suspense fallback={<LoadingFallback />}><Incidents /></Suspense></ErrorBoundary>} />

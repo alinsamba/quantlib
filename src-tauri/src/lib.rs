@@ -86,6 +86,11 @@ pub fn run() {
             commands::get_school_info,
             commands::save_school_info,
             commands::export_entire_db_csv,
+            commands::get_students,
+            commands::add_student,
+            commands::update_student,
+            commands::delete_student,
+            commands::promote_students,
         ])
         .on_window_event(move |_window, event| {
             if let tauri::WindowEvent::Destroyed = event {
@@ -123,7 +128,7 @@ mod tests {
         assert_eq!(vault.check_db_status(), "SETUP");
 
         // Weak password should be rejected
-        assert!(vault.setup_database("weak").is_err());
+        assert!(vault.setup_database("123").is_err());
 
         let recovery_key = vault
             .setup_database("SuperSecurePassword123!")
@@ -188,6 +193,7 @@ mod tests {
                 Some("S.4A".into()),
                 None,
                 Some(3),
+                None,
             )
             .expect("Failed to add checkout");
 
@@ -311,6 +317,7 @@ mod tests {
                 Some("S.4A".into()),
                 Some("2020-01-01T12:00:00Z".into()),
                 Some(3),
+                None,
             )
             .unwrap();
         assert_eq!(overdue_checkout.status, "ACTIVE");

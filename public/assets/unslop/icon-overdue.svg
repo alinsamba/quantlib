@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="bell" x1="18" y1="18" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F2C86E"/><stop offset="1" stop-color="#B98026"/>
+    </linearGradient>
+  </defs>
+  <rect x="28" y="12" width="8" height="7" rx="3.5" fill="#C8553D"/>
+  <path d="M14 44C14 30 22 20 32 20C42 20 50 30 50 44H14Z" fill="url(#bell)"/>
+  <ellipse cx="26" cy="30" rx="5" ry="3" transform="rotate(-25 26 30)" fill="#FFF6DC" opacity="0.55"/>
+  <rect x="10" y="44" width="44" height="9" rx="4.5" fill="#8C592B"/>
+</svg>

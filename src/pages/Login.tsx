@@ -2,8 +2,11 @@ import { useState, useEffect, type FormEvent } from 'react'
 import { db } from '../lib/ipc-client'
 import { Lock, ShieldCheck, Key, Copy, Check, Eye, EyeOff } from 'lucide-react'
 import { validateMasterPassword } from '../lib/utils'
+import { useTheme } from '../hooks/ThemeContext'
 
 export default function Login({ onUnlock }: { onUnlock: () => void }) {
+  const { theme } = useTheme()
+  const isChalk = theme === 'chalk'
   const [status, setStatus] = useState<'LOADING' | 'SETUP' | 'LOCKED'>('LOADING')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -113,33 +116,46 @@ export default function Login({ onUnlock }: { onUnlock: () => void }) {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-4">
-      <div className="max-w-md w-full bg-white dark:bg-slate-900 rounded-2xl shadow-xl p-8 border border-slate-100 dark:border-slate-800 animate-fade-in">
-        <div className="text-center mb-8">
-          <img src="/quantlib.svg" alt="Logo" className="w-16 h-16 mx-auto mb-4 object-contain" />
-          <h1 className="text-2xl font-bold text-slate-800 dark:text-white">
-            {status === 'SETUP' ? 'Create Master Password' : (isRecoveryMode ? 'Enter Recovery Key' : 'Unlock QuantLib')}
+    <div className="chalk-shell min-h-full flex items-center justify-center bg-[#F5F6F2] dark:bg-[#121615] p-6">
+      <div className="chalk-hero max-w-md w-full bg-white dark:bg-[#191F1E] rounded-2xl shadow-lg p-8 border border-[#E3E6DE] dark:border-[#27302E] animate-fade-in">
+        <div className="text-center mb-7">
+          <div
+            className={`w-24 h-24 mx-auto mb-4 rounded-2xl bg-[#182120] overflow-hidden flex items-center justify-center ${
+              isChalk
+                ? 'border-[1.5px] border-[#2b3a35] shadow-[3px_3px_0_#2b3a35]'
+                : 'border border-[#27302E] shadow-xs'
+            }`}
+          >
+            <img
+              src="/assets/unslop/quantlib-desk-emblem.webp"
+              alt="QuantLib"
+              className="w-full h-full object-cover scale-105"
+              draggable={false}
+            />
+          </div>
+          <h1 className="chalk-ink text-2xl font-extrabold text-[#18201D] dark:text-[#EEF2EF] tracking-tight">
+            {status === 'SETUP' ? 'Create Vault PIN / Password' : (isRecoveryMode ? 'Enter Recovery Key' : 'Unlock QuantLib')}
           </h1>
-          <p className="text-slate-500 dark:text-slate-400 mt-2 text-sm">
+          <p className="chalk-muted text-[#5E6B65] dark:text-[#94A39D] mt-2 text-sm">
             {status === 'SETUP' 
-              ? 'This password will be used to encrypt your database. Use 12+ characters with upper, lower, number, and symbol.' 
-              : (isRecoveryMode ? 'Enter the recovery key provided during setup (XXXX-XXXX-...).' : 'Enter your master password to access your data.')}
+              ? 'Choose a PIN or password (at least 4 characters) to encrypt your library database.' 
+              : (isRecoveryMode ? 'Enter the recovery key provided during setup (XXXX-XXXX-...).' : 'Enter your PIN or password to open the circulation desk.')}
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-5">
           <div>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                {isRecoveryMode ? <Key className="text-slate-400" size={20} /> : <Lock className="text-slate-400" size={20} />}
+                {isRecoveryMode ? <Key className="text-[#4a5c55]" size={18} /> : <Lock className="text-[#4a5c55]" size={18} />}
               </div>
               <input
                 type={isRecoveryMode || showPassword ? 'text' : 'password'}
                 required
-                placeholder={isRecoveryMode ? 'XXXX-XXXX-XXXX-...' : 'Enter master password'}
-                minLength={status === 'SETUP' && !isRecoveryMode ? 12 : undefined}
-                title={status === 'SETUP' && !isRecoveryMode ? 'Use at least 12 characters with uppercase, lowercase, a number, and a special character.' : undefined}
-                className="w-full pl-11 pr-11 py-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 dark:text-white transition-all text-base tracking-wide"
+                placeholder={isRecoveryMode ? 'XXXX-XXXX-XXXX-...' : 'Enter PIN or password'}
+                minLength={status === 'SETUP' && !isRecoveryMode ? 4 : undefined}
+                title={status === 'SETUP' && !isRecoveryMode ? 'Use at least 4 characters (PIN or password).' : undefined}
+                className="chalk-input w-full pl-11 pr-11 py-3 bg-[#F5F6F2] dark:bg-[#121615] border border-[#DDE1D8] dark:border-[#27302E] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#1F6F54]/25 dark:focus:ring-[#2E9472]/30 focus:border-[#1F6F54] dark:focus:border-[#2E9472] text-[#18201D] dark:text-[#EEF2EF] transition-all text-base tracking-wide"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
               />
@@ -147,7 +163,7 @@ export default function Login({ onUnlock }: { onUnlock: () => void }) {
                 <button
                   type="button"
                   onClick={() => setShowPassword(v => !v)}
-                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-[#4a5c55] hover:text-[#2b3a35] dark:hover:text-[#EEF2EF] cursor-pointer"
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
                 >
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -156,14 +172,14 @@ export default function Login({ onUnlock }: { onUnlock: () => void }) {
             </div>
           </div>
 
-          {error && <div className="text-red-500 text-sm text-center font-medium bg-red-50 dark:bg-red-900/20 py-2 px-3 rounded-lg">{error}</div>}
+          {error && <div className="text-[#a82c1d] dark:text-[#E4836E] text-sm text-center font-semibold bg-[#a82c1d]/10 border border-[#a82c1d]/30 py-2 px-3 rounded-lg">{error}</div>}
 
           <button
             type="submit"
             disabled={loading || !password}
-            className="w-full bg-blue-600 text-white py-3 rounded-xl font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="chalk-btn-primary w-full bg-[#1F6F54] hover:bg-[#195C45] dark:bg-[#2E9472] dark:hover:bg-[#267D60] text-white py-3 rounded-xl font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
           >
-            {loading ? 'Processing...' : (status === 'SETUP' ? 'Encrypt & Setup' : 'Unlock Database')}
+            {loading ? 'Processing...' : (status === 'SETUP' ? 'Encrypt & Setup' : 'Open Circulation Desk')}
           </button>
         </form>
 
@@ -172,9 +188,9 @@ export default function Login({ onUnlock }: { onUnlock: () => void }) {
             <button 
               type="button" 
               onClick={() => { setIsRecoveryMode(!isRecoveryMode); setPassword(''); setError(''); }}
-              className="text-sm text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+              className="chalk-slate text-sm font-semibold text-[#5E6B65] dark:text-[#94A39D] hover:text-[#a82c1d] dark:hover:text-[#3FB08A] transition-colors cursor-pointer"
             >
-              {isRecoveryMode ? 'Use Master Password instead' : 'Lost password? Use Recovery Key'}
+              {isRecoveryMode ? 'Use PIN / Password instead' : 'Forgot PIN? Use Recovery Key'}
             </button>
           </div>
         )}

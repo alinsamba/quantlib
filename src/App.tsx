@@ -1,28 +1,18 @@
 import { useState, useEffect } from 'react'
 import { Outlet, NavLink } from 'react-router-dom'
 import { 
-  LayoutDashboard, 
-  BookOpen, 
-  AlertTriangle, 
-  Settings as SettingsIcon, 
-  Clock, 
-  FileCheck, 
-  ClipboardCheck, 
-  BarChart3,
   ChevronLeft,
-  ChevronRight,
-  Sun,
-  Moon,
-  Lock
+  ChevronRight
 } from 'lucide-react'
 
-import { ThemeProvider, useTheme } from './hooks/ThemeContext'
+import { ThemeProvider } from './hooks/ThemeContext'
 import { ToastProvider } from './hooks/ToastContext'
 import Login from './pages/Login'
+import { TitleBar } from './components/TitleBar'
+import { ChalkGlyph, type ChalkGlyphName } from './components/theme/ChalkGlyph'
 import { db } from './lib/ipc-client'
 
 function AppLayout({ onLock }: { onLock: () => void }) {
-  const { theme, setTheme } = useTheme()
   const [isCollapsed, setIsCollapsed] = useState(() => {
     return localStorage.getItem('quantlib_sidebar_collapsed') === 'true'
   })
@@ -31,36 +21,49 @@ function AppLayout({ onLock }: { onLock: () => void }) {
     localStorage.setItem('quantlib_sidebar_collapsed', String(isCollapsed))
   }, [isCollapsed])
 
-  const navItems = [
-    { to: '/', label: 'Dashboard', icon: LayoutDashboard },
-    { to: '/inventory', label: 'Inventory', icon: BookOpen },
-    { to: '/audit', label: 'Stock Audit', icon: ClipboardCheck },
-    { to: '/analytics', label: 'Analytics', icon: BarChart3 },
-    { to: '/incidents', label: 'Incident Log', icon: AlertTriangle },
-    { to: '/overdue', label: 'Overdue Books', icon: Clock },
-    { to: '/clearance', label: 'Clearance', icon: FileCheck },
+  const dailyNavItems: { to: string; label: string; glyph: ChalkGlyphName; end?: boolean }[] = [
+    { to: '/', label: 'Circulation Desk', glyph: 'desk', end: true },
+    { to: '/students', label: 'Students & Staff', glyph: 'students' },
+    { to: '/inventory', label: 'Inventory', glyph: 'inventory' },
+    { to: '/overdue', label: 'Overdue Books', glyph: 'overdue' },
+    { to: '/clearance', label: 'Clearance', glyph: 'clearance' },
+  ]
+
+  const managementNavItems: { to: string; label: string; glyph: ChalkGlyphName }[] = [
+    { to: '/dashboard', label: 'Dashboard', glyph: 'dashboard' },
+    { to: '/incidents', label: 'Incident Log', glyph: 'incidents' },
+    { to: '/audit', label: 'Stock Audit', glyph: 'audit' },
+    { to: '/analytics', label: 'Analytics', glyph: 'analytics' },
   ]
 
   return (
-    <div className="flex h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-200">
+    <div className="chalk-shell flex h-screen overflow-hidden bg-[#fbf8f1] text-[#2b3a35]">
       {/* Sidebar (64px collapsed, 240px expanded) */}
       <aside 
-        className={`${
+        className={`chalk-sidebar ${
           isCollapsed ? 'w-16' : 'w-60'
-        } transition-all duration-300 ease-in-out bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border-r border-slate-200/80 dark:border-slate-800 flex flex-col whitespace-nowrap print:hidden shadow-xs relative z-30 select-none flex-shrink-0`}
+        } transition-all duration-300 ease-in-out flex flex-col whitespace-nowrap print:hidden relative z-30 select-none flex-shrink-0`}
       >
-        {/* App Branding */}
-        <div className={`p-3.5 pt-6 flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'} [webkit-app-region:drag]`}>
-          <div className="flex items-center space-x-3 overflow-hidden">
-            <div className="w-9 h-9 rounded-xl bg-blue-600/10 dark:bg-blue-500/20 flex items-center justify-center flex-shrink-0 text-blue-600 dark:text-blue-400">
-              <img src="/quantlib.svg" alt="QuantLib Logo" className="w-5 h-5 object-contain" />
+        {/* App Branding (Draggable region for frameless window) */}
+        <div
+          data-tauri-drag-region
+          className={`p-3.5 pt-4 flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'}`}
+        >
+          <div className="flex items-center gap-2.5 overflow-hidden">
+            <div className="w-9 h-9 rounded-lg bg-[#182120] border-[1.5px] border-[#2b3a35] shadow-[2px_2px_0_#2b3a35] flex items-center justify-center flex-shrink-0 overflow-hidden">
+              <img
+                src="/assets/unslop/quantlib-desk-emblem.webp"
+                alt="QuantLib"
+                className="w-full h-full object-cover scale-110"
+                draggable={false}
+              />
             </div>
             {!isCollapsed && (
               <div className="overflow-hidden transition-all duration-200">
-                <h1 className="text-lg font-bold bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-400 bg-clip-text text-transparent tracking-tight">
+                <h1 className="chalk-ink text-base font-extrabold tracking-tight leading-tight">
                   QuantLib
                 </h1>
-                <p className="text-[11px] text-slate-400 dark:text-slate-500 font-medium">Library Management</p>
+                <p className="chalk-slate text-[11px] font-semibold">School Library</p>
               </div>
             )}
           </div>
@@ -69,8 +72,8 @@ function AppLayout({ onLock }: { onLock: () => void }) {
             <button 
               type="button"
               onClick={() => setIsCollapsed(!isCollapsed)}
-              className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors [webkit-app-region:no-drag]"
-              title="Collapse Sidebar (64px)"
+              className="p-1 rounded-lg text-[#2f5749] hover:text-[#2b3a35] hover:bg-[#e9dcc0] transition-colors cursor-pointer"
+              title="Collapse Sidebar"
             >
               <ChevronLeft size={16} />
             </button>
@@ -78,12 +81,12 @@ function AppLayout({ onLock }: { onLock: () => void }) {
         </div>
 
         {isCollapsed && (
-          <div className="flex justify-center my-1 [webkit-app-region:no-drag]">
+          <div className="flex justify-center my-1">
             <button 
               type="button"
               onClick={() => setIsCollapsed(false)}
-              className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-              title="Expand Sidebar (240px)"
+              className="p-1 rounded-lg text-[#2f5749] hover:text-[#2b3a35] hover:bg-[#e9dcc0] transition-colors cursor-pointer"
+              title="Expand Sidebar"
             >
               <ChevronRight size={16} />
             </button>
@@ -91,90 +94,92 @@ function AppLayout({ onLock }: { onLock: () => void }) {
         )}
 
         {/* Navigation List */}
-        <nav className="flex-1 px-2 space-y-1.5 mt-3 overflow-y-auto">
-          {navItems.map((item) => {
-            const Icon = item.icon
-            return (
+        <nav className="flex-1 px-2.5 space-y-3 mt-1 overflow-y-auto">
+          <div className="space-y-1">
+            {!isCollapsed && (
+              <p className="chalk-sidebar-section-label px-3 pb-1 text-[10px] font-bold uppercase tracking-[0.08em]">
+                Daily Desk
+              </p>
+            )}
+            {dailyNavItems.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.end}
+                title={isCollapsed ? item.label : undefined}
+                className={({ isActive }) =>
+                  `chalk-nav-item ${isActive ? 'chalk-nav-active' : ''} flex items-center ${
+                    isCollapsed ? 'justify-center px-0 py-2' : 'px-2.5 py-1.5'
+                  } font-medium text-sm group`
+                }
+              >
+                <ChalkGlyph name={item.glyph} size={20} />
+                {!isCollapsed && (
+                  <span className="ml-2.5 truncate">{item.label}</span>
+                )}
+              </NavLink>
+            ))}
+          </div>
+
+          <div className="chalk-sidebar-divider space-y-1 pt-2.5 border-t">
+            {!isCollapsed && (
+              <p className="chalk-sidebar-section-label px-3 pb-1 text-[10px] font-bold uppercase tracking-[0.08em]">
+                Management
+              </p>
+            )}
+            {managementNavItems.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
                 title={isCollapsed ? item.label : undefined}
                 className={({ isActive }) =>
-                  `flex items-center ${
-                    isCollapsed ? 'justify-center px-0 py-2.5' : 'px-3 py-2'
-                  } rounded-xl transition-all duration-150 [webkit-app-region:no-drag] font-medium text-sm group ${
-                    isActive
-                      ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/30'
-                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-white'
-                  }`
+                  `chalk-nav-item ${isActive ? 'chalk-nav-active' : ''} flex items-center ${
+                    isCollapsed ? 'justify-center px-0 py-2' : 'px-2.5 py-1.5'
+                  } font-medium text-sm group`
                 }
               >
-                <Icon size={19} className="flex-shrink-0" />
+                <ChalkGlyph name={item.glyph} size={20} />
                 {!isCollapsed && (
-                  <span className="ml-3 truncate">{item.label}</span>
+                  <span className="ml-2.5 truncate">{item.label}</span>
                 )}
               </NavLink>
-            )
-          })}
+            ))}
+          </div>
         </nav>
 
-        {/* Bottom Actions: Theme Toggle, Settings & Lock Vault */}
-        <div className="p-2 border-t border-slate-100 dark:border-slate-800/80 space-y-1">
-          {/* Quick Theme Toggle */}
-          <button
-            type="button"
-            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            title={isCollapsed ? `Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode` : undefined}
-            className={`w-full flex items-center ${
-              isCollapsed ? 'justify-center px-0 py-2.5' : 'px-3 py-2'
-            } rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-white transition-colors [webkit-app-region:no-drag] text-sm font-medium`}
-          >
-            {theme === 'dark' ? (
-              <Sun size={19} className="flex-shrink-0 text-amber-400" />
-            ) : (
-              <Moon size={19} className="flex-shrink-0 text-slate-500" />
-            )}
-            {!isCollapsed && (
-              <span className="ml-3 truncate">{theme === 'dark' ? 'Light Theme' : 'Dark Theme'}</span>
-            )}
-          </button>
-
-          {/* Settings Nav */}
+        {/* Bottom Actions: Settings & Lock Vault */}
+        <div className="chalk-sidebar-divider p-2 border-t space-y-1">
           <NavLink
             to="/settings"
             title={isCollapsed ? "Settings" : undefined}
             className={({ isActive }) =>
-              `flex items-center ${
-                isCollapsed ? 'justify-center px-0 py-2.5' : 'px-3 py-2'
-              } rounded-xl transition-all duration-150 [webkit-app-region:no-drag] font-medium text-sm ${
-                isActive
-                  ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/30'
-                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/80 hover:text-slate-900 dark:hover:text-white'
-              }`
+              `chalk-nav-item ${isActive ? 'chalk-nav-active' : ''} flex items-center ${
+                isCollapsed ? 'justify-center px-0 py-2' : 'px-2.5 py-1.5'
+              } font-medium text-sm`
             }
           >
-            <SettingsIcon size={19} className="flex-shrink-0" />
-            {!isCollapsed && <span className="ml-3 truncate">Settings</span>}
+            <ChalkGlyph name="settings" size={20} />
+            {!isCollapsed && <span className="ml-2.5 truncate">Settings</span>}
           </NavLink>
 
-          {/* Lock Vault Button */}
           <button
             type="button"
             onClick={onLock}
             title={isCollapsed ? "Lock Encrypted Vault" : undefined}
-            className={`w-full flex items-center ${
-              isCollapsed ? 'justify-center px-0 py-2.5' : 'px-3 py-2'
-            } rounded-xl text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors [webkit-app-region:no-drag] text-sm font-medium`}
+            className={`chalk-nav-item w-full flex items-center ${
+              isCollapsed ? 'justify-center px-0 py-2' : 'px-2.5 py-1.5'
+            } text-[#a82c1d] font-medium text-sm cursor-pointer`}
           >
-            <Lock size={18} className="flex-shrink-0" />
-            {!isCollapsed && <span className="ml-3 truncate">Lock Vault</span>}
+            <ChalkGlyph name="lock" size={20} />
+            {!isCollapsed && <span className="ml-2.5 truncate">Lock Vault</span>}
           </button>
         </div>
       </aside>
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col overflow-hidden">
-        <div className="flex-1 overflow-auto p-6 sm:p-8">
+        <TitleBar transparent />
+        <div className="flex-1 overflow-auto px-6 pb-6 sm:px-8 sm:pb-8 pt-1">
           <Outlet />
         </div>
       </main>
@@ -240,7 +245,12 @@ function App() {
     return (
       <ThemeProvider>
         <ToastProvider>
-          <Login onUnlock={handleUnlock} />
+          <div className="flex flex-col h-screen overflow-hidden bg-slate-50 dark:bg-slate-950">
+            <TitleBar showBrand />
+            <div className="flex-1 overflow-auto">
+              <Login onUnlock={handleUnlock} />
+            </div>
+          </div>
         </ToastProvider>
       </ThemeProvider>
     )

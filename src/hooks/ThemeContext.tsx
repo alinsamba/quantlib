@@ -1,7 +1,7 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, type ReactNode } from 'react';
 import { db } from '../lib/ipc-client';
 
-type Theme = 'light' | 'dark';
+export type Theme = 'chalk';
 
 interface ThemeContextType {
   theme: Theme;
@@ -12,25 +12,18 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 // eslint-disable-next-line react-refresh/only-export-components
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>(() => {
-    return (localStorage.getItem('theme') as Theme) || 'light';
-  });
-
   useEffect(() => {
-    localStorage.setItem('theme', theme);
+    localStorage.setItem('quantlib_theme', 'chalk');
+    localStorage.removeItem('theme');
     const root = window.document.documentElement;
-    if (theme === 'dark') {
-      root.classList.add('dark');
-    } else {
-      root.classList.remove('dark');
-    }
-    
-    // Sync with main process for titleBarOverlay
-    db.setTheme(theme).catch(console.error);
-  }, [theme]);
+    root.setAttribute('data-theme', 'chalk');
+    root.classList.remove('dark');
+
+    db.setTheme('light').catch(() => {});
+  }, []);
 
   return (
-    <ThemeContext.Provider value={{ theme, setTheme: setThemeState }}>
+    <ThemeContext.Provider value={{ theme: 'chalk', setTheme: () => {} }}>
       {children}
     </ThemeContext.Provider>
   );

@@ -26,24 +26,24 @@ export function StatCard({
 }: StatCardProps) {
   const variantStyles = {
     primary: {
-      iconBg: 'bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-900/50',
-      badge: 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300'
+      iconBg: 'bg-[#1F6F54]/10 dark:bg-[#2E9472]/15 text-[#1F6F54] dark:text-[#3FB08A]',
+      badge: 'bg-[#1F6F54]/12 dark:bg-[#2E9472]/20 text-[#1F6F54] dark:text-[#63C7A4]'
     },
     success: {
-      iconBg: 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-900/50',
-      badge: 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300'
+      iconBg: 'bg-[#1F6F54]/10 dark:bg-[#2E9472]/15 text-[#1F6F54] dark:text-[#3FB08A]',
+      badge: 'bg-[#1F6F54]/12 dark:bg-[#2E9472]/20 text-[#1F6F54] dark:text-[#63C7A4]'
     },
     warning: {
-      iconBg: 'bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 border border-amber-100 dark:border-amber-900/50',
-      badge: 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300'
+      iconBg: 'bg-[#D49A3A]/12 dark:bg-[#D49A3A]/15 text-[#A8741E] dark:text-[#E2B05C]',
+      badge: 'bg-[#D49A3A]/15 text-[#9E6B18] dark:text-[#E2B05C]'
     },
     critical: {
-      iconBg: 'bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 border border-rose-100 dark:border-rose-900/50',
-      badge: 'bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300'
+      iconBg: 'bg-[#C8553D]/12 dark:bg-[#C8553D]/15 text-[#B8452E] dark:text-[#E4836E]',
+      badge: 'bg-[#C8553D]/15 text-[#B8452E] dark:text-[#E4836E]'
     },
     neutral: {
-      iconBg: 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700',
-      badge: 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+      iconBg: 'bg-[#ECEFE8] dark:bg-[#222A28] text-[#5E6B65] dark:text-[#94A39D]',
+      badge: 'bg-[#ECEFE8] dark:bg-[#222A28] text-[#5E6B65] dark:text-[#94A39D]'
     }
   }
 
@@ -65,43 +65,46 @@ export function StatCard({
             }
           : undefined
       }
-      className={`bg-white dark:bg-slate-800/90 rounded-2xl p-5 border border-slate-200/80 dark:border-slate-700/80 shadow-xs hover:shadow-md transition-all duration-200 flex flex-col justify-between ${
+      className={`chalk-card bg-white dark:bg-[#191F1E] rounded-2xl p-5 border border-[#E3E6DE] dark:border-[#27302E] transition-all duration-150 flex flex-col justify-between ${
         isClickable
-          ? 'cursor-pointer hover:border-blue-300 dark:hover:border-blue-700 group focus:outline-none focus:ring-2 focus:ring-blue-500'
+          ? 'cursor-pointer hover:border-[#1F6F54]/50 dark:hover:border-[#2E9472]/60 group focus:outline-none focus:ring-2 focus:ring-[#2E9472]/40'
           : ''
       } ${className}`}
     >
-      {/* Top Row: 40x40 Icon Backdrop & Badge */}
       <div className="flex items-center justify-between gap-2">
-        <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-transform ${isClickable ? 'group-hover:scale-105' : ''} ${currentVariant.iconBg}`}>
+        <div
+          className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-transform ${
+            isClickable ? 'group-hover:scale-105' : ''
+          } ${currentVariant.iconBg}`}
+        >
           {icon}
         </div>
         {badgeText && (
-          <span className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full uppercase tracking-wider whitespace-nowrap ${currentVariant.badge}`}>
+          <span
+            className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full uppercase tracking-wider whitespace-nowrap ${currentVariant.badge}`}
+          >
             {badgeText}
           </span>
         )}
       </div>
 
-      {/* Center: Metric Value (Bold 24px-30px) */}
       <div className="mt-4">
-        <div className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
+        <div className="text-2xl sm:text-3xl font-bold tracking-tight tabular-nums text-[#18201D] dark:text-[#EEF2EF]">
           {value}
         </div>
-        {/* Bottom: Sub-label (12px, uppercase/muted) */}
-        <div className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mt-1 truncate" title={label}>
+        <div
+          className="text-xs font-medium text-[#5E6B65] dark:text-[#94A39D] mt-1 truncate"
+          title={label}
+        >
           {label}
         </div>
       </div>
 
-      {/* Optional Subtext or Drilldown Footer */}
       {(subtext || drillDownLabel) && (
-        <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-700/60 flex items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
-          <div className="truncate font-medium min-w-0">
-            {subtext}
-          </div>
+        <div className="mt-3 pt-3 border-t border-[#ECEFE8] dark:border-[#232C2A] flex items-center justify-between gap-2 text-xs text-[#5E6B65] dark:text-[#94A39D]">
+          <div className="truncate font-medium min-w-0">{subtext}</div>
           {drillDownLabel && (
-            <div className="flex items-center space-x-1 font-semibold text-blue-600 dark:text-blue-400 group-hover:translate-x-0.5 transition-transform flex-shrink-0 whitespace-nowrap">
+            <div className="flex items-center gap-1 font-semibold text-[#1F6F54] dark:text-[#3FB08A] group-hover:translate-x-0.5 transition-transform flex-shrink-0 whitespace-nowrap">
               <span>{drillDownLabel}</span>
               <ArrowRight size={12} />
             </div>

@@ -141,6 +141,8 @@ pub struct Checkout {
     pub status: String,
     pub condition_out: i64,
     pub condition_in: Option<i64>,
+    #[serde(default)]
+    pub book_note: Option<String>,
     pub created_at: Option<String>,
     pub updated_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -437,4 +439,36 @@ pub struct DatabaseExportResult {
     pub target_dir: String,
     pub exported_count: i64,
     pub filenames: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Student {
+    pub id: i64,
+    pub name: String,
+    pub student_class: String,
+    pub sex: Option<String>,
+    pub section: Option<String>,
+    pub house: Option<String>,
+    pub combination: Option<String>,
+    pub created_at: Option<String>,
+    pub updated_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StudentInput {
+    pub name: Option<String>,
+    pub student_class: Option<String>,
+    pub sex: Option<String>,
+    pub section: Option<String>,
+    pub house: Option<String>,
+    pub combination: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PromoteStudentsResult {
+    pub promoted: i64,
+    pub graduated: i64,
 }

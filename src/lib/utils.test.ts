@@ -26,12 +26,9 @@ describe('Domain Utils Tests', () => {
   })
 
   it('validates master password length, complexity, and special character constraints', () => {
-    expect(validateMasterPassword('')).toContain('at least 12 characters')
-    expect(validateMasterPassword('Short1!')).toContain('at least 12 characters')
-    expect(validateMasterPassword('alllowercase123!')).toContain('uppercase letter')
-    expect(validateMasterPassword('ALLUPPERCASE123!')).toContain('lowercase letter')
-    expect(validateMasterPassword('NoNumbersHere!!')).toContain('number')
-    expect(validateMasterPassword('NoSpecialChar123')).toContain('special character')
+    expect(validateMasterPassword('')).toContain('at least 4 characters')
+    expect(validateMasterPassword('123')).toContain('at least 4 characters')
+    expect(validateMasterPassword('1234')).toBe('')
     expect(validateMasterPassword('ValidMasterPass123!')).toBe('')
   })
 

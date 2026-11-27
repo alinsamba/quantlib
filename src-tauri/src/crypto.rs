@@ -8,23 +8,8 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 pub fn validate_master_password(password: &str) -> Option<String> {
-    if password.len() < 12 {
-        return Some("Master password must be at least 12 characters long.".into());
-    }
-    if !password.chars().any(|c| c.is_ascii_uppercase()) {
-        return Some("Master password must include at least one uppercase letter.".into());
-    }
-    if !password.chars().any(|c| c.is_ascii_lowercase()) {
-        return Some("Master password must include at least one lowercase letter.".into());
-    }
-    if !password.chars().any(|c| c.is_ascii_digit()) {
-        return Some("Master password must include at least one number.".into());
-    }
-    if !password
-        .chars()
-        .any(|c| !c.is_ascii_alphanumeric() && !c.is_ascii_whitespace())
-    {
-        return Some("Master password must include at least one special character.".into());
+    if password.trim().len() < 4 {
+        return Some("PIN or password must be at least 4 characters long.".into());
     }
     None
 }

@@ -21,7 +21,6 @@ import {
   ExternalLink
 } from 'lucide-react'
 import { db } from '../lib/ipc-client'
-import { useTheme } from '../hooks/ThemeContext'
 import { calculateAvailable } from '../lib/utils'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '../components/Button'
@@ -44,8 +43,7 @@ const PALETTE = [
 export default function Dashboard() {
   const [summaryData, setSummaryData] = useState<DashboardSummary | null>(null)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
-  const { theme } = useTheme()
-  const isDark = theme === 'dark'
+  const isDark = false
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -128,7 +126,7 @@ export default function Dashboard() {
   return (
     <div className="space-y-8 animate-fade-in max-w-7xl mx-auto pb-12">
       {/* 1. Header & Primary Action Hierarchy */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-slate-200/80 dark:border-slate-800/80 pb-6">
+      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-[#E3E6DE]/80 dark:border-[#27302E]/80 pb-6">
         <div className="min-w-0">
           <div className="flex items-center flex-wrap gap-2.5">
             <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
@@ -256,8 +254,8 @@ export default function Dashboard() {
 
       {/* 3. Main Visualizations & Horizontal Bar Breakdown */}
       {!hasInventory ? (
-        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xs border border-slate-200/80 dark:border-slate-700/80 p-12 text-center">
-          <div className="w-14 h-14 bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-blue-100 dark:border-blue-900/50">
+        <div className="chalk-card p-12 text-center">
+          <div className="w-14 h-14 bg-blue-50 dark:bg-blue-950/50 text-[#1F6F54] dark:text-[#3FB08A] rounded-2xl flex items-center justify-center mx-auto mb-4 border border-blue-100 dark:border-blue-900/50">
             <Layers size={28} />
           </div>
           <h2 className="text-lg font-bold text-slate-800 dark:text-white">
@@ -285,7 +283,7 @@ export default function Dashboard() {
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          <div className="lg:col-span-7 bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-xs border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between">
+          <div className="lg:col-span-7 chalk-card p-6 flex flex-col justify-between">
             <div className="flex items-center justify-between mb-5">
               <div>
                 <h2 className="text-base sm:text-lg font-semibold text-slate-900 dark:text-white">
@@ -316,7 +314,7 @@ export default function Dashboard() {
                   <div
                     key={sub.id || sub.name}
                     onClick={() => navigate('/inventory', { state: { filterSubject: sub.name } })}
-                    className="group p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700/40 border border-transparent hover:border-slate-200 dark:hover:border-slate-700 transition-all duration-150 cursor-pointer"
+                    className="group p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700/40 border border-transparent hover:border-[#E3E6DE] dark:hover:border-slate-700 transition-all duration-150 cursor-pointer"
                     title={`Click to filter inventory for ${sub.name}`}
                   >
                     <div className="flex items-center justify-between text-xs mb-2">
@@ -324,7 +322,7 @@ export default function Dashboard() {
                         <span className="w-5 h-5 rounded-md bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold text-[10px] flex items-center justify-center flex-shrink-0">
                           #{idx + 1}
                         </span>
-                        <span className="font-semibold text-sm text-slate-800 dark:text-slate-200 truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                        <span className="font-semibold text-sm text-slate-800 dark:text-slate-200 truncate group-hover:text-[#1F6F54] dark:group-hover:text-blue-400 transition-colors">
                           {sub.name}
                         </span>
                         <ExternalLink size={12} className="opacity-0 group-hover:opacity-100 text-blue-500 transition-opacity flex-shrink-0" />
@@ -379,7 +377,7 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="lg:col-span-5 bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-xs border border-slate-200/80 dark:border-slate-700/80 flex flex-col justify-between">
+          <div className="lg:col-span-5 chalk-card p-6 flex flex-col justify-between">
             <div className="mb-3">
               <h2 className="text-base sm:text-lg font-semibold text-slate-900 dark:text-white">
                 Collection Share
@@ -434,7 +432,7 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-700/60 max-h-48 overflow-y-auto space-y-1.5 pr-1">
+            <div className="mt-3 pt-3 border-t border-[#E3E6DE] dark:border-[#27302E]/60 max-h-48 overflow-y-auto space-y-1.5 pr-1">
               {subjectData.map((sub, index) => (
                 <div 
                   key={sub.id || sub.name} 
@@ -446,7 +444,7 @@ export default function Dashboard() {
                       className="w-2.5 h-2.5 rounded-full flex-shrink-0" 
                       style={{ backgroundColor: PALETTE[index % PALETTE.length] }}
                     />
-                    <span className="font-medium text-slate-700 dark:text-slate-300 truncate group-hover:text-blue-600 dark:group-hover:text-blue-400">
+                    <span className="font-medium text-slate-700 dark:text-slate-300 truncate group-hover:text-[#1F6F54] dark:group-hover:text-blue-400">
                       {sub.name}
                     </span>
                   </div>

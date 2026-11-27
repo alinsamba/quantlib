@@ -30,14 +30,14 @@ export function ConfirmModal({
       <div className="space-y-5">
         <div className="flex items-start gap-3">
           {variant === 'danger' && (
-            <div className="p-2 rounded-lg bg-rose-100 dark:bg-rose-900/40 text-rose-600 dark:text-rose-400 flex-shrink-0">
+            <div className="p-2 rounded-xl bg-[#a82c1d]/12 border-[1.5px] border-[#a82c1d] text-[#a82c1d] flex-shrink-0">
               <AlertTriangle size={20} />
             </div>
           )}
-          <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">{message}</p>
+          <p className="chalk-ink text-sm text-[#2b3a35] leading-relaxed">{message}</p>
         </div>
 
-        <div className="flex justify-end gap-3 pt-2 border-t border-slate-100 dark:border-slate-700">
+        <div className="flex justify-end gap-3 pt-3 border-t border-[#c8bca3]">
           <Button type="button" variant="secondary" onClick={onCancel} disabled={isLoading}>
             {cancelLabel}
           </Button>

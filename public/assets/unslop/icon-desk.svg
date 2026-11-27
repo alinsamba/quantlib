@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="wood" x1="16" y1="8" x2="48" y2="44" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E5B97C"/><stop offset="1" stop-color="#A8703C"/>
+    </linearGradient>
+    <linearGradient id="greenBook" x1="8" y1="34" x2="56" y2="56" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#3DB08A"/><stop offset="1" stop-color="#1C684E"/>
+    </linearGradient>
+  </defs>
+  <rect x="8" y="38" width="48" height="16" rx="5" fill="url(#greenBook)"/>
+  <rect x="12" y="42" width="40" height="4" rx="2" fill="#F4EFE4" opacity="0.9"/>
+  <rect x="18" y="32" width="28" height="9" rx="3.5" fill="#C8553D"/>
+  <path d="M25 32C25 26 28 24 28 20C28 16 24 14 24 11C24 8 27.5 6 32 6C36.5 6 40 8 40 11C40 14 36 16 36 20C36 24 39 26 39 32H25Z" fill="url(#wood)"/>
+  <ellipse cx="30" cy="11" rx="3.5" ry="2" fill="#FFF3DC" opacity="0.45"/>
+</svg>

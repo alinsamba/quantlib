@@ -77,26 +77,26 @@ export default function AnalyticsPage() {
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 chalk-card p-6">
         <div className="flex items-center space-x-3">
-          <div className="p-3 bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 rounded-lg">
+          <div className="p-3 bg-[#e9dcc0] border-[1.5px] border-[#2b3a35] text-[#2b3a35] rounded-xl">
             <BarChart3 className="w-6 h-6" />
           </div>
           <div>
             <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Analytics & Circulation Insights</h1>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
+            <p className="text-sm chalk-muted text-[#4a5c55]">
               Circulation patterns, peak borrowing times, book lifespan decay & cost replacement projections
             </p>
           </div>
         </div>
 
         <div className="flex items-center space-x-3">
-          <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
+          <div className="chalk-segmented flex p-1">
             <button
               onClick={() => setActiveTab('CIRCULATION')}
               className={`px-4 py-2 text-xs font-semibold rounded-md transition ${
                 activeTab === 'CIRCULATION'
-                  ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-sm'
+                  ? 'chalk-segmented-active'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
               }`}
             >
@@ -106,7 +106,7 @@ export default function AnalyticsPage() {
               onClick={() => setActiveTab('DEPRECIATION')}
               className={`px-4 py-2 text-xs font-semibold rounded-md transition ${
                 activeTab === 'DEPRECIATION'
-                  ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-sm'
+                  ? 'chalk-segmented-active'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
               }`}
             >
@@ -117,7 +117,7 @@ export default function AnalyticsPage() {
           <button
             onClick={fetchAnalytics}
             disabled={loading}
-            className="p-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition"
+            className="chalk-btn-secondary p-2 transition cursor-pointer"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
@@ -139,50 +139,50 @@ export default function AnalyticsPage() {
         <div className="space-y-6">
           {/* Top KPI Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
+            <div className="chalk-card p-5 flex items-center justify-between">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Total Checkouts</p>
+                <p className="text-xs font-semibold uppercase tracking-wider chalk-muted text-[#4a5c55]">Total Checkouts</p>
                 <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-1">
                   {(circulation?.monthlyTrends ?? []).reduce((acc, m) => acc + (m.checkouts || 0), 0)}
                 </p>
               </div>
-              <div className="p-3 bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 rounded-lg">
+              <div className="p-3 bg-[#e9dcc0] border-[1.5px] border-[#2b3a35] text-[#2f5749] rounded-xl">
                 <TrendingUp className="w-5 h-5" />
               </div>
             </div>
 
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
+            <div className="chalk-card p-5 flex items-center justify-between">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Peak Day</p>
+                <p className="text-xs font-semibold uppercase tracking-wider chalk-muted text-[#4a5c55]">Peak Day</p>
                 <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-1">
                   {(circulation?.peakDays ?? []).reduce((max, d) => (d.count > max.count ? d : max), { day: 'None', count: 0 }).day || 'N/A'}
                 </p>
               </div>
-              <div className="p-3 bg-emerald-50 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 rounded-lg">
+              <div className="p-3 bg-[#e9dcc0] border-[1.5px] border-[#2b3a35] text-[#246b4f] rounded-xl">
                 <Clock className="w-5 h-5" />
               </div>
             </div>
 
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
+            <div className="chalk-card p-5 flex items-center justify-between">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Popular Category</p>
+                <p className="text-xs font-semibold uppercase tracking-wider chalk-muted text-[#4a5c55]">Popular Category</p>
                 <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-1 truncate max-w-[150px]">
                   {circulation?.popularCategories?.[0]?.category || 'General'}
                 </p>
               </div>
-              <div className="p-3 bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400 rounded-lg">
+              <div className="p-3 bg-[#e9dcc0] border-[1.5px] border-[#2b3a35] text-[#b4690e] rounded-xl">
                 <BookOpen className="w-5 h-5" />
               </div>
             </div>
 
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
+            <div className="chalk-card p-5 flex items-center justify-between">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Top Reader</p>
+                <p className="text-xs font-semibold uppercase tracking-wider chalk-muted text-[#4a5c55]">Top Reader</p>
                 <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-1 truncate max-w-[150px]">
                   {circulation?.topReaders?.[0]?.studentName || 'N/A'}
                 </p>
               </div>
-              <div className="p-3 bg-purple-50 dark:bg-purple-950 text-purple-600 dark:text-purple-400 rounded-lg">
+              <div className="p-3 bg-[#e9dcc0] border-[1.5px] border-[#2b3a35] text-[#6b4c7a] rounded-xl">
                 <Users className="w-5 h-5" />
               </div>
             </div>
@@ -190,7 +190,7 @@ export default function AnalyticsPage() {
           {/* Charts Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Monthly Trends Chart */}
-            <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+            <div className="chalk-card p-6 space-y-4">
               <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center space-x-2">
                 <TrendingUp className="w-4 h-4 text-blue-500" />
                 <span>Monthly Borrowing & Return Trends</span>
@@ -199,19 +199,19 @@ export default function AnalyticsPage() {
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={circulation?.monthlyTrends || []}>
                     <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
-                    <XAxis dataKey="month" stroke="#94a3b8" />
-                    <YAxis stroke="#94a3b8" />
+                    <XAxis dataKey="month" stroke="#2b3a35" />
+                    <YAxis stroke="#2b3a35" />
                     <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', color: '#fff' }} />
                     <Legend />
-                    <Bar dataKey="checkouts" fill="#3b82f6" name="Checkouts" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="returns" fill="#10b981" name="Returns" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="checkouts" fill="#a82c1d" name="Checkouts" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="returns" fill="#246b4f" name="Returns" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             </div>
 
             {/* Peak Days Chart */}
-            <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+            <div className="chalk-card p-6 space-y-4">
               <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center space-x-2">
                 <Clock className="w-4 h-4 text-emerald-500" />
                 <span>Peak Borrowing Days</span>
@@ -220,10 +220,10 @@ export default function AnalyticsPage() {
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={circulation?.peakDays || []}>
                     <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
-                    <XAxis dataKey="day" stroke="#94a3b8" />
-                    <YAxis stroke="#94a3b8" />
+                    <XAxis dataKey="day" stroke="#2b3a35" />
+                    <YAxis stroke="#2b3a35" />
                     <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', color: '#fff' }} />
-                    <Bar dataKey="count" fill="#6366f1" name="Borrowing Activity" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="count" fill="#2f5749" name="Borrowing Activity" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -232,7 +232,7 @@ export default function AnalyticsPage() {
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Category Distribution Chart */}
-            <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4 lg:col-span-1">
+            <div className="chalk-card p-6 space-y-4 lg:col-span-1">
               <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center space-x-2">
                 <Layers className="w-4 h-4 text-amber-500" />
                 <span>Popular Subject Categories</span>
@@ -260,7 +260,7 @@ export default function AnalyticsPage() {
             </div>
 
             {/* Top Readers Leaderboard */}
-            <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4 lg:col-span-2 overflow-hidden">
+            <div className="chalk-card p-6 space-y-4 lg:col-span-2 overflow-hidden">
               <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center space-x-2">
                 <Award className="w-4 h-4 text-purple-500" />
                 <span>Top Readers Leaderboard</span>
@@ -269,7 +269,7 @@ export default function AnalyticsPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 text-xs font-semibold uppercase">
+                    <tr className="bg-slate-50 dark:bg-[#191F1E]/80 text-slate-600 dark:text-slate-400 text-xs font-semibold uppercase">
                       <th className="p-3">Rank</th>
                       <th className="p-3">Student Name</th>
                       <th className="p-3">Class / Form</th>
@@ -289,7 +289,7 @@ export default function AnalyticsPage() {
                           <td className="p-3 font-bold text-slate-500">#{idx + 1}</td>
                           <td className="p-3 font-medium text-slate-900 dark:text-slate-100">{reader.studentName}</td>
                           <td className="p-3 text-slate-500">{reader.studentClass || 'N/A'}</td>
-                          <td className="p-3 text-right font-bold text-blue-600 dark:text-blue-400">
+                          <td className="p-3 text-right font-bold text-[#1F6F54] dark:text-[#3FB08A]">
                             {reader.totalCheckouts} books
                           </td>
                         </tr>
@@ -306,9 +306,9 @@ export default function AnalyticsPage() {
         <div className="space-y-6">
           {/* Depreciation Overview Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
+            <div className="chalk-card p-5 flex items-center justify-between">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                <p className="text-xs font-semibold uppercase tracking-wider chalk-muted text-[#4a5c55]">
                   Est. Total Replacement Cost
                 </p>
                 <p className="text-2xl font-bold text-red-600 dark:text-red-400 mt-1">
@@ -320,43 +320,43 @@ export default function AnalyticsPage() {
               </div>
             </div>
 
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
+            <div className="chalk-card p-5 flex items-center justify-between">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                <p className="text-xs font-semibold uppercase tracking-wider chalk-muted text-[#4a5c55]">
                   Damaged Items
                 </p>
                 <p className="text-2xl font-bold text-amber-600 dark:text-amber-400 mt-1">
                   {depreciation?.replacementCostAnalysis?.totalDamaged ?? 0}
                 </p>
               </div>
-              <div className="p-3 bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400 rounded-lg">
+              <div className="p-3 bg-[#e9dcc0] border-[1.5px] border-[#2b3a35] text-[#b4690e] rounded-xl">
                 <AlertOctagon className="w-5 h-5" />
               </div>
             </div>
 
-            <div className="bg-white dark:bg-slate-900 p-5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
+            <div className="chalk-card p-5 flex items-center justify-between">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                <p className="text-xs font-semibold uppercase tracking-wider chalk-muted text-[#4a5c55]">
                   Near End-of-Life Books
                 </p>
                 <p className="text-2xl font-bold text-purple-600 dark:text-purple-400 mt-1">
                   {depreciation?.replacementCostAnalysis?.totalNearEndLife ?? 0}
                 </p>
               </div>
-              <div className="p-3 bg-purple-50 dark:bg-purple-950 text-purple-600 dark:text-purple-400 rounded-lg">
+              <div className="p-3 bg-[#e9dcc0] border-[1.5px] border-[#2b3a35] text-[#6b4c7a] rounded-xl">
                 <BookOpen className="w-5 h-5" />
               </div>
             </div>
           </div>
 
           {/* Condition Decay Projection Chart */}
-          <div className="bg-white dark:bg-slate-900 p-6 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+          <div className="chalk-card p-6 space-y-4">
             <div>
               <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center space-x-2">
                 <TrendingUp className="w-4 h-4 text-blue-500" />
                 <span>Condition Decay Score Projections (3.0 Good → 1.0 Damaged)</span>
               </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
+              <p className="text-xs chalk-muted text-[#4a5c55]">
                 Projected physical condition decay curve over future checkout loans per subject
               </p>
             </div>
@@ -365,8 +365,8 @@ export default function AnalyticsPage() {
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={decayChartData}>
                   <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
-                  <XAxis dataKey="checkouts" stroke="#94a3b8" />
-                  <YAxis domain={[1, 3]} stroke="#94a3b8" />
+                  <XAxis dataKey="checkouts" stroke="#2b3a35" />
+                  <YAxis domain={[1, 3]} stroke="#2b3a35" />
                   <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', color: '#fff' }} />
                   <Legend />
                   {(depreciation?.decayProjections ?? []).slice(0, 5).map((sub, idx) => (
@@ -385,10 +385,10 @@ export default function AnalyticsPage() {
           </div>
 
           {/* Cost Replacement Forecast Table */}
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden space-y-4">
-            <div className="p-6 border-b border-slate-200 dark:border-slate-800">
+          <div className="chalk-card overflow-hidden space-y-4">
+            <div className="p-6 border-b border-[#E3E6DE] dark:border-[#27302E]">
               <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">Replacement Cost Projections</h3>
-              <p className="text-sm text-slate-500 dark:text-slate-400">
+              <p className="text-sm chalk-muted text-[#4a5c55]">
                 Estimated budget required to replace damaged and worn near-end-of-life books per subject
               </p>
             </div>
@@ -396,7 +396,7 @@ export default function AnalyticsPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 text-xs font-semibold uppercase">
+                  <tr className="bg-slate-50 dark:bg-[#191F1E]/80 text-slate-600 dark:text-slate-400 text-xs font-semibold uppercase">
                     <th className="p-4">Subject Name</th>
                     <th className="p-4">Category</th>
                     <th className="p-4 text-center">Avg Condition</th>

@@ -5,12 +5,12 @@ import { exportToExcel, exportToCsv, parseSpreadsheetFile } from '../lib/exportU
 import { db } from '../lib/ipc-client'
 import { calculateAvailable } from '../lib/utils'
 import { Button } from '../components/Button'
-import { TextField, SelectField, TextAreaField } from '../components/TextField'
+import { TextField, SelectField, TextAreaField, AutocompleteField } from '../components/TextField'
 import { Modal } from '../components/Modal'
 import { ConfirmModal } from '../components/ConfirmModal'
 import { useToast } from '../hooks/ToastContext'
 import { useAsync } from '../hooks/useAsync'
-import type { Subject, BorrowingRule, Checkout } from '../lib/types'
+import type { Subject, BorrowingRule, Checkout, Student } from '../lib/types'
 
 export default function Inventory() {
   const { showToast } = useToast()
@@ -20,6 +20,7 @@ export default function Inventory() {
   const { data: subjects, isLoading: subjectsLoading, error: subjectsError, execute: fetchSubjects } = useAsync<Subject[]>()
   const [borrowingRules, setBorrowingRules] = useState<BorrowingRule[]>([])
   const [allActiveCheckouts, setAllActiveCheckouts] = useState<Checkout[]>([])
+  const [students, setStudents] = useState<Student[]>([])
   const [isIssuing, setIsIssuing] = useState(false)
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
   const [importNotice, setImportNotice] = useState<string | null>(null)
@@ -91,16 +92,33 @@ export default function Inventory() {
     fetchSubjects(async () => {
       return db.getSubjects()
     })
+    db.getStudents()
+      .then((list) => setStudents(list || []))
+      .catch(() => {})
   }, [fetchSubjects])
 
   // Known students and classes for autocomplete
   const knownStudentNames = useMemo(() => {
-    return Array.from(new Set(allActiveCheckouts.map((c) => c.studentName).filter(Boolean)))
-  }, [allActiveCheckouts])
+    const names = new Set<string>()
+    for (const s of students) {
+      if (s.name) names.add(s.name)
+    }
+    for (const c of allActiveCheckouts) {
+      if (c.studentName) names.add(c.studentName)
+    }
+    return Array.from(names)
+  }, [students, allActiveCheckouts])
 
   const knownStudentClasses = useMemo(() => {
-    return Array.from(new Set(allActiveCheckouts.map((c) => c.studentClass || '').filter(Boolean)))
-  }, [allActiveCheckouts])
+    const classes = new Set<string>()
+    for (const s of students) {
+      if (s.studentClass) classes.add(s.studentClass)
+    }
+    for (const c of allActiveCheckouts) {
+      if (c.studentClass) classes.add(c.studentClass)
+    }
+    return Array.from(classes).sort()
+  }, [students, allActiveCheckouts])
 
   const handleImportSpreadsheet = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -480,7 +498,7 @@ export default function Inventory() {
         const isLowStock = available < 5
         const wearRate = sub.degradationRate && sub.degradationRate > 0 ? `-${sub.degradationRate.toFixed(2)}` : '0.00'
         return (
-          <tr key={sub.id} className="border-b border-slate-50 dark:border-slate-700/50 hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
+          <tr key={sub.id} className="border-b border-slate-50 dark:border-[#27302E]/50 hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
             <td className="px-3 py-3">
               <div className="flex items-center gap-1.5 flex-wrap">
                 <span className="font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">{sub.name}</span>
@@ -498,7 +516,7 @@ export default function Inventory() {
             </td>
             <td className="px-2.5 py-3 text-slate-500 dark:text-slate-400 text-xs whitespace-nowrap">{sub.category}</td>
             <td className="px-2 py-3 text-right tabular-nums">{sub.openingCount}</td>
-            <td className="px-2 py-3 text-right tabular-nums text-blue-600 dark:text-blue-400">{sub.recovered}</td>
+            <td className="px-2 py-3 text-right tabular-nums text-[#1F6F54] dark:text-[#3FB08A]">{sub.recovered}</td>
             <td className="px-2 py-3 text-right tabular-nums text-amber-600 dark:text-amber-400">{sub.issued}</td>
             <td className="px-2 py-3 text-right tabular-nums text-red-500">{sub.damaged}</td>
             <td className="px-2 py-3 text-right tabular-nums text-red-500">{sub.lost}</td>
@@ -512,7 +530,7 @@ export default function Inventory() {
             </td>
             <td className="px-2.5 py-3 text-center print:hidden whitespace-nowrap">
               <div className="flex justify-center gap-1.5">
-                <button onClick={() => openIssueModal(sub)} className="text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/30 px-2 py-1 rounded transition-colors text-xs font-medium border border-blue-200 dark:border-blue-800">Issue</button>
+                <button onClick={() => openIssueModal(sub)} className="text-[#1F6F54] hover:bg-blue-50 dark:text-[#3FB08A] dark:hover:bg-blue-900/30 px-2 py-1 rounded transition-colors text-xs font-medium border border-blue-200 dark:border-blue-800">Issue</button>
                 <button onClick={() => openReturnModal(sub)} className="text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-900/30 px-2 py-1 rounded transition-colors text-xs font-medium border border-emerald-200 dark:border-emerald-800">Return</button>
                 <button onClick={() => openEditModal(sub)} className="text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-700 px-2 py-1 rounded transition-colors text-xs font-medium">Edit</button>
               </div>
@@ -583,12 +601,12 @@ export default function Inventory() {
         </div>
       )}
 
-      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden transition-colors duration-200">
-        <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex flex-wrap items-center justify-between gap-3">
+      <div className="chalk-card overflow-hidden transition-colors duration-200">
+        <div className="p-4 border-b border-[#E3E6DE] dark:border-[#27302E] flex flex-wrap items-center justify-between gap-3">
           <input
             type="text"
             placeholder="Search subjects, categories, or notes..."
-            className="w-full max-w-md px-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 dark:text-white transition-all"
+            className="w-full max-w-md px-4 py-2 bg-white dark:bg-[#141A19] border border-[#E3E6DE] dark:border-[#27302E] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2E9472]/40/20 focus:border-blue-500 dark:text-white transition-all"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
@@ -598,7 +616,7 @@ export default function Inventory() {
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 border transition-colors ${
               lowStockOnly
                 ? 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800'
-                : 'bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-900 dark:text-slate-400 dark:border-slate-700'
+                : 'bg-slate-50 text-slate-600 border-[#E3E6DE] dark:bg-[#141A19] dark:text-slate-400 dark:border-[#27302E]'
             }`}
           >
             <AlertTriangle size={14} />
@@ -622,7 +640,7 @@ export default function Inventory() {
           ) : (
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wider border-b border-slate-100 dark:border-slate-700">
+                <tr className="bg-slate-50 dark:bg-[#141A19] text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wider border-b border-[#E3E6DE] dark:border-[#27302E]">
                   <th className="px-3 py-3 font-semibold">Subject</th>
                   <th className="px-2.5 py-3 font-semibold">Category</th>
                   <th className="px-2 py-3 font-semibold text-right whitespace-nowrap">Open</th>
@@ -695,32 +713,32 @@ export default function Inventory() {
             readOnly
           />
 
-          <TextField 
+          <AutocompleteField 
             label="Student Name"
             required
-            list="student-names-list"
             placeholder="e.g. John Doe"
             value={issueData.studentName}
-            onChange={e => setIssueData({...issueData, studentName: e.target.value})}
+            onChange={(val) => {
+              const match = students.find((s) => s.name.toLowerCase() === val.trim().toLowerCase())
+              setIssueData({
+                ...issueData,
+                studentName: val,
+                studentClass: match ? match.studentClass : issueData.studentClass
+              })
+            }}
+            options={knownStudentNames.map((name) => {
+              const st = students.find((s) => s.name === name)
+              return { value: name, badge: st?.studentClass }
+            })}
           />
-          <datalist id="student-names-list">
-            {knownStudentNames.map((name) => (
-              <option key={name} value={name} />
-            ))}
-          </datalist>
           
-          <TextField 
+          <AutocompleteField 
             label="Class / Form"
-            list="student-classes-list"
-            placeholder="e.g. S.4"
+            placeholder="e.g. S4"
             value={issueData.studentClass}
-            onChange={e => setIssueData({...issueData, studentClass: e.target.value})}
+            onChange={(val) => setIssueData({...issueData, studentClass: val})}
+            options={knownStudentClasses.map((cls) => ({ value: cls }))}
           />
-          <datalist id="student-classes-list">
-            {knownStudentClasses.map((cls) => (
-              <option key={cls} value={cls} />
-            ))}
-          </datalist>
 
           <SelectField 
             label="Outgoing Condition"
@@ -757,7 +775,7 @@ export default function Inventory() {
             placeholder="Search by student, class, or subject..."
             value={loansSearchQuery}
             onChange={(e) => setLoansSearchQuery(e.target.value)}
-            className="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-white"
+            className="w-full px-3 py-2 text-sm rounded-lg border border-[#E3E6DE] dark:border-[#27302E] bg-slate-50 dark:bg-[#141A19] text-slate-800 dark:text-white"
           />
 
           {filteredActiveLoans.length === 0 ? (

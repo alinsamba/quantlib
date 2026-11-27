@@ -71,6 +71,7 @@ export interface Checkout {
   status: CheckoutStatus | string;
   conditionOut: number;
   conditionIn: number | null;
+  bookNote?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -299,6 +300,32 @@ export interface DatabaseExportResult {
   targetDir?: string;
   exportedCount?: number;
   filenames?: string[];
+}
+
+export interface Student {
+  id: number;
+  name: string;
+  studentClass: string;
+  sex: string | null;
+  section: string | null;
+  house: string | null;
+  combination: string | null;
+  createdAt?: string | Date;
+  updatedAt?: string | Date;
+}
+
+export interface StudentInput {
+  name: string;
+  studentClass: string;
+  sex?: string | null;
+  section?: string | null;
+  house?: string | null;
+  combination?: string | null;
+}
+
+export interface PromoteStudentsResult {
+  promoted: number;
+  graduated: number;
 }
 
 

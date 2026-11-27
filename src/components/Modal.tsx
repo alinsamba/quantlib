@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
 interface ModalProps {
@@ -66,32 +67,36 @@ export function Modal({ isOpen, onClose, title, children }: ModalProps) {
   }, [isOpen]);
   if (!isOpen) return null;
 
-  return (
+  return createPortal(
     <div 
-      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in"
+      className="fixed inset-0 bg-[#2b3a35]/45 flex items-center justify-center p-4 z-50"
       role="dialog"
       aria-modal="true"
       aria-labelledby="modal-title"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
     >
       <div 
         ref={modalRef}
         tabIndex={-1}
-        className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200 dark:border-slate-700 outline-none"
+        className="chalk-modal bg-white dark:bg-[#191F1E] rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-[#E3E6DE] dark:border-[#27302E] outline-none animate-fade-in"
       >
-        <div className="bg-slate-50 dark:bg-slate-900/50 p-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
-          <h3 id="modal-title" className="text-lg font-semibold text-slate-800 dark:text-white">{title}</h3>
+        <div className="chalk-modal-header bg-[#F5F6F2] dark:bg-[#141A19] p-4 border-b border-[#E3E6DE] dark:border-[#27302E] flex justify-between items-center">
+          <h3 id="modal-title" className="chalk-ink text-base font-bold text-[#18201D] dark:text-[#EEF2EF]">{title}</h3>
           <button 
             onClick={onClose} 
-            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors p-1 rounded-md hover:bg-slate-200 dark:hover:bg-slate-700"
+            className="text-[#5E6B65] hover:text-[#18201D] dark:text-[#94A39D] dark:hover:text-[#EEF2EF] transition-colors p-1 rounded-lg hover:bg-[#e9dcc0] cursor-pointer"
             aria-label="Close dialog"
           >
-            <X size={20} />
+            <X size={18} />
           </button>
         </div>
         <div className="p-6 max-h-[80vh] overflow-y-auto">
           {children}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

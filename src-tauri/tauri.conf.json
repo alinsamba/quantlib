@@ -6,7 +6,7 @@
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
-    "beforeDevCommand": "npm run dev:vite",
+    "beforeDevCommand": "bun run dev:vite",
     "beforeBuildCommand": "tsc -b && vite build"
   },
   "app": {
@@ -19,7 +19,8 @@
         "minWidth": 960,
         "minHeight": 640,
         "resizable": true,
-        "fullscreen": false
+        "fullscreen": false,
+        "decorations": false
       }
     ],
     "security": {

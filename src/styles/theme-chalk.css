@@ -1,0 +1,374 @@
+/* ==========================================================================
+   Chalk & Ledger (`chalk`) — Tactile Editorial Light Theme
+   Modeled after a school librarian's desk: warm ledger paper, crisp dark-ink
+   outlines (#2b3a35), hard 0-blur offset shadows, and a red-pen accent (#a82c1d).
+   ========================================================================== */
+
+[data-theme="chalk"] {
+  color-scheme: light;
+
+  /* Surfaces */
+  --bg-color: #fbf8f1;
+  --bg-primary: #fbf8f1;
+  --surface: #f6efe0;
+  --bg-card: #f6efe0;
+  --card-bg: #f6efe0;
+  --empty-card-bg: #f6efe0;
+  --sidebar-bg: #f2e9d5;
+  --surface-raised: #eee4cf;
+  --bg-secondary: #eee4cf;
+  --card-hover-bg: #eee4cf;
+  --table-row-hover: #eee4cf;
+  --bg-tertiary: #e9dcc0;
+  --table-header-bg: #e9dcc0;
+  --segmented-nav-bg: #e9dcc0;
+  --empty-icon-bg: #e9dcc0;
+  --input-bg: #fbf8f1;
+  --active-tab-bg: #fbf8f1;
+
+  /* Ink & Borders */
+  --text-color: #2b3a35;
+  --text-primary: #2b3a35;
+  --text-secondary: #2f5749;
+  --text-muted: #2f5749;
+  --text-tertiary: #4a5c55;
+  --card-border: #2b3a35;
+  --control-border: #2b3a35;
+  --btn-3d-edge: #2b3a35;
+  --border-subtle: #c8bca3;
+  --border-color: #b9ad95;
+
+  /* Accents & Semantic */
+  --primary-color: #a82c1d;
+  --accent: #a82c1d;
+  --focus-ring: #a82c1d;
+  --interactive-text: #a82c1d;
+  --primary-dark: #8c2216;
+  --interactive-text-hover: #8c2216;
+  --success: #246b4f;
+  --success-text: #1d5c43;
+  --warning: #b4690e;
+  --warning-text: #7c4d08;
+  --danger: #a82c1d;
+  --danger-text: #a6291b;
+  --info: #1f5c7a;
+  --info-text: #1f4e6b;
+  --accent-purple: #6b4c7a;
+
+  /* Hard 0-blur offset ink shadows */
+  --shadow-sm: 2px 2px 0 #2b3a35;
+  --shadow-md: 3px 3px 0 #2b3a35;
+  --shadow-lg: 4px 4px 0 #2b3a35;
+  --shadow-modal: 5px 5px 0 #2b3a35;
+  --shadow-xl: 6px 6px 0 #2b3a35;
+
+  /* Radii */
+  --control-radius: 8px;
+  --nav-radius: 10px;
+  --card-radius: 12px;
+  --hero-radius: 16px;
+
+  /* ChalkGlyph duotone variables */
+  --chalk-glyph-fill: #e4d5b7;
+  --chalk-glyph-accent: #a82c1d;
+
+  /* Map legacy CSS vars */
+  --background: #fbf8f1;
+  --text: #2b3a35;
+  --primary: #a82c1d;
+  --secondary: #2f5749;
+}
+
+[data-theme="chalk"] body {
+  background-color: var(--bg-color);
+  color: var(--text-primary);
+}
+
+/* Global accessible red-pen focus ring */
+[data-theme="chalk"] :focus-visible {
+  outline: 2.5px solid #a82c1d !important;
+  outline-offset: 2px;
+}
+
+/* Shell & Sidebar */
+[data-theme="chalk"] .chalk-shell {
+  background-color: #fbf8f1 !important;
+  color: #2b3a35 !important;
+}
+
+[data-theme="chalk"] .chalk-sidebar {
+  background-color: #f2e9d5 !important;
+  border-right: 1.5px solid #2b3a35 !important;
+  color: #2b3a35 !important;
+}
+
+[data-theme="chalk"] .chalk-sidebar-section-label {
+  color: #2f5749 !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.08em !important;
+}
+
+[data-theme="chalk"] .chalk-sidebar-divider {
+  border-color: #c8bca3 !important;
+}
+
+[data-theme="chalk"] .chalk-nav-item {
+  position: relative;
+  border-radius: 10px !important;
+  color: #2b3a35 !important;
+  border: 1.5px solid transparent;
+  transition: transform 0.14s ease, background-color 0.14s ease, box-shadow 0.14s ease;
+}
+
+[data-theme="chalk"] .chalk-nav-item:hover {
+  background-color: #e9dcc0 !important;
+  transform: translateX(2px);
+  --chalk-glyph-fill: #d9c59d;
+}
+
+[data-theme="chalk"] .chalk-nav-item[data-active="true"],
+[data-theme="chalk"] .chalk-nav-item.chalk-nav-active {
+  background-color: #fbf8f1 !important;
+  color: #2b3a35 !important;
+  font-weight: 700 !important;
+  border: 1.5px solid #2b3a35 !important;
+  box-shadow: 2px 2px 0 #2b3a35 !important;
+  transform: none;
+  --chalk-glyph-fill: rgba(168, 44, 29, 0.16);
+}
+
+[data-theme="chalk"] .chalk-nav-item[data-active="true"]::before,
+[data-theme="chalk"] .chalk-nav-item.chalk-nav-active::before {
+  content: "";
+  position: absolute;
+  left: -1px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 22px;
+  border-radius: 0 3px 3px 0;
+  background-color: #a82c1d;
+}
+
+/* TitleBar */
+[data-theme="chalk"] .chalk-titlebar {
+  background-color: #fbf8f1 !important;
+  color: #2b3a35 !important;
+}
+
+[data-theme="chalk"] .chalk-titlebar-bordered {
+  border-bottom: 1.5px solid #2b3a35 !important;
+}
+
+/* Cards & Surfaces */
+[data-theme="chalk"] .chalk-card {
+  background-color: #f6efe0 !important;
+  border: 1.5px solid #2b3a35 !important;
+  border-radius: 12px !important;
+  box-shadow: 3px 3px 0 #2b3a35 !important;
+  color: #2b3a35 !important;
+}
+
+[data-theme="chalk"] .chalk-card-subtle {
+  background-color: #f6efe0 !important;
+  border: 1.5px solid #2b3a35 !important;
+  border-radius: 12px !important;
+  box-shadow: 2px 2px 0 #2b3a35 !important;
+  color: #2b3a35 !important;
+}
+
+[data-theme="chalk"] .chalk-hero {
+  background-color: #f6efe0 !important;
+  border: 1.5px solid #2b3a35 !important;
+  border-radius: 16px !important;
+  box-shadow: 4px 4px 0 #2b3a35 !important;
+  color: #2b3a35 !important;
+}
+
+[data-theme="chalk"] .chalk-empty-card {
+  background-color: #f6efe0 !important;
+  border: 1.5px dashed #2b3a35 !important;
+  border-radius: 12px !important;
+  box-shadow: 3px 3px 0 #2b3a35 !important;
+  color: #2b3a35 !important;
+}
+
+[data-theme="chalk"] .chalk-modal {
+  background-color: #fbf8f1 !important;
+  border: 1.5px solid #2b3a35 !important;
+  border-radius: 12px !important;
+  box-shadow: 5px 5px 0 #2b3a35 !important;
+  color: #2b3a35 !important;
+}
+
+[data-theme="chalk"] .chalk-modal-header {
+  background-color: #e9dcc0 !important;
+  border-bottom: 1.5px solid #2b3a35 !important;
+}
+
+/* Buttons */
+[data-theme="chalk"] .chalk-btn-primary {
+  background-color: #a82c1d !important;
+  color: #ffffff !important;
+  border: 1.5px solid #2b3a35 !important;
+  border-radius: 8px !important;
+  box-shadow: 2px 2px 0 #2b3a35 !important;
+}
+
+[data-theme="chalk"] .chalk-btn-primary:hover:not(:disabled) {
+  background-color: #8c2216 !important;
+}
+
+[data-theme="chalk"] .chalk-btn-primary:active:not(:disabled) {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 #2b3a35 !important;
+}
+
+[data-theme="chalk"] .chalk-btn-secondary {
+  background-color: #fbf8f1 !important;
+  color: #2b3a35 !important;
+  border: 1.5px solid #2b3a35 !important;
+  border-radius: 8px !important;
+  box-shadow: 2px 2px 0 #2b3a35 !important;
+}
+
+[data-theme="chalk"] .chalk-btn-secondary:hover:not(:disabled) {
+  background-color: #eee4cf !important;
+}
+
+[data-theme="chalk"] .chalk-btn-secondary:active:not(:disabled) {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 #2b3a35 !important;
+}
+
+[data-theme="chalk"] .chalk-btn-ghost {
+  background-color: transparent !important;
+  color: #2b3a35 !important;
+  border: 1.5px solid transparent !important;
+  border-radius: 8px !important;
+}
+
+[data-theme="chalk"] .chalk-btn-ghost:hover:not(:disabled) {
+  background-color: #e9dcc0 !important;
+  border-color: #2b3a35 !important;
+}
+
+[data-theme="chalk"] .chalk-btn-danger {
+  background-color: #a82c1d !important;
+  color: #ffffff !important;
+  border: 1.5px solid #2b3a35 !important;
+  border-radius: 8px !important;
+  box-shadow: 2px 2px 0 #2b3a35 !important;
+}
+
+/* Inputs & Controls */
+[data-theme="chalk"] .chalk-input {
+  background-color: #fbf8f1 !important;
+  color: #2b3a35 !important;
+  border: 1.5px solid #2b3a35 !important;
+  border-radius: 8px !important;
+}
+
+[data-theme="chalk"] .chalk-input::placeholder {
+  color: #4a5c55 !important;
+  opacity: 0.72;
+}
+
+[data-theme="chalk"] .chalk-segmented {
+  background-color: #e9dcc0 !important;
+  border: 1.5px solid #2b3a35 !important;
+  border-radius: 10px !important;
+}
+
+[data-theme="chalk"] .chalk-segmented-active {
+  background-color: #fbf8f1 !important;
+  color: #2b3a35 !important;
+  border: 1.5px solid #2b3a35 !important;
+  box-shadow: 1.5px 1.5px 0 #2b3a35 !important;
+}
+
+[data-theme="chalk"] .chalk-pill {
+  background-color: #e9dcc0 !important;
+  color: #2b3a35 !important;
+  border: 1.5px solid #2b3a35 !important;
+}
+
+[data-theme="chalk"] .chalk-pill-active {
+  background-color: #a82c1d !important;
+  color: #ffffff !important;
+  border: 1.5px solid #2b3a35 !important;
+  box-shadow: 2px 2px 0 #2b3a35 !important;
+}
+
+/* Tables */
+[data-theme="chalk"] table thead tr {
+  background-color: #e9dcc0 !important;
+  border-bottom: 1.5px solid #2b3a35 !important;
+  color: #2b3a35 !important;
+}
+
+[data-theme="chalk"] table tbody tr {
+  border-color: #c8bca3 !important;
+}
+
+[data-theme="chalk"] table tbody tr:hover {
+  background-color: #eee4cf !important;
+}
+
+/* Secondary & Muted Text Helpers */
+[data-theme="chalk"] .chalk-ink {
+  color: #2b3a35 !important;
+}
+
+[data-theme="chalk"] .chalk-slate {
+  color: #2f5749 !important;
+}
+
+[data-theme="chalk"] .chalk-muted {
+  color: #4a5c55 !important;
+}
+
+/* Mobile Tightening (<= 768px) */
+@media (max-width: 768px) {
+  [data-theme="chalk"] .chalk-card {
+    box-shadow: 2px 2px 0 #2b3a35 !important;
+    border-radius: 10px !important;
+  }
+  [data-theme="chalk"] .chalk-hero {
+    box-shadow: 3px 3px 0 #2b3a35 !important;
+    border-radius: 12px !important;
+  }
+  [data-theme="chalk"] .chalk-modal {
+    box-shadow: 3px 3px 0 #2b3a35 !important;
+  }
+}
+
+/* Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  [data-theme="chalk"] *,
+  [data-theme="chalk"] *::before,
+  [data-theme="chalk"] *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Statutory Document & Print Isolation */
+@media print {
+  [data-theme="chalk"],
+  [data-theme="chalk"] body,
+  [data-theme="chalk"] .chalk-shell,
+  [data-theme="chalk"] .chalk-card,
+  [data-theme="chalk"] .chalk-hero,
+  [data-theme="chalk"] [data-statutory-document] {
+    background: #ffffff !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+  }
+}
+
+[data-statutory-document] {
+  background-color: #ffffff;
+  color: #000000;
+}

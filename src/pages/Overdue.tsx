@@ -5,6 +5,7 @@ import { useAsync } from '../hooks/useAsync'
 import { Button } from '../components/Button'
 import { Modal } from '../components/Modal'
 import { SelectField } from '../components/TextField'
+import { EmptyState } from '../components/EmptyState'
 import type { Checkout } from '../lib/types'
 
 export default function Overdue() {
@@ -90,7 +91,7 @@ export default function Overdue() {
               placeholder="Filter student, class, subject..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 pr-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="pl-9 pr-3 py-2 text-sm rounded-lg border border-[#E3E6DE] dark:border-[#27302E] bg-white dark:bg-[#191F1E] text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#2E9472]/40"
             />
           </div>
           <button
@@ -104,7 +105,7 @@ export default function Overdue() {
       </div>
 
       {isLoading && !overdueCheckouts ? (
-        <div className="bg-white dark:bg-slate-800 p-8 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 text-center text-slate-500 print:hidden">
+        <div className="bg-white dark:bg-[#191F1E] p-8 rounded-xl shadow-sm border border-[#E3E6DE] dark:border-[#27302E] text-center text-slate-500 print:hidden">
           Loading overdue checkouts...
         </div>
       ) : error ? (
@@ -112,15 +113,24 @@ export default function Overdue() {
           {error}
         </div>
       ) : filteredOverdue.length === 0 ? (
-        <div className="bg-white dark:bg-slate-800 p-8 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 text-center text-slate-500 print:hidden">
-          {searchQuery ? 'No overdue books match your search filter.' : 'No overdue books right now! Great job keeping track.'}
+        <div className="bg-white dark:bg-[#191F1E] rounded-2xl border border-[#E3E6DE] dark:border-[#27302E] print:hidden">
+          <EmptyState
+            image="/assets/unslop/empty-overdue.svg"
+            chalkArt="clearanceSlip"
+            title={searchQuery ? 'No matching overdue books' : 'Zero overdue books'}
+            description={
+              searchQuery
+                ? 'Try clearing or adjusting your search filter.'
+                : 'Every borrowed book is currently within its due date.'
+            }
+          />
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 print:grid-cols-2 print:gap-4 print:text-black">
           {filteredOverdue.map((checkout, index) => (
             <div
               key={checkout.id ?? `checkout-${index}`}
-              className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 print:border-black print:border-2 print:shadow-none print:break-inside-avoid flex flex-col justify-between"
+              className="chalk-card p-6 print:border-black print:border-2 print:shadow-none print:break-inside-avoid flex flex-col justify-between"
             >
               <div>
                 <div className="flex items-center space-x-3 mb-4">
@@ -148,10 +158,11 @@ export default function Overdue() {
                     </p>
                     <p className="font-medium text-slate-800 dark:text-white print:text-black">
                       {checkout.subject?.name}
+                      {checkout.bookNote ? ` — ${checkout.bookNote}` : ''}
                     </p>
                   </div>
 
-                  <div className="flex justify-between items-center bg-rose-50 dark:bg-slate-900 p-3 rounded-lg print:bg-gray-100">
+                  <div className="flex justify-between items-center bg-rose-50 dark:bg-[#141A19] p-3 rounded-lg print:bg-gray-100">
                     <div>
                       <p className="text-xs text-rose-600/70 dark:text-rose-400/70 uppercase tracking-wider print:text-black">
                         Due Date
@@ -179,7 +190,7 @@ export default function Overdue() {
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-slate-100 dark:border-slate-700 print:border-gray-300 mt-4 flex items-center justify-between gap-2">
+              <div className="pt-4 border-t border-[#E3E6DE] dark:border-[#27302E] print:border-gray-300 mt-4 flex items-center justify-between gap-2">
                 <span className="text-xs text-slate-600 dark:text-slate-400 print:text-black">
                   Please return this book as soon as possible.
                 </span>
@@ -217,7 +228,7 @@ export default function Overdue() {
       >
         {selectedCheckout && (
           <form onSubmit={handleReturnSubmit} className="space-y-4">
-            <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-lg border border-slate-200 dark:border-slate-700 space-y-1 text-sm">
+            <div className="bg-slate-50 dark:bg-[#141A19] p-3 rounded-lg border border-[#E3E6DE] dark:border-[#27302E] space-y-1 text-sm">
               <p><span className="font-semibold text-slate-600 dark:text-slate-400">Student:</span> {selectedCheckout.studentName} {selectedCheckout.studentClass ? `(${selectedCheckout.studentClass})` : ''}</p>
               <p><span className="font-semibold text-slate-600 dark:text-slate-400">Subject:</span> {selectedCheckout.subject?.name}</p>
               <p><span className="font-semibold text-slate-600 dark:text-slate-400">Due Date:</span> {new Date(selectedCheckout.dueDate).toLocaleDateString()}</p>

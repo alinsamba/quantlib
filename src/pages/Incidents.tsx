@@ -5,13 +5,14 @@ import { db } from '../lib/ipc-client'
 import { useAsync } from '../hooks/useAsync'
 import { Button } from '../components/Button'
 import { Modal } from '../components/Modal'
-import { TextField, SelectField, TextAreaField } from '../components/TextField'
-import type { Incident, Subject } from '../lib/types'
+import { TextField, SelectField, TextAreaField, AutocompleteField } from '../components/TextField'
+import type { Incident, Subject, Student } from '../lib/types'
 
 export default function Incidents() {
   const { data: incidents, isLoading, error, execute } = useAsync<Incident[]>()
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [subjects, setSubjects] = useState<Subject[]>([])
+  const [students, setStudents] = useState<Student[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [resolvingId, setResolvingId] = useState<number | null>(null)
   const [modalError, setModalError] = useState('')
@@ -39,8 +40,12 @@ export default function Incidents() {
     setModalError('')
     setIsModalOpen(true)
     try {
-      const list = await db.getSubjects()
+      const [list, studentList] = await Promise.all([
+        db.getSubjects(),
+        db.getStudents().catch(() => [])
+      ])
       setSubjects(list || [])
+      setStudents(studentList || [])
     } catch {
       // ignore error loading subjects
     }
@@ -209,7 +214,7 @@ export default function Incidents() {
         </div>
       )}
 
-      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden transition-colors duration-200">
+      <div className="chalk-card overflow-hidden transition-colors duration-200">
         <div className="overflow-x-auto">
           {isLoading && !incidents ? (
             <div className="p-8 text-center text-slate-500">Loading incidents...</div>
@@ -218,7 +223,7 @@ export default function Incidents() {
           ) : (
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wider border-b border-slate-100 dark:border-slate-700">
+                <tr className="bg-slate-50 dark:bg-[#141A19] text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wider border-b border-[#E3E6DE] dark:border-[#27302E]">
                   <th className="px-3 py-3 font-semibold whitespace-nowrap">Date</th>
                   <th className="px-3 py-3 font-semibold whitespace-nowrap">Type</th>
                   <th className="px-3 py-3 font-semibold">Subject</th>
@@ -243,7 +248,7 @@ export default function Incidents() {
                     !isResolved && (inc.type === 'DAMAGED' || inc.type === 'LOST')
 
                   return (
-                    <tr key={inc.id} className="border-b border-slate-50 dark:border-slate-700/50 hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
+                    <tr key={inc.id} className="border-b border-slate-50 dark:border-[#27302E]/50 hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors">
                       <td className="px-3 py-3 whitespace-nowrap text-xs">{new Date(inc.date).toLocaleDateString()}</td>
                       <td className="px-3 py-3 whitespace-nowrap">
                         <span
@@ -253,7 +258,7 @@ export default function Incidents() {
                               : inc.type === 'LOST'
                               ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
                               : inc.type === 'NEW' || inc.type === 'DONATION'
-                              ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                              ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-[#3FB08A]'
                               : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
                           }`}
                         >
@@ -351,18 +356,27 @@ export default function Incidents() {
           />
 
           <div className="grid grid-cols-2 gap-4">
-            <TextField
+            <AutocompleteField
               label="Responsible Party / Student"
               placeholder="e.g. John Doe"
               value={formData.responsibleParty}
-              onChange={(e) => setFormData({ ...formData, responsibleParty: e.target.value })}
+              onChange={(val) => {
+                const match = students.find((s) => s.name.toLowerCase() === val.trim().toLowerCase())
+                setFormData({
+                  ...formData,
+                  responsibleParty: val,
+                  studentClass: match ? match.studentClass : formData.studentClass
+                })
+              }}
+              options={students.map((s) => ({ value: s.name, badge: s.studentClass }))}
             />
 
-            <TextField
+            <AutocompleteField
               label="Class / Form"
-              placeholder="e.g. S.4 North"
+              placeholder="e.g. S4"
               value={formData.studentClass}
-              onChange={(e) => setFormData({ ...formData, studentClass: e.target.value })}
+              onChange={(val) => setFormData({ ...formData, studentClass: val })}
+              options={Array.from(new Set(students.map((s) => s.studentClass))).sort().map((cls) => ({ value: cls }))}
             />
           </div>
 

@@ -1,17 +1,38 @@
-import { useState, useMemo, useCallback } from 'react'
-import { Search, CheckCircle, AlertOctagon, Printer, BookOpen, AlertTriangle, DollarSign, CreditCard, ShieldCheck } from 'lucide-react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
+import { Search, CheckCircle, AlertOctagon, Printer, BookOpen, AlertTriangle, Users } from 'lucide-react'
 import { Button } from '../components/Button'
-import { TextField, SelectField } from '../components/TextField'
+import { SelectField, AutocompleteField } from '../components/TextField'
 import { Modal } from '../components/Modal'
 import { useToast } from '../hooks/ToastContext'
 import { db } from '../lib/ipc-client'
-import { roundCurrency } from '../lib/utils'
-import type { ClearanceRecord, Checkout } from '../lib/types'
+import type { ClearanceRecord, Checkout, Student, Incident } from '../lib/types'
 
 export default function Clearance() {
   const { showToast } = useToast()
+  const [activeTab, setActiveTab] = useState<'CLASS' | 'INDIVIDUAL'>('CLASS')
   const [studentName, setStudentName] = useState('')
   const [studentClass, setStudentClass] = useState('')
+  const [students, setStudents] = useState<Student[]>([])
+  const [allCheckouts, setAllCheckouts] = useState<Checkout[]>([])
+  const [allIncidents, setAllIncidents] = useState<Incident[]>([])
+  const [sheetClass, setSheetClass] = useState('ALL')
+  const [holdsOnly, setHoldsOnly] = useState(false)
+
+  const refreshDirectoryData = useCallback(() => {
+    Promise.all([
+      db.getStudents().catch(() => []),
+      db.getActiveCheckouts().catch(() => []),
+      db.getIncidents().catch(() => [])
+    ]).then(([studs, loans, incs]) => {
+      setStudents(studs || [])
+      setAllCheckouts(loans || [])
+      setAllIncidents(incs || [])
+    })
+  }, [])
+
+  useEffect(() => {
+    refreshDirectoryData()
+  }, [refreshDirectoryData])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [clearanceData, setClearanceData] = useState<ClearanceRecord | null>(null)
@@ -22,21 +43,6 @@ export default function Clearance() {
   const [returningCheckout, setReturningCheckout] = useState<Checkout | null>(null)
   const [returnCondition, setReturnCondition] = useState<number>(3)
   const [returnSubmitting, setReturnSubmitting] = useState(false)
-
-  // Fine Payment Modal State
-  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false)
-  const [paymentAmount, setPaymentAmount] = useState<number>(0)
-  const [paymentMethod, setPaymentMethod] = useState('Cash')
-  const [paymentNotes, setPaymentNotes] = useState('')
-  const [paymentLoading, setPaymentLoading] = useState(false)
-  const [paymentError, setPaymentError] = useState('')
-
-  // Fine Waiver Modal State
-  const [isWaiverModalOpen, setIsWaiverModalOpen] = useState(false)
-  const [waiverReason, setWaiverReason] = useState('')
-  const [approvedBy, setApprovedBy] = useState('LIBRARIAN')
-  const [waiverLoading, setWaiverLoading] = useState(false)
-  const [waiverError, setWaiverError] = useState('')
 
   const handleSearch = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
@@ -90,83 +96,6 @@ export default function Clearance() {
     }
   }, [clearanceData, showToast])
 
-  const handleOpenPaymentModal = useCallback(() => {
-    if (!clearanceData) return
-    const rawTotalDue = clearanceData.totalAmountDue 
-      ?? ((clearanceData.totalReplacementCharges || 0) + (clearanceData.totalOverdueFines || 0))
-    const totalDue = roundCurrency(rawTotalDue)
-    setPaymentAmount(totalDue)
-    setPaymentMethod('Cash')
-    setPaymentNotes('')
-    setPaymentError('')
-    setIsPaymentModalOpen(true)
-  }, [clearanceData])
-
-  const handleRecordPaymentSubmit = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!clearanceData) return
-    setPaymentLoading(true)
-    setPaymentError('')
-    try {
-      const res = await db.recordFinePayment({
-        studentName: clearanceData.studentName,
-        studentClass: clearanceData.studentClass || undefined,
-        amount: Number(paymentAmount),
-        paymentMethod,
-        notes: paymentNotes
-      })
-      if (res && res.success && res.data) {
-        setClearanceData(res.data)
-        setIsPaymentModalOpen(false)
-      } else {
-        setPaymentError(res?.error || 'Failed to record payment.')
-      }
-    } catch (err: unknown) {
-      setPaymentError(err instanceof Error ? err.message : 'Error recording payment.')
-    } finally {
-      setPaymentLoading(false)
-    }
-  }, [clearanceData, paymentAmount, paymentMethod, paymentNotes])
-
-  const handleOpenWaiverModal = useCallback(() => {
-    if (!clearanceData) return
-    setWaiverReason('')
-    setApprovedBy('LIBRARIAN')
-    setWaiverError('')
-    setIsWaiverModalOpen(true)
-  }, [clearanceData])
-
-  const handleWaiveSubmit = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!clearanceData) return
-    if (!waiverReason.trim()) {
-      setWaiverError('Please enter a reason for the waiver.')
-      return
-    }
-    setWaiverLoading(true)
-    setWaiverError('')
-    try {
-      const res = await db.waiveFine({
-        studentName: clearanceData.studentName,
-        studentClass: clearanceData.studentClass || undefined,
-        reason: waiverReason.trim(),
-        approvedBy: approvedBy.trim() || 'LIBRARIAN'
-      })
-      if (res && res.success && res.data) {
-        setClearanceData(res.data)
-        setIsWaiverModalOpen(false)
-      } else {
-        setWaiverError(res?.error || 'Failed to waive fine.')
-      }
-    } catch (err: unknown) {
-      setWaiverError(err instanceof Error ? err.message : 'Error waiving fine.')
-    } finally {
-      setWaiverLoading(false)
-    }
-  }, [clearanceData, waiverReason, approvedBy])
-
-
-
   // Memoize incidents table rows and date formatting
   const incidentsRows = useMemo(() => {
     if (!clearanceData?.incidents) return null
@@ -219,30 +148,262 @@ export default function Clearance() {
     return (slipData && slipData.timestamp) ? new Date(slipData.timestamp).toLocaleString() : ''
   }, [slipData])
 
+  // Class-wide clearance summary rows
+  const classSheetRows = useMemo(() => {
+    const activeByStudent = new Map<string, Checkout[]>()
+    for (const c of allCheckouts) {
+      const key = c.studentName.trim().toLowerCase()
+      const list = activeByStudent.get(key) || []
+      list.push(c)
+      activeByStudent.set(key, list)
+    }
+
+    const unresolvedByStudent = new Map<string, Incident[]>()
+    for (const inc of allIncidents) {
+      const party = (inc.responsibleParty || '').trim().toLowerCase()
+      if (!party) continue
+      const isDamageOrLoss = inc.type === 'DAMAGED' || inc.type === 'LOST'
+      const action = (inc.actionTaken || '').toUpperCase()
+      const isResolved = action.includes('RESOLVED') || action.includes('REPLACED') || action.includes('WAIVED') || action.includes('PAID')
+      if (isDamageOrLoss && !isResolved) {
+        const list = unresolvedByStudent.get(party) || []
+        list.push(inc)
+        unresolvedByStudent.set(party, list)
+      }
+    }
+
+    return students
+      .filter((s) => sheetClass === 'ALL' || s.studentClass === sheetClass)
+      .map((s) => {
+        const key = s.name.trim().toLowerCase()
+        const loans = activeByStudent.get(key) || []
+        const issues = unresolvedByStudent.get(key) || []
+        const isHold = loans.length > 0 || issues.length > 0
+        return {
+          student: s,
+          activeLoansCount: loans.length,
+          unresolvedIncidentsCount: issues.length,
+          status: isHold ? ('HOLD' as const) : ('CLEARED' as const)
+        }
+      })
+      .filter((r) => (!holdsOnly ? true : r.status === 'HOLD'))
+  }, [students, allCheckouts, allIncidents, sheetClass, holdsOnly])
+
+  const sheetClasses = useMemo(() => {
+    return Array.from(new Set(students.map((s) => s.studentClass).filter(Boolean))).sort()
+  }, [students])
+
+  const handleCheckStudentFromSheet = async (s: Student) => {
+    setStudentName(s.name)
+    setStudentClass(s.studentClass)
+    setActiveTab('INDIVIDUAL')
+    setError('')
+    setLoading(true)
+    try {
+      const res = await db.getClearanceStatus({
+        studentName: s.name,
+        studentClass: s.studentClass
+      })
+      if (res && res.success && res.data) {
+        setClearanceData(res.data)
+      } else {
+        setError(res?.error || 'Failed to retrieve student clearance status.')
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred during lookup.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-12">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Student Clearance Slip Generator</h1>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-          Verify student borrowing status, check outstanding items or incidents, manage fine payments/waivers, and issue official End-of-Term clearance slips.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 print:hidden">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-800 dark:text-white">End-of-Term Library Clearance</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+            Print class-wide clearance sheets for class teachers/bursar, or look up individual students and issue clearance slips.
+          </p>
+        </div>
+        <div className="inline-flex rounded-xl bg-slate-100 dark:bg-[#191F1E] p-1 text-sm font-medium self-start">
+          <button
+            type="button"
+            onClick={() => setActiveTab('CLASS')}
+            className={`px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors ${
+              activeTab === 'CLASS'
+                ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
+                : 'text-slate-500 dark:text-slate-400'
+            }`}
+          >
+            <Users size={15} />
+            Class Clearance Sheet
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('INDIVIDUAL')}
+            className={`px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors ${
+              activeTab === 'INDIVIDUAL'
+                ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
+                : 'text-slate-500 dark:text-slate-400'
+            }`}
+          >
+            <Search size={15} />
+            Individual Slip
+          </button>
+        </div>
       </div>
 
+      {/* CLASS CLEARANCE SHEET VIEW */}
+      {activeTab === 'CLASS' && (
+        <div className="space-y-4">
+          <div className="chalk-card p-4 flex flex-wrap items-center justify-between gap-3 print:hidden">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setSheetClass('ALL')}
+                className={`px-3 py-1 rounded-full text-xs font-medium ${
+                  sheetClass === 'ALL'
+                    ? 'bg-[#1F6F54] dark:bg-[#2E9472] text-white'
+                    : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                }`}
+              >
+                All ({students.length})
+              </button>
+              {sheetClasses.map((cls) => (
+                <button
+                  key={cls}
+                  type="button"
+                  onClick={() => setSheetClass(cls)}
+                  className={`px-3 py-1 rounded-full text-xs font-medium ${
+                    sheetClass === cls
+                      ? 'bg-[#1F6F54] dark:bg-[#2E9472] text-white'
+                      : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                  }`}
+                >
+                  {cls}
+                </button>
+              ))}
+              <label className="ml-2 inline-flex items-center gap-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={holdsOnly}
+                  onChange={(e) => setHoldsOnly(e.target.checked)}
+                  className="rounded border-slate-300 text-[#1F6F54]"
+                />
+                Holds Only
+              </label>
+            </div>
+            <Button variant="secondary" size="sm" icon={<Printer size={15} />} onClick={() => window.print()}>
+              Print Class Sheet
+            </Button>
+          </div>
+
+          <div
+            data-statutory-document
+            className="chalk-card chalk-card overflow-hidden print:border-black print:shadow-none"
+          >
+            <div className="p-4 border-b border-[#E3E6DE] dark:border-[#27302E] flex items-center justify-between">
+              <div>
+                <h2 className="font-bold text-slate-900 dark:text-white print:text-black">
+                  Library Clearance Sheet — {sheetClass === 'ALL' ? 'All Classes' : sheetClass}
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400 print:text-black">
+                  {classSheetRows.filter((r) => r.status === 'CLEARED').length} Cleared ·{' '}
+                  {classSheetRows.filter((r) => r.status === 'HOLD').length} On Hold · Generated{' '}
+                  {new Date().toLocaleDateString()}
+                </p>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-[#E3E6DE] dark:border-[#27302E] bg-slate-50 dark:bg-[#141A19] text-xs uppercase text-slate-500 dark:text-slate-400">
+                    <th className="p-3">#</th>
+                    <th className="p-3">Student / Borrower</th>
+                    <th className="p-3">Class</th>
+                    <th className="p-3">Unreturned Books</th>
+                    <th className="p-3">Damaged / Lost</th>
+                    <th className="p-3">Status</th>
+                    <th className="p-3 text-right print:hidden">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                  {classSheetRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="p-8 text-center text-slate-400">
+                        No students match this filter.
+                      </td>
+                    </tr>
+                  ) : (
+                    classSheetRows.map((row, idx) => (
+                      <tr key={row.student.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-700/20">
+                        <td className="p-3 text-slate-400 text-xs">{idx + 1}</td>
+                        <td className="p-3 font-medium text-slate-900 dark:text-white print:text-black">
+                          {row.student.name}
+                        </td>
+                        <td className="p-3 text-slate-600 dark:text-slate-300 print:text-black">
+                          {row.student.studentClass}
+                        </td>
+                        <td className="p-3 text-slate-600 dark:text-slate-300 print:text-black">
+                          {row.activeLoansCount}
+                        </td>
+                        <td className="p-3 text-slate-600 dark:text-slate-300 print:text-black">
+                          {row.unresolvedIncidentsCount}
+                        </td>
+                        <td className="p-3">
+                          <span
+                            className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                              row.status === 'CLEARED'
+                                ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300'
+                                : 'bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300'
+                            }`}
+                          >
+                            {row.status}
+                          </span>
+                        </td>
+                        <td className="p-3 text-right print:hidden">
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => handleCheckStudentFromSheet(row.student)}
+                          >
+                            Slip / Details
+                          </Button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* INDIVIDUAL LOOKUP VIEW */}
+      {activeTab === 'INDIVIDUAL' && (
+      <>
       {/* Student Search Card */}
-      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 p-6">
+      <div className="chalk-card p-6">
         <form onSubmit={handleSearch} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-          <TextField
+          <AutocompleteField
             label="Student Name"
             placeholder="e.g. John Doe"
             required
             value={studentName}
-            onChange={(e) => setStudentName(e.target.value)}
+            onChange={(val) => {
+              setStudentName(val)
+              const match = students.find((s) => s.name.toLowerCase() === val.trim().toLowerCase())
+              if (match) setStudentClass(match.studentClass)
+            }}
+            options={students.map((s) => ({ value: s.name, badge: s.studentClass }))}
           />
-          <TextField
+          <AutocompleteField
             label="Class / Grade (Optional)"
-            placeholder="e.g. S.4, S.6, TEACHER"
+            placeholder="e.g. S1, S4, TEACHER"
             value={studentClass}
-            onChange={(e) => setStudentClass(e.target.value)}
+            onChange={(val) => setStudentClass(val)}
+            options={Array.from(new Set(students.map((s) => s.studentClass))).sort().map((cls) => ({ value: cls }))}
           />
           <div>
             <Button
@@ -311,8 +472,8 @@ export default function Clearance() {
 
           {/* Overview Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-100 dark:border-slate-700 shadow-sm flex items-center space-x-4">
-              <div className="p-3 bg-blue-100 dark:bg-blue-900/30 text-blue-600 rounded-lg">
+            <div className="chalk-card p-5 flex items-center space-x-4">
+              <div className="p-3 bg-blue-100 dark:bg-blue-900/30 text-[#1F6F54] rounded-lg">
                 <BookOpen size={24} />
               </div>
               <div>
@@ -321,7 +482,7 @@ export default function Clearance() {
               </div>
             </div>
 
-            <div className="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-100 dark:border-slate-700 shadow-sm flex items-center space-x-4">
+            <div className="chalk-card p-5 flex items-center space-x-4">
               <div className="p-3 bg-amber-100 dark:bg-amber-900/30 text-amber-600 rounded-lg">
                 <AlertTriangle size={24} />
               </div>
@@ -331,44 +492,23 @@ export default function Clearance() {
               </div>
             </div>
 
-            <div className="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col justify-between space-y-2">
-              {(() => {
-                const totalDue = roundCurrency(
-                  clearanceData.totalAmountDue ??
-                    ((clearanceData.totalReplacementCharges || 0) + (clearanceData.totalOverdueFines || 0))
-                )
-                return (
-                  <>
-                    <div className="flex items-center space-x-4">
-                      <div className="p-3 bg-rose-100 dark:bg-rose-900/30 text-rose-600 rounded-lg flex-shrink-0">
-                        <DollarSign size={24} />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-xs text-slate-500 dark:text-slate-400 uppercase font-bold">Replacement / Fine Charges</p>
-                        <p className="text-2xl font-bold text-slate-800 dark:text-white">${totalDue.toFixed(2)}</p>
-                        <span className="text-[10px] text-slate-400">Overdue fines capped at max $15.00/book</span>
-                      </div>
-                    </div>
-
-                    {(totalDue > 0 || clearanceData.unresolvedIncidents.length > 0) && (
-                      <div className="flex gap-2 pt-2 border-t border-slate-100 dark:border-slate-700">
-                        <Button size="sm" variant="primary" icon={<CreditCard size={14} />} onClick={handleOpenPaymentModal} className="flex-1 text-xs py-1.5 whitespace-nowrap">
-                          Accept Payment
-                        </Button>
-                        <Button size="sm" variant="secondary" icon={<ShieldCheck size={14} />} onClick={handleOpenWaiverModal} className="flex-1 text-xs py-1.5 whitespace-nowrap">
-                          Waive Fine
-                        </Button>
-                      </div>
-                    )}
-                  </>
-                )
-              })()}
+            <div className="chalk-card p-5 flex items-center space-x-4">
+              <div className={`p-3 rounded-lg flex-shrink-0 ${clearanceData.status === 'CLEARED' ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600' : 'bg-rose-100 dark:bg-rose-900/30 text-rose-600'}`}>
+                {clearanceData.status === 'CLEARED' ? <CheckCircle size={24} /> : <AlertOctagon size={24} />}
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs text-slate-500 dark:text-slate-400 uppercase font-bold">Clearance Decision</p>
+                <p className="text-lg font-bold text-slate-800 dark:text-white">
+                  {clearanceData.status === 'CLEARED' ? 'Cleared for End of Term' : 'Hold — Return / Replace Books'}
+                </p>
+                <span className="text-xs text-slate-400">No cash late fines — return or replace items to clear</span>
+              </div>
             </div>
           </div>
 
           {/* Active Checkouts List */}
-          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
-            <div className="p-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 flex items-center space-x-2">
+          <div className="chalk-card overflow-hidden">
+            <div className="p-4 border-b border-[#E3E6DE] dark:border-[#27302E] bg-slate-50 dark:bg-[#141A19] flex items-center space-x-2">
               <BookOpen size={18} className="text-blue-500" />
               <h3 className="font-semibold text-slate-800 dark:text-white">Active Checkouts ({clearanceData.activeCheckouts.length})</h3>
             </div>
@@ -377,7 +517,7 @@ export default function Clearance() {
             ) : (
               <table className="w-full text-left text-sm">
                 <thead>
-                  <tr className="border-b border-slate-100 dark:border-slate-700 text-slate-500 dark:text-slate-400 bg-slate-50/50 dark:bg-slate-800/50">
+                  <tr className="border-b border-[#E3E6DE] dark:border-[#27302E] text-slate-500 dark:text-slate-400 bg-slate-50/50 dark:bg-[#191F1E]/80">
                     <th className="p-3 font-medium">Subject / Book</th>
                     <th className="p-3 font-medium">Checkout Date</th>
                     <th className="p-3 font-medium">Due Date</th>
@@ -431,8 +571,8 @@ export default function Clearance() {
           </div>
 
           {/* Incidents List */}
-          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-100 dark:border-slate-700 overflow-hidden">
-            <div className="p-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50 flex items-center space-x-2">
+          <div className="chalk-card overflow-hidden">
+            <div className="p-4 border-b border-[#E3E6DE] dark:border-[#27302E] bg-slate-50 dark:bg-[#141A19] flex items-center space-x-2">
               <AlertTriangle size={18} className="text-amber-500" />
               <h3 className="font-semibold text-slate-800 dark:text-white">Incidents & Damaged/Lost Items ({clearanceData.incidents.length})</h3>
             </div>
@@ -441,7 +581,7 @@ export default function Clearance() {
             ) : (
               <table className="w-full text-left text-sm">
                 <thead>
-                  <tr className="border-b border-slate-100 dark:border-slate-700 text-slate-500 dark:text-slate-400 bg-slate-50/50 dark:bg-slate-800/50">
+                  <tr className="border-b border-[#E3E6DE] dark:border-[#27302E] text-slate-500 dark:text-slate-400 bg-slate-50/50 dark:bg-[#191F1E]/80">
                     <th className="p-3 font-medium">Book Title</th>
                     <th className="p-3 font-medium">Incident Type</th>
                     <th className="p-3 font-medium">Date</th>
@@ -457,101 +597,6 @@ export default function Clearance() {
         </div>
       )}
 
-      {/* Record Fine Payment Modal */}
-      <Modal
-        isOpen={isPaymentModalOpen}
-        onClose={() => setIsPaymentModalOpen(false)}
-        title="Record Fine Payment"
-      >
-        <form onSubmit={handleRecordPaymentSubmit} className="space-y-4">
-          <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-lg border border-slate-200 dark:border-slate-700 text-sm">
-            <p><span className="font-semibold">Student:</span> {clearanceData?.studentName} {clearanceData?.studentClass ? `(${clearanceData.studentClass})` : ''}</p>
-            <p><span className="font-semibold">Total Replacement Charges:</span> ${clearanceData?.totalReplacementCharges.toFixed(2)}</p>
-          </div>
-
-          <TextField
-            label="Payment Amount ($)"
-            type="number"
-            step="0.01"
-            required
-            min={0}
-            value={paymentAmount}
-            onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)}
-          />
-
-          <SelectField
-            label="Payment Method"
-            value={paymentMethod}
-            onChange={(e) => setPaymentMethod(e.target.value)}
-            options={[
-              { value: 'Cash', label: 'Cash' },
-              { value: 'Mobile Money', label: 'Mobile Money' },
-              { value: 'Bank Transfer', label: 'Bank Transfer' },
-              { value: 'Card', label: 'Card' }
-            ]}
-          />
-
-          <TextField
-            label="Notes / Receipt No. (Optional)"
-            placeholder="e.g. Receipt #1042"
-            value={paymentNotes}
-            onChange={(e) => setPaymentNotes(e.target.value)}
-          />
-
-          {paymentError && <p className="text-red-500 text-sm font-medium">{paymentError}</p>}
-
-          <div className="pt-4 flex space-x-3 justify-end">
-            <Button variant="secondary" type="button" onClick={() => setIsPaymentModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" isLoading={paymentLoading} icon={<CreditCard size={16} />}>
-              Record Payment
-            </Button>
-          </div>
-        </form>
-      </Modal>
-
-      {/* Waive Fine Modal */}
-      <Modal
-        isOpen={isWaiverModalOpen}
-        onClose={() => setIsWaiverModalOpen(false)}
-        title="Waive Fine / Replacement Charges"
-      >
-        <form onSubmit={handleWaiveSubmit} className="space-y-4">
-          <div className="bg-amber-50 dark:bg-amber-950/40 p-3 rounded-lg border border-amber-200 dark:border-amber-800 text-sm text-amber-800 dark:text-amber-200">
-            <p><span className="font-semibold">Student:</span> {clearanceData?.studentName} {clearanceData?.studentClass ? `(${clearanceData.studentClass})` : ''}</p>
-            <p><span className="font-semibold">Outstanding Amount to Waive:</span> ${clearanceData?.totalReplacementCharges.toFixed(2)}</p>
-          </div>
-
-          <TextField
-            label="Waiver Reason"
-            required
-            placeholder="e.g. Principal Exemption, Book Replaced, Hardship Waiver"
-            value={waiverReason}
-            onChange={(e) => setWaiverReason(e.target.value)}
-          />
-
-          <TextField
-            label="Approved By"
-            required
-            placeholder="e.g. Head Teacher / Librarian Name"
-            value={approvedBy}
-            onChange={(e) => setApprovedBy(e.target.value)}
-          />
-
-          {waiverError && <p className="text-red-500 text-sm font-medium">{waiverError}</p>}
-
-          <div className="pt-4 flex space-x-3 justify-end">
-            <Button variant="secondary" type="button" onClick={() => setIsWaiverModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" isLoading={waiverLoading} icon={<ShieldCheck size={16} />}>
-              Confirm Fine Waiver
-            </Button>
-          </div>
-        </form>
-      </Modal>
-
       {/* Printable Clearance Slip Modal */}
       <Modal
         isOpen={isSlipModalOpen}
@@ -560,10 +605,10 @@ export default function Clearance() {
       >
         {slipData && (
           <div className="space-y-6 print:space-y-4">
-            <div id="clearance-slip-printable" className="p-6 bg-white dark:bg-slate-900 border rounded-xl space-y-6 text-slate-800 dark:text-slate-100">
+            <div id="clearance-slip-printable" data-statutory-document className="p-6 bg-white dark:bg-[#141A19] border rounded-xl space-y-6 text-slate-800 dark:text-slate-100">
               {/* Header / Branding */}
               <div className="text-center border-b pb-4 space-y-1">
-                <h2 className="text-2xl font-extrabold tracking-wide uppercase text-blue-700 dark:text-blue-400">
+                <h2 className="text-2xl font-extrabold tracking-wide uppercase text-blue-700 dark:text-[#3FB08A]">
                   {slipData.school?.name || 'Mentor High School'}
                 </h2>
                 {slipData.school?.motto && (
@@ -583,7 +628,7 @@ export default function Clearance() {
               </div>
 
               {/* Student Details Box */}
-              <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-lg border border-slate-200 dark:border-slate-700 grid grid-cols-2 gap-4 text-sm">
+              <div className="bg-slate-50 dark:bg-[#191F1E] p-4 rounded-lg border border-[#E3E6DE] dark:border-[#27302E] grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <p className="text-xs text-slate-500 uppercase font-semibold">Student Name</p>
                   <p className="font-bold text-slate-900 dark:text-white text-base">{slipData.student?.studentName || slipData.studentName}</p>
@@ -662,7 +707,7 @@ export default function Clearance() {
       >
         {returningCheckout && (
           <div className="space-y-4">
-            <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-lg space-y-1 text-sm">
+            <div className="bg-slate-50 dark:bg-[#141A19] p-4 rounded-lg space-y-1 text-sm">
               <p className="text-xs text-slate-500 uppercase font-semibold">Student</p>
               <p className="font-bold text-slate-800 dark:text-white">{returningCheckout.studentName}</p>
               <p className="text-xs text-slate-500 uppercase font-semibold pt-2">Book Title / Subject</p>
@@ -701,6 +746,7 @@ export default function Clearance() {
                     if (res && res.success && res.data) {
                       setClearanceData(res.data)
                     }
+                    refreshDirectoryData()
                   } catch (err: unknown) {
                     showToast('Failed to return book: ' + (err instanceof Error ? err.message : String(err)), 'error')
                   } finally {
@@ -714,6 +760,8 @@ export default function Clearance() {
           </div>
         )}
       </Modal>
+      </>
+      )}
     </div>
   )
 }
