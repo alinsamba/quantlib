@@ -59,8 +59,11 @@ jobs:
             pkg-config \
             rpm
 
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
       - name: Install frontend dependencies
-        run: npm ci
+        run: bun install
 
       - name: Build and upload Tauri installers
         uses: tauri-apps/tauri-action@v0
